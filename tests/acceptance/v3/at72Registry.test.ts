@@ -2,11 +2,14 @@
 // AT-72 (registry part; M23 A2; CXA-015, D-1602…D-1605, D-1609): on all four writer kinds (short-selling shadow, outside-signal
 // state, Committee trial, offline ledger) a second look is refused, audited in holdout_look_refusal and logged, and never
 // computes; the page list carries every look with its hash and the three-word vocabulary; F1.v2-mom is NULL and never re-looked.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Client } from "@libsql/client";
 import { evaluateAlt, ALT_LINEAGE, PREREG_SHA as ALT_SHA } from "@/lib/regime/alt/evaluate";
 import { evaluateShort, SHORT_LINEAGE, PREREG_SHA as SHORT_SHA } from "@/lib/shortShadow/evaluate";
 import { TRIAL_LINEAGE } from "@/lib/committee/prereg";
+import { LEDGER_PATH } from "@/lib/research/ledgerFile";
 import { preregister, takeLook } from "@/lib/research/registry";
 import { syncLedger } from "@/lib/research/steps/lookSync";
 import { registryRows } from "@/lib/research/view";
@@ -141,7 +144,16 @@ describe("AT-72: the list carries every look with its hash; F1.v2-mom is NULL", 
     await syncLedger(db, { market: "AU", now: NOW });
     await firstLook(db, "zz_extra", "VAL-121", '{"hypothesis":"extra"}');
     const rows = await registryRows(db, "AU");
-    expect(rows.map((r) => r.lineage)).toEqual(["f1_v2_mom", "zz_extra"]);
+    // the committed ledger's looks come first, in ledger order (one timestamp, then lineage), then the one taken here
+    const ledgerLooks = (
+      JSON.parse(readFileSync(join(__dirname, "../../..", LEDGER_PATH), "utf8")) as {
+        entries: { lineage: string; verdict?: string }[];
+      }
+    ).entries
+      .filter((e) => e.verdict !== undefined)
+      .map((e) => e.lineage);
+    expect(ledgerLooks[0]).toBe("f1_v2_mom");
+    expect(rows.map((r) => r.lineage)).toEqual([...ledgerLooks, "zz_extra"]);
     for (const r of rows) {
       expect(r.sha).toMatch(/^[0-9a-f]{64}$/);
       expect(["PASS", "NULL", "INCONCLUSIVE"]).toContain(r.verdict);

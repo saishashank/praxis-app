@@ -1142,6 +1142,11 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
 | D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
 | D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
+| D-1685 | Split boundary (R2, D-1628) [VERIFY resolved]: the M15 design freeze records development up to 2021-12-31 and validation from 2022-01-01; |
+| D-1686 | CXA-003 detectors (R2, D-1627), frozen in docs/research/prereg/CXA-003.json: all on the split-adjusted daily bars, the signal being known at the close of the... |
+| D-1687 | CXA-003 conventions (R2, D-1605, D-1628, D-1655): the tier of a session is assignTiers over the bars up to and including that session (60-session window, raw... |
+| D-1688 | CXA-003 ledger and report (R2, D-1606, D-1628, D-1631): the first commit freezes nine plans (six lineages and the three _p5000 variants) in docs/research/reg... |
+| D-1689 | Ledger merge of R2 and T2 (orchestrator, D-1606): both tasks appended to the same ledger from the same base, T2 as seq 2 to 24 and R2 as seq 2 to 16. |
 | D-1690 | CXA-004 set and lineages (T2, D-1635): the set is derived, not listed: an angle belongs when its registry needsData names the announcement archive and it rea... |
 | D-1691 | CXA-004 counter and meter (T2, D-1623, D-1641): the counter is the number of distinct session_d with at least one archive item of a timing class, per market. |
 | D-1692 | CXA-004 look path (T2, D-1605, D-1635): below 252 nothing is read but dates (the pure engine returns before its reader is called; a test proves it with 251). |

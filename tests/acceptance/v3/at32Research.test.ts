@@ -211,10 +211,16 @@ describe("AT-32 (research): the M23 own-set, the seam and the complement proof (
     // steps still stubs write nothing (each task that lands a step moves its own table out of the zero list)
     const own = async (t: string): Promise<number> =>
       Number((await on.execute(`SELECT COUNT(*) n FROM ${t}`)).rows[0]!.n);
-    for (const t of ["research_result", "holdout_look"]) expect(await own(t), t).toBe(1);
-    // the one recorded F1 plan plus the 23 plan-only lineages of CXA-004 (ledger entries and the step freeze the same text)
-    expect(await own("research_prereg"), "research_prereg").toBe(24);
-    // the archive of the golden world is empty: one meter row, "collecting", and no look of its own
+    // the committed ledger decides the counts: one plan row per lineage, one look and one result per recorded verdict
+    const ledger = JSON.parse(readFileSync(join(__dirname, "../../..", LEDGER_PATH), "utf8")) as {
+      entries: { lineage: string; verdict?: string }[];
+    };
+    expect(await own("research_prereg"), "research_prereg").toBe(
+      new Set(ledger.entries.map((e) => e.lineage)).size,
+    );
+    for (const t of ["research_result", "holdout_look"])
+      expect(await own(t), t).toBe(ledger.entries.filter((e) => e.verdict !== undefined).length);
+    // the archive of the golden world is empty: one meter row, "collecting", and no look of its own (T2)
     expect(await own("research_meter"), "research_meter").toBe(1);
     expect(await own("residual_monitor"), "residual_monitor").toBeGreaterThan(0);
     for (const t of M23_OWN.filter(
