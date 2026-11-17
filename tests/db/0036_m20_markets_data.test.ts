@@ -69,7 +69,7 @@ const ROW: Record<string, (m: string) => string> = {
 describe("0036_m20_markets_data", () => {
   it("is migration 36 and its generated regions are current", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms).toHaveLength(38);
+    expect(ms).toHaveLength(39);
     expect(ms[35]).toMatchObject({ version: 36, name: "m20_markets_data" });
     const text = readFileSync(M20_MIGRATION_PATH as string, "utf8");
     expect(regionOf(text, M20_REGION as string)).toBe(renderM20Region() as string);
@@ -87,7 +87,7 @@ describe("0036_m20_markets_data", () => {
     const before = (
       await d2.execute("SELECT code, mode, enabled FROM market ORDER BY code")
     ).rows.map((r) => ({ ...r }));
-    expect(await migrateDown(d2, ms, 3)).toEqual({ rolledBack: 3, version: 35 });
+    expect(await migrateDown(d2, ms, 4)).toEqual({ rolledBack: 4, version: 35 });
     const names = (await schemaOf(d2)).join("\n");
     for (const t of NEW_TABLES) expect(names).not.toContain(`table:${t}:`);
     const cols = (await d2.execute("SELECT name FROM pragma_table_info('market')")).rows.map((r) =>
@@ -101,7 +101,7 @@ describe("0036_m20_markets_data", () => {
           .rows[0]!.v,
       ),
     ).toBe(1);
-    expect(await migrateUp(d2, ms)).toEqual({ applied: 3, version: 38 });
+    expect(await migrateUp(d2, ms)).toEqual({ applied: 4, version: 39 });
     expect(await schemaOf(d2)).toEqual(after);
     expect(
       (await d2.execute("SELECT code, mode, enabled FROM market ORDER BY code")).rows.map((r) => ({

@@ -10,7 +10,9 @@ export const STATES: Record<
   | "blueprint-full"
   | "owner-tools-on"
   | "review-stored"
-  | "labels-queue",
+  | "labels-queue"
+  | "committee-trial"
+  | "experts-sources",
   SeedState
 >;
 export const STATE_NAMES: string[];

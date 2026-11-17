@@ -9134,6 +9134,38 @@
       }
     },
     {
+      "id": "table:main.alt_input_point",
+      "type": "table",
+      "name": "alt_input_point",
+      "purpose": "Table alt_input_point in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "source",
+          "event_key",
+          "d",
+          "prob_ppm",
+          "fetched_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.angle_forward_flag",
       "type": "table",
       "name": "angle_forward_flag",
@@ -10247,6 +10279,42 @@
       }
     },
     {
+      "id": "table:main.cluster_expression",
+      "type": "table",
+      "name": "cluster_expression",
+      "purpose": "Table cluster_expression in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "cluster_id",
+          "version",
+          "outcome",
+          "rule_json",
+          "exit_json",
+          "park_reason",
+          "reason_text",
+          "prereg_sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.cluster_state",
       "type": "table",
       "name": "cluster_state",
@@ -10396,6 +10464,161 @@
           "kind",
           "d",
           "detail_json"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.committee_call",
+      "type": "table",
+      "name": "committee_call",
+      "purpose": "Table committee_call in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "id",
+          "market",
+          "d",
+          "signal_id",
+          "stage",
+          "prompt_sha",
+          "pack_id",
+          "provider",
+          "model_id",
+          "model_version",
+          "params_json",
+          "raw_response",
+          "parsed_json",
+          "created_at",
+          "expires_d"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_committee_call_expires",
+          "idx_committee_call_signal"
+        ]
+      }
+    },
+    {
+      "id": "table:main.committee_prereg",
+      "type": "table",
+      "name": "committee_prereg",
+      "purpose": "Table committee_prereg in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "trial_id",
+          "version",
+          "market",
+          "frozen_json",
+          "sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.committee_rating",
+      "type": "table",
+      "name": "committee_rating",
+      "purpose": "Table committee_rating in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "signal_id",
+          "trial_id",
+          "pack_id",
+          "rating",
+          "reasons_json",
+          "bull_model",
+          "bear_model",
+          "risk_model",
+          "judge_model",
+          "same_family",
+          "timings_json",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_committee_rating_trial"
+        ]
+      }
+    },
+    {
+      "id": "table:main.committee_trial_result",
+      "type": "table",
+      "name": "committee_trial_result",
+      "purpose": "Table committee_trial_result in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "trial_id",
+          "market",
+          "d",
+          "kind",
+          "verdict",
+          "stats_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -11575,6 +11798,38 @@
       }
     },
     {
+      "id": "table:main.expert_call_confirm",
+      "type": "table",
+      "name": "expert_call_confirm",
+      "purpose": "Table expert_call_confirm in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "claim_id",
+          "proposal_id",
+          "price_basis",
+          "confirmed_by",
+          "confirmed_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.expert_call_outcome",
       "type": "table",
       "name": "expert_call_outcome",
@@ -11612,6 +11867,81 @@
           "luck_pct",
           "settled_d",
           "early"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_call_proposal",
+      "type": "table",
+      "name": "expert_call_proposal",
+      "purpose": "Table expert_call_proposal in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "proposal_id",
+          "claim_id",
+          "market",
+          "code",
+          "direction",
+          "call_d",
+          "horizon_sessions",
+          "price_basis",
+          "target_micro",
+          "stop_micro",
+          "state",
+          "reason",
+          "source",
+          "model_id",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_expert_call_proposal_claim"
+        ]
+      }
+    },
+    {
+      "id": "table:main.expert_poll_run",
+      "type": "table",
+      "name": "expert_poll_run",
+      "purpose": "Table expert_poll_run in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "kind",
+          "d",
+          "counts_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -11693,6 +12023,44 @@
         ],
         "database": "main",
         "indexes": []
+      }
+    },
+    {
+      "id": "table:main.expert_source_licence",
+      "type": "table",
+      "name": "expert_source_licence",
+      "purpose": "Table expert_source_licence in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "expert_id",
+          "source_key",
+          "checked_at",
+          "terms_url",
+          "robots",
+          "summarisation",
+          "status",
+          "actor",
+          "note"
+        ],
+        "database": "main",
+        "indexes": [
+          "idx_expert_source_licence_source"
+        ]
       }
     },
     {
@@ -13356,6 +13724,43 @@
       }
     },
     {
+      "id": "table:main.minilm_shadow",
+      "type": "table",
+      "name": "minilm_shadow",
+      "purpose": "Table minilm_shadow in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "source",
+          "ann_id",
+          "rule_category",
+          "model_category",
+          "rule_material",
+          "model_material",
+          "model_sha",
+          "created_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
       "id": "table:main.nav_daily",
       "type": "table",
       "name": "nav_daily",
@@ -13429,6 +13834,38 @@
           "close_micro",
           "value_micro",
           "haircut"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.opinion_promotion_request",
+      "type": "table",
+      "name": "opinion_promotion_request",
+      "purpose": "Table opinion_promotion_request in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "kind",
+          "requested_d",
+          "evidence_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -14482,6 +14919,40 @@
           "ic",
           "source",
           "computed_at"
+        ],
+        "database": "main",
+        "indexes": []
+      }
+    },
+    {
+      "id": "table:main.regime_alt_reading",
+      "type": "table",
+      "name": "regime_alt_reading",
+      "purpose": "Table regime_alt_reading in the main database.",
+      "specIds": [
+        "DAT-200"
+      ],
+      "owner": "database",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "A failed write rolls back; the data-quality and health checks flag gaps.",
+      "runbook": null,
+      "views": [
+        "data"
+      ],
+      "source": "db/migrations/main/0039_m22_llm_experts.sql",
+      "attrs": {
+        "columns": [
+          "market",
+          "d",
+          "base_state",
+          "alt_state",
+          "inputs_status",
+          "inputs_json",
+          "created_at"
         ],
         "database": "main",
         "indexes": []
@@ -20705,6 +21176,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.alt_input_point",
+      "from": "service:turso-main",
+      "to": "table:main.alt_input_point",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.angle_forward_flag",
       "from": "service:turso-main",
       "to": "table:main.angle_forward_flag",
@@ -21012,6 +21493,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.cluster_expression",
+      "from": "service:turso-main",
+      "to": "table:main.cluster_expression",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.cluster_state",
       "from": "service:turso-main",
       "to": "table:main.cluster_state",
@@ -21050,6 +21541,46 @@
       "contract": "Runs or holds this element.",
       "views": [
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_call",
+      "from": "service:turso-main",
+      "to": "table:main.committee_call",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_prereg",
+      "from": "service:turso-main",
+      "to": "table:main.committee_prereg",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_rating",
+      "from": "service:turso-main",
+      "to": "table:main.committee_rating",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.committee_trial_result",
+      "from": "service:turso-main",
+      "to": "table:main.committee_trial_result",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21370,6 +21901,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.expert_call_confirm",
+      "from": "service:turso-main",
+      "to": "table:main.expert_call_confirm",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.expert_call_outcome",
       "from": "service:turso-main",
       "to": "table:main.expert_call_outcome",
@@ -21378,6 +21919,26 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_call_proposal",
+      "from": "service:turso-main",
+      "to": "table:main.expert_call_proposal",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_poll_run",
+      "from": "service:turso-main",
+      "to": "table:main.expert_poll_run",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21400,6 +21961,16 @@
       "views": [
         "data",
         "learning"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.expert_source_licence",
+      "from": "service:turso-main",
+      "to": "table:main.expert_source_licence",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
       ]
     },
     {
@@ -21851,6 +22422,16 @@
       ]
     },
     {
+      "id": "service:turso-main|contains|table:main.minilm_shadow",
+      "from": "service:turso-main",
+      "to": "table:main.minilm_shadow",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "data"
+      ]
+    },
+    {
       "id": "service:turso-main|contains|table:main.nav_daily",
       "from": "service:turso-main",
       "to": "table:main.nav_daily",
@@ -21869,6 +22450,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.opinion_promotion_request",
+      "from": "service:turso-main",
+      "to": "table:main.opinion_promotion_request",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },
@@ -22159,6 +22750,16 @@
       "contract": "Runs or holds this element.",
       "views": [
         "agents",
+        "data"
+      ]
+    },
+    {
+      "id": "service:turso-main|contains|table:main.regime_alt_reading",
+      "from": "service:turso-main",
+      "to": "table:main.regime_alt_reading",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
         "data"
       ]
     },

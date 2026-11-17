@@ -55,6 +55,23 @@ const M21_TABLES = [
   "short_shadow_outcome",
 ];
 
+// The thirteen tables 0039 adds (M22 A1, D-1444): opinions and records no night reads, so STAGE_TABLES and the AU schemaSha are unchanged.
+const M22_TABLES = [
+  "alt_input_point",
+  "cluster_expression",
+  "committee_call",
+  "committee_prereg",
+  "committee_rating",
+  "committee_trial_result",
+  "expert_call_confirm",
+  "expert_call_proposal",
+  "expert_poll_run",
+  "expert_source_licence",
+  "minilm_shadow",
+  "opinion_promotion_request",
+  "regime_alt_reading",
+];
+
 describe("the base list", () => {
   it("equals the schema-35 table set minus market_profile*, sorted, with no duplicate", async () => {
     expect([...STAGE_TABLES]).toEqual(await scan(35));
@@ -63,13 +80,16 @@ describe("the base list", () => {
     expect(STAGE_TABLES.some((t) => t.startsWith("market_profile"))).toBe(false);
   });
 
-  it("is the whole migrated schema minus the market_profile tables, the nine tables 0036 adds and the six 0038 adds", async () => {
-    const now = await scan(38);
-    expect(now.filter((t) => !M20_TABLES.includes(t) && !M21_TABLES.includes(t))).toEqual([
-      ...STAGE_TABLES,
-    ]);
+  it("is the whole migrated schema minus the market_profile tables, the nine tables 0036 adds, the six 0038 adds and the thirteen 0039 adds", async () => {
+    const now = await scan(39);
+    expect(
+      now.filter(
+        (t) => !M20_TABLES.includes(t) && !M21_TABLES.includes(t) && !M22_TABLES.includes(t),
+      ),
+    ).toEqual([...STAGE_TABLES]);
     expect(now.filter((t) => M20_TABLES.includes(t))).toEqual(M20_TABLES);
     expect(now.filter((t) => M21_TABLES.includes(t))).toEqual(M21_TABLES);
+    expect(now.filter((t) => M22_TABLES.includes(t))).toEqual(M22_TABLES);
   });
 
   it("the AU schemaSha equals the pre-M20 scan of a schema-35 database, byte for byte", async () => {

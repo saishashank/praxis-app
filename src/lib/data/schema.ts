@@ -180,6 +180,15 @@ export const AU_SOURCES = [
 ] as const;
 export type AuSource = (typeof AU_SOURCES)[number];
 /**
+ * M22 (D-1439, D-1443, D-1444): the register rows that are pending and off until the Owner accepts them; defined in
+ * scripts/ci/licence-register.mjs (PENDING_SOURCE_ROWS), written by no migration. No fetcher exists for any of them.
+ */
+export const M22_PENDING_SOURCES = [
+  "polymarket_public",
+  "kalshi_public",
+  "yahoo_delayed_batch",
+] as const;
+/**
  * The ASX listed-companies file (D-067): a register row only (migration 0006), covered by the ASX
  * announcements entry O-23. It has no source_status row; the rate token uses `asx_announcements`.
  */

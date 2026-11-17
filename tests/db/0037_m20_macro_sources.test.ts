@@ -33,7 +33,7 @@ const count = async (c: Client, where = "1 = 1") =>
 describe("0037_m20_macro_sources", () => {
   it("is migration 37", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
-    expect(ms).toHaveLength(38);
+    expect(ms).toHaveLength(39);
     expect(ms[36]).toMatchObject({ version: 37, name: "m20_macro_sources" });
   });
 
@@ -48,7 +48,7 @@ describe("0037_m20_macro_sources", () => {
     await d2.execute(ins("rba", "FXRINR", "2030-01-02", 55_750_000));
     await d2.execute(ins("abs", "CPI", "2029-12-31", 4_250_000));
     await expect(d2.execute(ins("rbi"))).rejects.toThrow(); // the 0033 CHECK
-    expect(await migrateUp(d2, ms)).toEqual({ applied: 2, version: 38 });
+    expect(await migrateUp(d2, ms)).toEqual({ applied: 3, version: 39 });
     const after = await schemaOf(d2);
     expect(after.some((s) => s.startsWith("table:macro_series:"))).toBe(true);
     expect(
@@ -75,13 +75,13 @@ describe("0037_m20_macro_sources", () => {
     await allowMarket(d2, "IN");
     await d2.execute(ins("rbi", "RBI_REPO"));
     expect(await count(d2)).toBe(3);
-    expect(await migrateDown(d2, ms, 2)).toEqual({ rolledBack: 2, version: 36 });
+    expect(await migrateDown(d2, ms, 3)).toEqual({ rolledBack: 3, version: 36 });
     const down = await schemaOf(d2);
     expect(down.some((s) => s.includes("macro_series_source_guard_"))).toBe(false);
     expect(await count(d2)).toBe(2);
     expect(await count(d2, "source = 'rba'")).toBe(1);
     await expect(d2.execute(ins("rbi"))).rejects.toThrow(); // back to the 0033 list
-    expect(await migrateUp(d2, ms)).toEqual({ applied: 2, version: 38 });
+    expect(await migrateUp(d2, ms)).toEqual({ applied: 3, version: 39 });
     expect(await schemaOf(d2)).toEqual(after);
     expect(await count(d2)).toBe(2);
   });
@@ -89,7 +89,7 @@ describe("0037_m20_macro_sources", () => {
   it("the fresh schema equals the up-down-up schema (no rename residue differs between the two paths)", async () => {
     const ms = await loadMigrations(MIGRATIONS("main"));
     const fresh = await schemaOf(db);
-    await migrateDown(db, ms, 2); // 0038 and 0037 (the macro_series rebuild)
+    await migrateDown(db, ms, 3); // 0038 and 0037 (the macro_series rebuild)
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(fresh);
   });

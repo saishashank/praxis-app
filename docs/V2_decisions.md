@@ -970,3 +970,8 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1447 | AT-73 shared part: tests/acceptance/v3/at73Shared.test.ts holds the 20-fixture proposal set for call proposals (valid, incomplete, duplicate, hostile text, o... |
 | D-1448 | Acceptance test files: M22 clauses go to split files (at76Trial, at76Reflections, at77WorkersAi, at77Sweep, at79Fetch, at79Calls, at79Clusters, at80Routes, a... |
 | D-1449 | Owner steps for the PR: dispatch the words and Committee-judge bake-offs after the merge and add any passing role to llm_live_roles; import the seed (format... |
+| D-1450 | Migration 0039 as built (A1): the thirteen tables of D-1444 exactly, each STRICT with a -- +down; beyond the design text only closed-shape checks (hex shas a... |
+| D-1451 | Register rows (A1, requirements Gap 8): polymarket_public, kalshi_public and yahoo_delayed_batch are defined in code (PENDING_SOURCE_ROWS in scripts/ci/licen... |
+| D-1452 | Seed states (A1): committee-trial switches the Committee on in the throwaway database, so it is opt-in like owner-tools-on (OPT_IN_STATES; a lane names it: E... |
+| D-1453 | AT-32 complement (A1): tests/acceptance/v3/at32Opinions.test.ts hashes every table except the steelman's own and exactly the eight of D-1426; the five other... |
+| D-1454 | Schema pins (A1): every pin moves from 38 to 39 (migration tests, backup, CLI, rollback runbook). |
