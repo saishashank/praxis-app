@@ -15,3 +15,5 @@ ffb9ba02cfcb56859210d3e84fc02990dc9abcab:src/lib/agents/families/ruleSchema.ts:g
 e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:21
 e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:61
 e2c6b8b67800fa07ea6191b83aba76bd84132133:tests/acceptance/v3/replay-hash.baseline.json:generic-api-key:62
+# A deliberately fake key (sk-abcdefghijklmnop...) in the committee test's hostile-pack text on the build branch (8ded45c4, 2026-11-17, M22 C1). The scan reads every branch. Not a secret (Owner approved 2026-11-18).
+8ded45c4a2d19cec9edfc66f97fbcd0aa70de14d:tests/committee/debate.test.ts:generic-api-key:169
