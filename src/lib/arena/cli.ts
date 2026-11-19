@@ -6,7 +6,9 @@
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
 //   close-books --kill market_off [--market <CODE>] [--date YYYY-MM-DD]   (the rollback kill, M20 D-1101: closes every
 //                open book of a market in rollback at the open, then disables it; src/lib/arena/kill.ts)
-//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all]
+//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all|core|after]
+//   D-1847: `core` = 2b then 3 (as in `all`), `after` = learn then words (as in `all`); the nightly
+//   orchestrator runs core -> picks -> after so the picks never wait behind the learning stages.
 //                (batch 2b, M4 T8; batch 3, T15; then A6 `learn` and the `words` text, M6 T11; all = in that order)
 //   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market <CODE>]
 //
@@ -441,8 +443,8 @@ export async function signalsMain(
     return 2;
   }
   const phase = flag(argv, "--phase") ?? "all";
-  if (!["2b", "3", "learn", "words", "all"].includes(phase)) {
-    out("arena-2b: refused (--phase must be 2b, 3, learn, words or all)");
+  if (!["2b", "3", "learn", "words", "all", "core", "after"].includes(phase)) {
+    out("arena-2b: refused (--phase must be 2b, 3, learn, words, all, core or after)");
     return 2;
   }
   const waitMinutes = Number.parseInt(flag(argv, "--wait-minutes") ?? "", 10);
@@ -475,8 +477,11 @@ export async function signalsMain(
       args: [market],
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
+    // D-1847: `core` is the 2b -> 3 half of `all`, `after` its learn -> words half
+    const chain = phase === "all" || phase === "core";
+    const tail = phase === "all" || phase === "after";
     let runReview = phase === "3";
-    if (phase === "2b" || phase === "all") {
+    if (phase === "2b" || chain) {
       if (writes) {
         const deadline = nowMs() + wait * 60_000;
         while (!(await hasClosedBooks(db, market, d)) && nowMs() < deadline) await sleep(POLL_MS);
@@ -522,7 +527,7 @@ export async function signalsMain(
       if (late2a) exit = 1;
       // batch 3 follows 2b back-to-back (design 4.1), unless 2b failed or never had its inputs
       runReview =
-        phase === "all" &&
+        chain &&
         !late2a &&
         (result.status === "success" ||
           result.status === "degraded" ||
@@ -556,7 +561,7 @@ export async function signalsMain(
     // but not at all in data-only mode: there is nothing to learn and the guard would only add noise.
     const nowIso = (): string => new Date(nowMs()).toISOString();
     const commitSha = has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined;
-    if (phase === "learn" || (phase === "all" && writes)) {
+    if (phase === "learn" || (tail && writes)) {
       const learn = await learnDay(db, {
         market: market,
         d,
@@ -570,7 +575,7 @@ export async function signalsMain(
       lastLearn = `learn=${learn.status}`;
       if (learn.status === "failed") exit = 1;
     }
-    if (phase === "words" || (phase === "all" && writes)) {
+    if (phase === "words" || (tail && writes)) {
       const llm = deps.wordsLlm ?? nightWordsLlm;
       // D-1460: the list is read here, before the synchronous words phase; null (unreadable) keeps every role rules-only.
       const liveRoles = await readLiveRoles(db);

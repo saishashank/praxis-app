@@ -35,7 +35,7 @@ jobs:
   production:
     if: github.ref == 'refs/heads/release'
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 240
     permissions:
       contents: read
       deployments: read
