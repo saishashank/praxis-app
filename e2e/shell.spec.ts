@@ -4,7 +4,7 @@
 import { expect, test } from "@playwright/test";
 import { ROLE_LIST, axeViolations, expectNoHorizontalScroll, signIn } from "./helpers";
 
-const SIX = ["Home", "Picks", "Market", "Strategies", "News", "Reviews"];
+const SIX = ["Home", "Picks", "Portfolio", "Market", "Strategies", "News", "Reviews"];
 
 test("360 px: bottom bar shows all six labels unclipped, so no More menu is needed", async ({
   page,
@@ -17,8 +17,8 @@ test("360 px: bottom bar shows all six labels unclipped, so no More menu is need
   await expect(bar).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Main", exact: true })).toBeHidden();
   const links = bar.getByRole("link");
-  await expect(links).toHaveCount(6);
-  for (let i = 0; i < 6; i++) {
+  await expect(links).toHaveCount(7);
+  for (let i = 0; i < SIX.length; i++) {
     const link = links.nth(i);
     await expect(link).toContainText(SIX[i]!);
     const m = await link.evaluate((a) => {

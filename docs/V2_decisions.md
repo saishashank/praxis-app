@@ -1332,3 +1332,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1778 | Main's migration tests for 0029, 0031 and 0033 are pinned to their own version (ms.filter(version <= N)), as main's test for 0032 already was, because V3 mig... |
 | D-1779 | Main's display changes (pick card with entry, now, aim and stop rows, My portfolio card and loader, delayed-price labels on Strategies and Risk, end-of-day d... |
 | D-1844 | Cortex warm state for V3 (Owner 2026-11-18: no clean slate). |
+| D-1849 | "My portfolio" moves off the Picks page to its own top-nav tab, and the Picks page gets one tab row (Owner 2026-11-19). |

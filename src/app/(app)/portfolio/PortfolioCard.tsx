@@ -1,9 +1,9 @@
-// D-950 "My portfolio" on Home and the Picks page: the three practice portfolios side by side, one
+// D-950 "My portfolio" on Home and the Portfolio page (D-1849: moved off Picks): the three practice portfolios side by side, one
 // per risk profile, each with its value, profit or loss, worst fall, holdings and strategy split.
 import type { MyPortfolio, MyPortfoliosView } from "@/lib/ui/loaders/pickPortfolio";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { currencyFormatFor, formatDay, formatMicro, formatPpm } from "@/lib/view/format";
-import { profileLabel } from "./text";
+import { profileLabel } from "../picks/text";
 
 const pctText = (ppm: number | null) =>
   ppm === null ? null : formatPpm(ppm, { digits: 1, sign: "always" });
@@ -133,7 +133,15 @@ function One({ v }: { v: MyPortfolio }) {
   );
 }
 
-export function PortfolioCard({ v }: { v: MyPortfoliosView }) {
+export function PortfolioCard({
+  v,
+  headingLevel = 2,
+}: {
+  v: MyPortfoliosView;
+  /** The Portfolio page owns the h1; Home keeps the card as a section with an h2. */
+  headingLevel?: 1 | 2;
+}) {
+  const Heading = headingLevel === 1 ? "h1" : "h2";
   return (
     <section
       aria-labelledby="portfolio-h"
@@ -141,9 +149,16 @@ export function PortfolioCard({ v }: { v: MyPortfoliosView }) {
       data-testid="pick-portfolio"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="portfolio-h" className="m-0 text-lg font-semibold">
+        <Heading
+          id="portfolio-h"
+          className={
+            headingLevel === 1
+              ? "m-0 text-2xl font-semibold tracking-tight"
+              : "m-0 text-lg font-semibold"
+          }
+        >
           My portfolio
-        </h2>
+        </Heading>
         {!v.masked ? <SimulatedLabel /> : null}
       </div>
       <p className="m-0 mt-1 text-text-muted">

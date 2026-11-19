@@ -5,6 +5,7 @@ import type { TabId } from "./nav";
 
 const ROOTS: ReadonlyArray<readonly [string, TabId]> = [
   ["/picks", "picks"],
+  ["/portfolio", "portfolio"],
   ["/market", "market"],
   ["/strategies", "strategies"],
   ["/news", "news"],

@@ -60,13 +60,24 @@ describe("landmarks and tabs", () => {
     expect(first).toBe(skip);
   });
 
-  it.each(["owner", "editor", "viewer"] as const)("%s sees the six tabs in both bars", (role) => {
-    shell(role);
-    // UXR-002 / AT-47: the current tab carries a screen-reader "(Selected)" cue beside aria-current.
-    const six = ["Home (Selected)", "Picks", "Market", "Strategies", "News", "Reviews"];
-    expect(names(top())).toEqual(six);
-    expect(names(bottom())).toEqual(six);
-  });
+  it.each(["owner", "editor", "viewer"] as const)(
+    "%s sees the seven tabs in both bars (Portfolio after Picks, D-1849)",
+    (role) => {
+      shell(role);
+      // UXR-002 / AT-47: the current tab carries a screen-reader "(Selected)" cue beside aria-current.
+      const six = [
+        "Home (Selected)",
+        "Picks",
+        "Portfolio",
+        "Market",
+        "Strategies",
+        "News",
+        "Reviews",
+      ];
+      expect(names(top())).toEqual(six);
+      expect(names(bottom())).toEqual(six);
+    },
+  );
 
   it("marks the tab of the current path (also for a detail page)", () => {
     pathname.value = "/cards/12";
@@ -285,13 +296,16 @@ describe("tab icons (UXR-055)", () => {
         );
         expect(hued.length).toBeGreaterThan(0);
         for (const st of hued) {
-          expect(st).toMatch(/var\(--color-section-(home|picks|market|strategies|news|reviews)\)/);
+          expect(st).toMatch(
+            /var\(--color-section-(home|picks|portfolio|market|strategies|news|reviews)\)/,
+          );
         }
         expect(svg.getAttribute("stroke")).toBe("currentColor");
       }
     }
   });
-  it("each tab has its own hue", () => {
+  // D-1849: Portfolio shares the Picks hue (no new colour token), so seven tabs show six hues.
+  it("each tab has its own hue (Portfolio shares Picks)", () => {
     shell();
     const hues = within(top())
       .getAllByRole("link")
@@ -411,6 +425,7 @@ describe("keyboard order", () => {
       "Praxis",
       "Home (Selected)",
       "Picks",
+      "Portfolio",
       "Market",
       "Strategies",
       "News",
@@ -433,12 +448,12 @@ describe("keyboard order", () => {
 });
 
 describe("360 px layout (UXN-017, unit level)", () => {
-  it("the bottom bar is six equal columns, fixed, and only below the desktop breakpoint", () => {
+  it("the bottom bar is seven equal columns, fixed, and only below the desktop breakpoint", () => {
     shell();
     expect(bottom().className).toMatch(/fixed/);
     expect(bottom().className).toMatch(/bottom-0/);
     expect(bottom().className).toMatch(/lg:hidden/);
-    expect(bottom().querySelector("ul")?.className).toMatch(/grid-cols-6/);
+    expect(bottom().querySelector("ul")?.className).toMatch(/grid-cols-7/);
     expect(top().className).toMatch(/hidden/);
     expect(top().className).toMatch(/lg:block/);
   });
