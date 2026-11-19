@@ -111,7 +111,7 @@ import {
 import { applyArn011 } from "./families/arn011";
 import { createContext } from "./families/context";
 import { FAMILY_RULE_VERSION, runFamilies } from "./families";
-import { putDayCandidates } from "./forwardLedger";
+import { poolFromDay, putDayCandidates, putDayPool } from "./forwardLedger";
 import { liveParams, loadVersionSet, runVersions, versionIdOf } from "./versionRuns";
 import type { Candidate, CodeFacts, Family, FamilyInputs } from "./families/types";
 import {
@@ -441,6 +441,8 @@ export async function storeLedgerCandidates(
   try {
     const out = runFamilies(day.inputs, baseParams);
     await putDayCandidates(db, o.market, o.d, { candidates: out.candidates, blocked: out.blocked });
+    // D-1848: the day's control pool, so batch 3 never rebuilds the day's inputs for the controls
+    await putDayPool(db, o.market, o.d, poolFromDay(day));
   } catch {
     // batch 3 rebuilds the day
   }

@@ -200,12 +200,12 @@ function bigintCol(v: unknown): bigint {
 }
 
 /** D-910: extra sessions prefetched so a code with a few missing bars still answers from memory. */
-const PREFETCH_MARGIN = 10; // threshold-ok: read-ahead slack in sessions, not a rule
+export const PREFETCH_MARGIN = 10; // threshold-ok: read-ahead slack in sessions, not a rule
 const CAL_DAYS_PER_SESSION = 2; // threshold-ok: calendar days searched per session (weekends, holidays)
 const CAL_SLACK_DAYS = 14; // threshold-ok: extra calendar days searched for the session floor
 
 /** The session `n` sessions back from D (D counts as one), or the oldest the calendar knows. */
-function sessionFloor(d: string, n: number, calendar: readonly CalendarRow[]): string {
+export function sessionFloor(d: string, n: number, calendar: readonly CalendarRow[]): string {
   const back = sessionsBetween(addDays(d, -n * CAL_DAYS_PER_SESSION - CAL_SLACK_DAYS), d, calendar);
   return back[back.length > n ? back.length - n : 0] ?? d;
 }
