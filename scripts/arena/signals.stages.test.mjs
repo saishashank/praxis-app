@@ -21,15 +21,24 @@ const ENTRIES = {
 
 function harness({ code = 0, breakEntry = null } = {}) {
   const calls = [];
+  const order = []; // D-1847: the signals phases and the stages, interleaved
   const loaded = [];
   const rec = (name) => async (args) => {
     calls.push([name, ...args]);
+    order.push(name);
     return 0;
   };
   const loadEngine = async (entry) => {
     loaded.push(entry);
     if (entry === breakEntry) throw new SyntaxError("did not build");
-    if (entry === undefined) return { signalsMain: async () => code };
+    if (entry === undefined)
+      return {
+        signalsMain: async (args) => {
+          const i = args.indexOf("--phase");
+          order.push(`signals:${i < 0 ? "default" : args[i + 1]}`);
+          return code;
+        },
+      };
     if (String(entry).endsWith("picks/cli.ts")) return { picksMain: rec("picks") };
     if (entry === ENTRIES.steelman) return { steelmanMain: rec("steelman") };
     if (entry === ENTRIES.reflect) return { reflectMain: rec("reflect") };
@@ -40,7 +49,7 @@ function harness({ code = 0, breakEntry = null } = {}) {
     if (entry === ENTRIES.minilm) return { minilmMain: rec("minilm") };
     throw new Error(`unexpected entry ${entry}`);
   };
-  return { calls, loaded, loadEngine };
+  return { calls, order, loaded, loadEngine };
 }
 
 function rootWith(files) {
@@ -63,10 +72,16 @@ test("the stages run in order: steelman, reflections, Committee; each from its o
       { loadEngine: h.loadEngine, out: (s) => lines.push(s), root },
     );
     assert.equal(code, 0);
-    assert.deepEqual(
-      h.calls.map((c) => c[0]),
-      ["picks", "steelman", "reflect", "committee", "proposals", "opinions"],
-    );
+    assert.deepEqual(h.order, [
+      "signals:core",
+      "picks",
+      "signals:after",
+      "steelman",
+      "reflect",
+      "committee",
+      "proposals",
+      "opinions",
+    ]);
     assert.equal(new Set(h.loaded).size, h.loaded.length, "one bundle per stage");
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -212,5 +227,54 @@ test("no stage entry imports another stage's entry (PRD-033)", () => {
             ),
           `${stage} imports ${spec}`,
         );
+  }
+});
+
+test("D-1847: a whole night publishes the picks before learn and words; a named phase runs as given", async () => {
+  const root = rootWith([]);
+  try {
+    for (const [argv, first] of [
+      [
+        ["--date", "2026-11-18"],
+        ["signals:core", "picks", "signals:after"],
+      ],
+      [
+        ["--phase", "all"],
+        ["signals:core", "picks", "signals:after"],
+      ],
+      [
+        ["--phase", "3"],
+        ["signals:3", "picks"],
+      ],
+      [
+        ["--phase", "learn"],
+        ["signals:learn", "picks"],
+      ],
+    ]) {
+      const h = harness();
+      await run(argv, {}, { loadEngine: h.loadEngine, out: () => {}, root });
+      const names = h.order;
+      assert.deepEqual(names.slice(0, first.length), first, argv.join(" "));
+      assert.equal(
+        names.filter((n) => n.startsWith("signals:")).length,
+        first.filter((n) => n.startsWith("signals:")).length,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("D-1847: the exit code is the worst of core, picks and after", async () => {
+  const root = rootWith([]);
+  try {
+    const h = harness();
+    const load = async (entry) =>
+      entry === undefined
+        ? { signalsMain: async (args) => (args.includes("after") ? 1 : 0) }
+        : h.loadEngine(entry);
+    assert.equal(await run([], {}, { loadEngine: load, out: () => {}, root }), 1);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });

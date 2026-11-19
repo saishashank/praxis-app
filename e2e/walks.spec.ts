@@ -4,7 +4,7 @@
 // The images and the log stay outside this repo (SEC-110). Starts from the rich scenario plus the named states
 // `steelman-cards` and `blueprint-full` when the lane sets E2E_STATES (e2e/seed/states.mjs, TST-135).
 import { test, type Page } from "@playwright/test";
-import { createClient } from "@libsql/client";
+import { openLocalDb } from "./localDb";
 import AxeBuilder from "@axe-core/playwright";
 import fs from "node:fs";
 import path from "node:path";
@@ -114,7 +114,7 @@ for (const ROLE of ROLES_)
             continue;
           let target = p;
           if (p.startsWith("@")) {
-            const db = createClient({ url: process.env.TURSO_MAIN_URL! });
+            const db = await openLocalDb(process.env.TURSO_MAIN_URL!);
             try {
               const q = {
                 "@card": "SELECT '/cards/' || id AS u FROM decision_card LIMIT 1",

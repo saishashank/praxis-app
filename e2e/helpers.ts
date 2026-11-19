@@ -1,7 +1,7 @@
 import type { BrowserContext, Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { encode } from "next-auth/jwt";
-import { createClient } from "@libsql/client";
+import { openLocalDb } from "./localDb";
 
 export type Role = "owner" | "editor" | "viewer";
 export const EMAIL: Record<Role, string> = {
@@ -14,7 +14,7 @@ export const EMAIL: Record<Role, string> = {
 // uses on http. The HTTP login route cannot be used here: its replay store speaks only the Turso
 // HTTP protocol (no file: databases), so the cookie is minted in-process from the per-run secret.
 export async function signIn(context: BrowserContext, role: Role): Promise<void> {
-  const authDb = createClient({ url: process.env.TURSO_AUTH_URL! });
+  const authDb = await openLocalDb(process.env.TURSO_AUTH_URL!);
   try {
     const res = await authDb.execute({
       sql: "SELECT id, session_version FROM app_user WHERE email = ?",
@@ -39,7 +39,7 @@ export async function signIn(context: BrowserContext, role: Role): Promise<void>
 }
 
 export async function setTheme(role: Role, theme: string): Promise<void> {
-  const db = createClient({ url: process.env.TURSO_AUTH_URL! });
+  const db = await openLocalDb(process.env.TURSO_AUTH_URL!);
   try {
     const u = await db.execute({
       sql: "SELECT id FROM app_user WHERE email = ?",

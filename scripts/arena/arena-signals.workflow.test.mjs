@@ -36,8 +36,9 @@ test("one production job on release, environment production without a deployment
   assert.notEqual(job.concurrency.group, close.jobs.production.concurrency.group);
   assert.equal(job["runs-on"], "ubuntu-latest");
   // 90 since 2026-11-02 (D-870); 120 since 2026-11-09: two nights ran out before the picks step (D-910).
-  // 120 is the ceiling.
-  assert.ok(job["timeout-minutes"] > 0 && job["timeout-minutes"] <= 120);
+  // 240 since 2026-11-19 (D-1847): 16-18 Nov ran out at 120 before the picks; the picks now also run before learn.
+  // 240 is the ceiling.
+  assert.ok(job["timeout-minutes"] > 0 && job["timeout-minutes"] <= 240);
 });
 
 test("the approved-commit steps and node setup are copied exactly from Batch 1 and arena-close", () => {
