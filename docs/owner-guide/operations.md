@@ -83,7 +83,7 @@ On the first Saturday of the month. Allow about 45 minutes. [OPS-020]
 On 1 January, April, July and October. A reminder shows from day 75. The release gate needs a restore drill pass within 120 days. [OPS-020, TST-108]
 
 1. **Restore drill.** Follow section H of `M8_go_live.md`. In short: add your offline private key and a new short-lived Turso token as secrets, run **Restore drill** with mode `drill`, then delete both secrets and revoke the token, then run again with mode `verify-removed`. From the first drill after go-live, the check replays one stored live cohort and compares it with its stored result. [TST-108]
-2. **Staging sign-in.** Sign in once to staging, so Google keeps its OAuth client in use. [VERIFY Google's rule for unused clients]
+2. **Staging sign-in.** Retired: there is no staging (D-964), so there is no OAuth client to keep in use.
 3. **Rotations due.** If any secret is due, rotate it (see "Rotating a secret" below).
 
 ---
@@ -187,16 +187,18 @@ The AT-05b test push is expected. It is not an incident. [AT-05b]
 
 **Start the next market (OPS-061).** Not part of the AU go-live. When AU meets the rules and you approve, the agent builds India, then the USA. [MKT-105, MKT-106]
 
+**Read the Markets row (MKT-114, UXN-312).** Open **Settings**, then **Region & markets**. Only you see every market. Editors and Viewers see the markets that are switched on. AU reads **Active**, or **Active (collecting data only)** while it only collects. India and the USA read **Built — off in production**. That means the code and the facts about the market exist, but nothing runs for it, nothing is stored for it, and no page or email names it. Under each one you see "AT-M evidence: not recorded" and two open items: AU 60 trading days, and your approval. You cannot switch a market on from this row yet. If production ever shows rows, jobs or a page for India or the USA, that is an S2 incident, and **System health** names it (`market_not_enabled`, `market_rows_unexpected` or `markets_enabled_mismatch`). Leave the variable `PRAXIS_MARKETS_ENABLED` unset; the next market's switch-on will say when to set it. [MKT-110, D-1809]
+
 ---
 
 ## Deploy
 
 All changes go in by pull request. [OPS-041]
 
-- A merge into `main` deploys **staging only**: the staging app and the staging Worker. A failing test blocks it.
+- A merge into `main` deploys **nothing**: staging is retired (D-964) and `deploy-staging.yml` is dispatch-only. What staging used to prove is proven by the `recorded-day` job of CI (one full AU day on local files, no request leaves the runner).
 - For production, the agent opens a pull request into `release`, from a branch fixed at the chosen commit (`rc/<sha>`). You merge it.
 - The `deploy-production` job then waits. GitHub emails you. Open **Actions**, open the run, select **Review deployments**, tick `deploy-production`, and select **Approve and deploy**. [SEC-108 c]
-- The release gate must pass first. The gate checks the CI jobs, a staging full day, a restore drill in the last 120 days, a staging ZAP run and a recent nightly run. [TST-112]
+- The release gate must pass first. The gate checks the CI jobs, the recorded day (CI job `recorded-day`), the CI streak (three green push runs, the newest on the commit), an authenticated ZAP scan of the local build, and a restore drill in the last 120 days. No condition can be waived. [TST-112, D-964]
 - Every night the app checks the code that runs in production is the last approved commit. If the `release` head or the deployed commit differs and nobody approved it, you get an S1 incident. [SEC-108 d]
 - Backups and archives go to the private data repository. They never start a deploy. [PLT-022a]
 
@@ -228,6 +230,53 @@ Use this after you change any Vercel environment variable. The new value is read
 
 ---
 
+## Switching on India or the US, and rolling back (V3, M20)
+
+Nothing here happens by itself. India and the US are built and **off** in production; the build never switches them on. You do it, after the pull request is merged and deployed, from **Settings > Region & markets > Switch on a market** (Owner only; Editors and Viewers never see it). [MKT-111, AT-71]
+
+**Before the first switch (you do these, once)**
+
+1. **Decide each pending source.** The licence register lists every source of the market. A source marked pending blocks the switch. For each one, accept its risk or turn it off; the decision is recorded as a one-line status change in the build, so ask for a build session. [D-1096, D-1191]
+2. **US only:** put `PRAXIS_EDGAR_CONTACT` (a contact address EDGAR can reach) and `FRED_API_KEY` (a free key) in the Owner store. The US fetchers refuse to run without them. [D-1094]
+3. **Keep Turso on the free plan.** The Usage page shows "Projection per market". The switch stays disabled while AU plus the markets already on plus this one would pass 20 % of the free plan. [D-1195]
+
+**The two steps**
+
+| Step | The button | What it needs | What happens |
+|---|---|---|---|
+| 1 | Switch on (data only) | the five checklist items: profile complete, AT-M evidence recorded, source rows decided, quota projection fits, AU has been live 60 trading days with no open S1 or S2 incident and its 30-day targets met | the market starts collecting data only: prices, announcements, quality checks. No books, no e-mails. |
+| 2 | Switch to full | the same items plus five good trading days (a green quality check each) and ten bar-latency samples, and the exchange-rate close of the day for the starting money | the books open on the next trading day. |
+
+Each item shows its state and where to look. A button that is greyed out says which items are open. You cannot skip step 1. [D-1100, D-1105]
+
+**After a switch: your own step.** Set the production setting `PRAXIS_MARKETS_ENABLED` (for example `AU,IN`) in the host and redeploy the app (see "Redeploy the app"). Until you do, the nightly check says the setting and the database differ; the database decides what runs. [D-1809, D-1193]
+
+**Rolling back (one click)**
+
+1. On the same card press **Roll back to off** and give a reason (required). The market goes to off at once: no new orders, no e-mails.
+2. At the next open of that market (two minutes after it) every open position is sold at the open price, orders still waiting are cancelled, and the market is then disabled. Nothing is deleted: all stored data stays. If the market was only collecting data, it is disabled at once and there is nothing to close.
+3. While the close is waiting nothing can be switched. If a share is halted, it cannot be sold: you get an incident, the market stays on, and the close tries again at the next open. [D-1101, D-1194]
+4. Afterwards remove the market from `PRAXIS_MARKETS_ENABLED`.
+
+**Deploy order (once, for the first V3 release).** The Worker reads a new market column before the database migration for it has run. Expect at most one tick window of `statement-error` incidents after the approved deploy, or run the migration first. [D-1129, D-1199]
+
+---
+
+## Custom domain and installing the app (M21)
+
+Praxis runs on its Vercel address until you choose to buy a name. Nothing changes until you do these steps, in this order:
+
+1. Buy the name from a registrar you trust.
+2. In Vercel, open the project, then **Domains**, and add the name.
+3. Add the DNS records Vercel shows you at your registrar, and wait until Vercel says the domain is valid.
+4. In Vercel's **production** environment, change `APP_BASE_URL` to the new address (https, no path), then redeploy.
+5. In Google's OAuth client, add the new redirect address for sign-in.
+6. Open **Configuration** and set **Public domain** to the host name only, for example `praxis.example.com` (no https, no path).
+
+The next self-check confirms it: while a public domain is set, `APP_BASE_URL` must be on that host. Sign-in cookies belong to one host, so everyone signs in again once. Leave the setting empty to keep the Vercel address.
+
+**Installing the app.** Settings > About has "Install Praxis on this device". Where the browser allows it, one button installs; otherwise use the browser menu ("Install app" or "Add to Home Screen"). The installed app keeps only its own screens' fixed files (code and icons) for speed. It never stores prices, pages, picks or anything from your account, and there are no push alerts: e-mail stays the alert channel. When the device is offline the app shows a badge that the figures shown may be old.
+
 ## Settings you can change, and ones you must not
 
 | You may | You must not |
@@ -235,7 +284,7 @@ Use this after you change any Vercel environment variable. The new value is read
 | Switch a market's data source on or off in Data controls. | Add a payment method to any provider. |
 | Set email mode: `off`, `incidents` or `full`. In production, email cannot go `off` while a market is `full`. | Paste a key into chat, email or a file. |
 | Tick or untick Worker slots on System health. Backup, maintenance and ingest batch 1 always run. | Put the backup private key on Vercel or Cloudflare. |
-| Set the AU market to `data_only` to pause trading. | Put `TEST_IDENTITY_SECRET` in production. |
+| Set the AU market to `data_only` to pause trading. Switch India or the US on only through the checklist (Settings > Region & markets). | Put `TEST_IDENTITY_SECRET` in production. |
 | Add or remove a user. | Approve a deploy you did not expect. |
 
 ## Known gaps to keep in mind

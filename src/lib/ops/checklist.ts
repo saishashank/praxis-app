@@ -3,9 +3,10 @@
 // the Melbourne "today" comes from the instant with the zone database (marketDate), so a day that is
 // 23 or 25 hours long (the two DST changes) never moves a due date. Weekdays and day counts are done on
 // the date digits in UTC, which has no DST. Nothing here reads a clock or a database.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { addDays, marketDate } from "@/lib/data/calendar";
 
-export const OPS_TZ = "Australia/Melbourne";
+export const OPS_TZ = OWNER_TZ;
 
 const DAY_MS = 86_400_000; // threshold-ok: unit conversion
 const WEEK = 7; // threshold-ok: days in a week

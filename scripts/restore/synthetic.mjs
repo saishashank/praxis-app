@@ -8,9 +8,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateIdentity, identityToRecipient } from "age-encryption";
 import { loadMigrations, migrateUp } from "../../src/lib/db/migrate-core.mjs";
+import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
 import { exportEncrypted } from "../backup/core.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+/** The market of the synthetic rows: the enabled market of a freshly migrated database (the seed's home market). */
+const SYNTH_MARKET = HOME_MARKET;
 export const SYNTH_NOW = "2026-01-02T03:04:05.678Z";
 export const SYNTH_MARKER = "SYNTH-ROW-MARKER-77c1"; // must never appear in any output
 
@@ -27,8 +30,19 @@ async function seedMain(db) {
       const c = Math.round((10 + ci * 3 + Math.sin(i / 5 + ci) * 2 + i * 0.03) * 100) / 100;
       await db.execute({
         sql: `INSERT INTO price_bar (market, code, d, o, h, l, c, volume, source, published_at, ingested_at)
-              VALUES ('AU', ?, ?, ?, ?, ?, ?, ?, 'synthetic', ?, ?)`,
-        args: [CODES[ci], isoDay(i), c, c + 0.1, c - 0.1, c, 1000 + i, SYNTH_NOW, SYNTH_NOW],
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'synthetic', ?, ?)`,
+        args: [
+          SYNTH_MARKET,
+          CODES[ci],
+          isoDay(i),
+          c,
+          c + 0.1,
+          c - 0.1,
+          c,
+          1000 + i,
+          SYNTH_NOW,
+          SYNTH_NOW,
+        ],
       });
     }
   }

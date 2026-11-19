@@ -1,6 +1,11 @@
-import { COST_PROFILE_CODES } from "@/lib/arena/costs";
+import { allMarketCostProfileCodes } from "@/lib/arena/costs";
 import { LEARN_CONFIG_SPEC } from "@/lib/cortex/learn/config";
+import { CALENDAR_MARKETS } from "@/lib/data/calendar";
+import { MKT_KEY_FIELDS, type MktKeyField } from "@/lib/market/fields.mjs";
+import { HOME_MARKET, marketsEnabledDefault } from "@/lib/market/profileCore.mjs";
+import { builtMarkets, seedOf } from "@/lib/market/seed/index.mjs";
 import { DEFAULT_INJECTION_PHRASES } from "@/lib/llm/injection";
+import { HMAC_SCHEME_VERSION } from "@/lib/security/hmacCore.mjs";
 
 // Typed registry of configuration keys (spec ch.15). Values are stored as JSON in config_version.
 // Spec refs cite spec/15_configuration_reference.md line numbers.
@@ -40,8 +45,24 @@ const never = async () => "this setting is fixed";
 const oneOf = (allowed: readonly string[]) => async (v: unknown) =>
   typeof v === "string" && allowed.includes(v) ? null : `must be one of ${allowed.join(", ")}`;
 
-/** Markets that have a mode (MKT-102: IN and US do not exist before their build starts). */
-export const MODE_MARKETS = ["AU"] as const;
+/**
+ * Markets that have a mode: the built markets of the seed registry (M19 D-1808; was a literal AU list). A market
+ * that is built but not enabled is mode `off` and is never switched on here (D-1809).
+ */
+export const MODE_MARKETS: readonly string[] = builtMarkets();
+
+/** The AU decision cut-off (HH:MM): the seed value, so the legacy `decision_cutoff` key and the profile share one definition. */
+const HOME_CUTOFF: string = (seedOf(HOME_MARKET)!.fields.decision_cutoff.value as { time: string })
+  .time;
+
+/** The home market session window (HH:MM): the quote-poll and scan keys must lie inside it (AGT-140). */
+const HOME_OPEN: string = seedOf(HOME_MARKET)!.fields.session_open.value as string;
+const HOME_CLOSE: string = seedOf(HOME_MARKET)!.fields.session_close.value as string;
+
+/** The default of `market_mode`: every built market with the mode its seed row has (AU data_only, the rest off). */
+const MARKET_MODE_DEFAULT: Record<string, string> = Object.fromEntries(
+  builtMarkets().map((c) => [c, seedOf(c)!.mode]),
+);
 /**
  * Modes that can be selected. `full` is accepted here as a value; in PRODUCTION the Owner action
  * (src/lib/data/controls.ts setMarketMode) refuses it unless a go_live_signoff row exists and
@@ -197,11 +218,11 @@ const M4_FIXED = [
   ["short_interest_window_sessions", "int", 10, "sessions", REG, "F6 class (d), spec 07 l.57", "Short-interest change window"],
   ["f4_event_window_sessions", "int", 3, "sessions", REG, "F4, spec 07 l.55 (no negative event in the last 3 sessions)", "F4: negative-event look-back"],
   ["day0_close_offset_min", "int", 10, "min", REG, "ARN-020 day 0; continuous trading ends 10 min before the close [VERIFY]", "Day-0 boundary before the calendar close [VERIFY]"],
-  ["decision_cutoff", "text", "18:10", "Melbourne time", REG, "ARN-020, DAT-001; ch.15 l.15", "Decision cut-off"],
+  ["decision_cutoff", "text", HOME_CUTOFF, "Melbourne time", REG, "ARN-020, DAT-001; ch.15 l.15", "Decision cut-off"],
   ["thesis_breakers_min", "int", 3, "count", REG, "AGT-110", "Thesis-breakers on a card, at least"],
   ["thesis_breakers_max", "int", 5, "count", REG, "AGT-110", "Thesis-breakers on a card, at most"],
   ["thesis_amber_fraction", "num", 0.2, "fraction", REG, "AGT-111 amber within 20 % of the trigger", "Amber when this close to a thesis-breaker trigger"],
-  ["ledger_notional_aud", "int", 600, "A$", VAL, "ARN-080 fixed notional A$600", "Signal-ledger notional per row"],
+  ["ledger_notional_aud", "int", 600, "market currency", VAL, "ARN-080 fixed notional A$600", "Signal-ledger notional per row"],
   // Statistics (ARN-081..087, VAL-110)
   ["alpha", "num", 0.05, "level", VAL, "ARN-081; ch.15 l.62", "Overall test level"],
   ["bootstrap_replications_min", "int", 1000, "replications", VAL, "ARN-081 B = max(1,000, 20 / level); ch.15 l.57", "Bootstrap replications, floor"],
@@ -314,7 +335,7 @@ const M5_RANGED = [
   ["p0_batch_window_min", "int", 5, 1, 15, "min", "O", SEM, "EML-020, AGT-115; ch.15 l.120 (bounds not in the extract, D-097)", "P0 follow-ups inside this window are batched into one email"],
   ["watch_list_window", "int", 20, 5, 60, "sessions", "O", SEM, "AGT-014; ch.15 l.121 (bounds not in the extract, D-097)", "A code with a family signal in the last this many sessions is on the watch-list"],
   ["owner_add_expiry_days", "int", 90, 1, 90, "days", "O", SEM, "AGT-014 (expiry at most 90 days); ch.15 l.121 (lower bound D-097)", "Longest an Owner-added watch-list code stays on"],
-  ["sentinel_max_items_per_run", "int", 40, 1, 40, "items", "O", SEM, "AGT-010, PLT-075 (at most 40); ch.15 l.122 (lower bound D-097)", "Announcements assessed per Sentinel call"],
+  ["news_assess_per_run", "int", 40, 20, 200, "items", "O", SEM, "DAT-251 b (supersedes the AGT-010/PLT-075 ceiling of 40), D-1783", "Announcements assessed per Sentinel call (the effective cap is also bounded by the LLM headroom and, near the Turso line, by 40)"],
   // Email budget and review follow-up (EML-004, EML-036, NFR-006)
   ["email_daily_cap", "int", 20, 5, 50, "emails/day", "O", SEM, "EML-004; ch.15 l.189", "Emails per day (3 are reserved, P0 uses the rest)"],
   ["email_monthly_cap", "int", 300, 50, 1000, "emails/month", "O", SEM, "EML-004; ch.15 l.190", "Emails per month"],
@@ -530,11 +551,11 @@ const M6_RANGED = [
   ["pick_success_min_n", "int", 30, 10, 200, "picks", "O", LRN, "UXN-041; ch.15 l.213 (bounds 'as ch. 16' not given, 10-200 agent-chosen, D-111)", "Closed picks needed before model success is shown"],
   // D-950 "My portfolio": three practice portfolios, one per risk profile (Owner 2026-11-11; replaces
   // the D-913 Follow the picks keys picks_portfolio_seed_aud and picks_portfolio_slots)
-  ["my_portfolio_seed_aud", "int", 1000, 1000, 100000, "AUD", "O", LRN, "D-950 (Owner 2026-11-11: A$1,000 per profile)", "Practice money each My portfolio starts with (one per risk profile)"],
+  ["my_portfolio_seed_aud", "int", 1000, 1000, 100000, "market currency", "O", LRN, "D-950 (Owner 2026-11-11: A$1,000 per profile)", "Practice money each My portfolio starts with (one per risk profile)"],
   ["my_portfolio_stock_max_pct", "int", 30, 10, 30, "%", "O", LRN, "D-952 (Owner 2026-11-11: at most 30 % in one stock)", "Most of a My portfolio in one stock (a profile may set less)"],
   ["my_portfolio_strategy_max_pct", "int", 40, 20, 100, "%", "O", LRN, "D-951 (Owner 2026-11-11: at most 40 % per strategy)", "Most of a My portfolio given to one strategy; what the cap frees stays cash"],
   ["my_portfolio_cost_max_pct", "num", 1.5, 0.5, 5, "%", "O", LRN, "D-952 (Owner 2026-11-11: brokerage matters with A$1,000)", "Most a buy's brokerage both ways may cost, as a share of the buy (a trim: half); a dearer trade is not made"],
-  ["my_portfolio_min_parcel_aud", "int", 200, 0, 500, "AUD", "O", LRN, "D-952 (the ASX first-buy minimum parcel is A$500; at A$1,000 it would allow one stock)", "Smallest buy of My portfolio"],
+  ["my_portfolio_min_parcel_aud", "int", 200, 0, 500, "market currency", "O", LRN, "D-952 (the ASX first-buy minimum parcel is A$500; at A$1,000 it would allow one stock)", "Smallest buy of My portfolio"],
   // D-980 candidate picks (Owner 2026-11-11: "start picking stocks based on new candidates so that you can validate")
   ["picks_candidate_per_measure", "int", 1, 0, 2, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Candidate picks per candidate measure per night (0 = none)"],
   ["picks_candidate_max", "int", 3, 0, 5, "picks", "O", LRN, "D-980 (Owner 2026-11-11)", "Most candidate picks per night in total, placed after the strategy and shortlist picks (0 = none)"],
@@ -825,7 +846,7 @@ const M6_EXPLICIT_KEYS = {
   },
   profile_portfolio_amount: {
     default: { aggressive: 10000, balanced: 10000, conservative: 10000 },
-    unit: "A$",
+    unit: "market currency",
     editable: "O",
     ref: "AGT-113, UXN-040; ch.15 l.210 (A$1,000-1,000,000)",
     validate: async (v: unknown) => validateProfileAmounts(v),
@@ -1378,7 +1399,7 @@ async function validateScanWindow(
   v: unknown,
   get: (k: M17TimeKey) => Promise<unknown>,
 ): Promise<string | null> {
-  const bad = await timeIn("10:00", "16:00")(v);
+  const bad = await timeIn(HOME_OPEN, HOME_CLOSE)(v);
   if (bad) return bad;
   const t = clockMinutes(v)!;
   const other = clockMinutes(
@@ -1614,6 +1635,496 @@ const MOVERS_META_TABLES = Object.fromEntries(
 /** Every key added by the movers gap additions (D-740 to D-759). */
 export const MOVERS_KEY_NAMES: readonly ConfigKey[] = MOVERS_RANGED.map((r) => r[0]);
 
+// ---- M19 market-profile keys (docs/M19_design.md A1; MKT-107, DAT-241, CXA-002; D-1808, D-1809) ----------------
+// `mkt.<CODE>.<field>` overlays the seed row of the profile field of that name (src/lib/market/profile.ts reads
+// the newest value); an Owner edit of an O key goes through setProfileField (a counted trial for costs, parcels
+// and settlement, DAT-242). The defaults are the seed values, so the key never holds a second definition.
+
+type MktKeyShape = {
+  unit: string;
+  ref: string;
+  label: string;
+  bounds: string;
+  input: ConfigInput;
+  range?: readonly [number, number];
+  validate: (code: string) => ConfigKeyDef["validate"];
+  /** The key's default from the seed value of the field. */
+  def: (code: string) => unknown;
+};
+
+const seedValue = (code: string, field: MktKeyField): unknown => seedOf(code)!.fields[field].value;
+
+const MKT_SHAPES: Record<MktKeyField, MktKeyShape> = {
+  decision_cutoff: {
+    unit: "local HH:MM",
+    ref: "CXA-002 a, ch.15 15.11.1; one definition with the decision_cutoff key for the home market (D-1808)",
+    label: "Decision cut-off",
+    bounds: "fixed (HH:MM, the profile seed)",
+    input: "text",
+    validate: () => never,
+    def: (c) => (seedValue(c, "decision_cutoff") as { time: string }).time,
+  },
+  settlement_days: {
+    unit: "sessions",
+    ref: "CXA-002 b, ch.15 15.11.1",
+    label: "Settlement cycle",
+    bounds: "fixed (whole sessions, 0 to 3)",
+    input: "int",
+    range: [0, 3],
+    validate: () => intRange(0, 3),
+    def: (c) => seedValue(c, "settlement_days"),
+  },
+  parcel_floor: {
+    unit: "market currency",
+    ref: "CXA-002 b, O-60, D-947, ch.15 15.11.1",
+    label: "Smallest parcel the Arena will trade",
+    bounds: "0 or more, in the market's currency (a change is a counted trial)",
+    input: "number",
+    range: [0, 1_000_000_000],
+    validate: () => numRange(0, 1_000_000_000),
+    def: (c) => Number(seedValue(c, "parcel_floor") as bigint) / 1_000_000,
+  },
+  opening_auction_window: {
+    unit: "window",
+    ref: "CXA-002 c, ch.15 15.11.1",
+    label: "Opening auction window",
+    bounds: "fixed (staggered from-to, or a single time)",
+    input: "object",
+    validate: () => never,
+    def: (c) => seedValue(c, "opening_auction_window"),
+  },
+  preopen_recheck_min: {
+    unit: "minutes before open",
+    ref: "CXA-002 c, ch.15 15.11.1",
+    label: "Pre-open re-check, minutes before the open",
+    bounds: "fixed",
+    input: "int",
+    range: [1, 30],
+    validate: () => never,
+    def: (c) => seedValue(c, "preopen_recheck_min"),
+  },
+  classification_scheme: {
+    unit: "scheme",
+    ref: "CXA-002 e, ch.15 15.11.1",
+    label: "Industry classification scheme",
+    bounds: "fixed (gics_group, nse_level2 or sic_2digit)",
+    input: "text",
+    validate: () => never,
+    def: (c) => seedValue(c, "classification_scheme"),
+  },
+  cost_formula: {
+    unit: "profile",
+    ref: "ARN-116, ARN-117, ch.15 15.11.1",
+    label: "Brokerage cost profile of the market",
+    bounds: "one of the market's cost profiles (a change is a counted trial)",
+    input: "text",
+    validate: (c) => oneOf(seedOf(c)!.costProfileCodes),
+    def: (c) => seedValue(c, "cost_formula"),
+  },
+  universe_max: {
+    unit: "codes (0 = no cap)",
+    ref: "MKT-113, D-928, ch.15 15.11.1",
+    label: "Most codes in the market's universe",
+    bounds: "0 (no cap) or 500 to 6,000, only within the quota projection",
+    input: "int",
+    range: [0, 6000],
+    validate: () => async (v) =>
+      v === 0 || (isInt(v) && v >= 500 && v <= 6000)
+        ? null
+        : "must be 0 (no cap) or a whole number from 500 to 6,000",
+    def: (c) => {
+      const v = seedValue(c, "universe_max");
+      return typeof v === "number" ? v : 0;
+    },
+  },
+  dividend_imputation: {
+    unit: "on/off",
+    ref: "CXA-002 i, ch.15 15.11.1",
+    label: "Dividend imputation (franking) angle",
+    bounds: "fixed (true or false)",
+    input: "bool",
+    validate: () => never,
+    def: (c) => seedValue(c, "dividend_imputation"),
+  },
+};
+
+type MktKeyName = `mkt.${string}.${MktKeyField}`;
+
+const MKT_KEYS = Object.fromEntries(
+  builtMarkets().flatMap((code) =>
+    (Object.keys(MKT_KEY_FIELDS) as MktKeyField[]).map((field) => {
+      const shape = MKT_SHAPES[field];
+      return [
+        `mkt.${code}.${field}`,
+        {
+          default: shape.def(code),
+          unit: shape.unit,
+          editable: MKT_KEY_FIELDS[field],
+          ref: shape.ref,
+          ...(shape.range === undefined ? {} : { range: shape.range }),
+          validate: MKT_KEY_FIELDS[field] === "fixed" ? never : shape.validate(code),
+        } satisfies ConfigKeyDef,
+      ] as const;
+    }),
+  ),
+) as Record<MktKeyName, ConfigKeyDef>;
+
+const MKT_META = Object.fromEntries(
+  builtMarkets().flatMap((code) =>
+    (Object.keys(MKT_KEY_FIELDS) as MktKeyField[]).map((field) => {
+      const shape = MKT_SHAPES[field];
+      return [
+        `mkt.${code}.${field}`,
+        {
+          label: `${shape.label} (${code})`,
+          area: "Other",
+          bounds: shape.bounds,
+          input: shape.input,
+        },
+      ] as const;
+    }),
+  ),
+) as Record<MktKeyName, ConfigMeta>;
+
+/** The `mkt.<CODE>.<field>` key of a profile field (the only place the key text is built). */
+export const mktConfigKey = (code: string, field: MktKeyField): string => `mkt.${code}.${field}`;
+/** Parses `mkt.<CODE>.<field>`; null for any other key. */
+export function parseMktKey(key: string): { code: string; field: MktKeyField } | null {
+  const m = /^mkt.([A-Z]{2,5}).([a-z_]+)$/.exec(key);
+  return m !== null && Object.prototype.hasOwnProperty.call(MKT_KEY_FIELDS, m[2]!)
+    ? { code: m[1]!, field: m[2] as MktKeyField }
+    : null;
+}
+
+// ---- M21 keys (ch.15 §15.11.2; docs/M21_design.md section A, D-1212, D-1213, D-1231) ----
+// Nine Owner switches and limits. The ch.15 "bool" keys are "on"/"off" text like every other Owner switch (D-1212). Phase R
+// (the Owner tools) is off in a fresh configuration; the readers of the sweep, poll and proposal keys are M22 and M23.
+
+/** A lowercase host name of 1 to 253 characters with at least one dot: no scheme, port, path, wildcard or trailing dot. */
+const HOST_LABEL = "[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?";
+const PUBLIC_HOST_RE = new RegExp("^" + HOST_LABEL + "(?:[.]" + HOST_LABEL + ")+$");
+
+/** Empty (unset) or the public host name the Owner has bought (PLT-078). Only a confirmation, never a redirect (D-1230). */
+const validPublicDomain = async (v: unknown): Promise<string | null> =>
+  typeof v === "string" && (v === "" || (v.length <= 253 && PUBLIC_HOST_RE.test(v))) // threshold-ok: DNS name length
+    ? null
+    : "must be empty, or a lowercase host name such as praxis.example.com (no https://, port, path or wildcard)";
+
+const M21_ON_OFF = {
+  default: "off",
+  unit: "on/off",
+  editable: "O",
+  validate: oneOf(ON_OFF),
+} as const satisfies Omit<ConfigKeyDef, "ref">;
+
+const M21_KEYS = {
+  committee_enabled: { ...M21_ON_OFF, ref: "AGT-145, D-938, D-1213" },
+  intraday_sweep_enabled: { ...M21_ON_OFF, ref: "AGT-147" },
+  intraday_sweep_requests_per_slot: {
+    default: 5,
+    unit: "requests",
+    editable: "O",
+    ref: "AGT-147",
+    range: [0, 20],
+    validate: intRange(0, 20),
+  },
+  stop_hit_email_default: { ...M21_ON_OFF, ref: "EML-043, D-933" },
+  owner_real_money_tools: { ...M21_ON_OFF, ref: "UX-131, PRD-041, D-1214" },
+  app_public_domain: {
+    default: "",
+    unit: "host name",
+    editable: "O",
+    ref: "PLT-078, D-1230",
+    validate: validPublicDomain,
+  },
+  pwa_push_enabled: {
+    ...M21_ON_OFF,
+    ref: "PLT-079, D-1231",
+    validate: async (v: unknown) =>
+      v === "on" ? "Web push is not built: e-mail stays the alert channel" : oneOf(ON_OFF)(v),
+  },
+  expert_poll_items_daily: {
+    default: 150,
+    unit: "items/day",
+    editable: "O",
+    ref: "KB-082, KB-083, D-939",
+    range: [0, 500],
+    validate: intRange(0, 500),
+  },
+  llm_proposals_per_month: {
+    default: 3,
+    unit: "proposals/month",
+    editable: "O",
+    ref: "CXA-007",
+    range: [0, 10],
+    validate: intRange(0, 10),
+  },
+} as const satisfies Record<string, ConfigKeyDef>;
+
+type M21Key = keyof typeof M21_KEYS;
+
+const M21_META_TABLES: Record<M21Key, ConfigMeta> = {
+  committee_enabled: {
+    label: "The Committee (the two-sided case for each pick)",
+    area: LRN,
+    bounds:
+      "on or off; can be switched on after 10 nights with the case-writing check at 98 % or better",
+    input: "text",
+  },
+  intraday_sweep_enabled: {
+    label: "Midday market sweep for extra candidates",
+    area: OTH,
+    bounds: "on or off",
+    input: "text",
+  },
+  intraday_sweep_requests_per_slot: {
+    label: "Requests the midday sweep may make in one slot",
+    area: OTH,
+    bounds: "whole number, 0 to 20",
+    input: "int",
+  },
+  stop_hit_email_default: {
+    label: "E-mail me when a pick reaches its stop (the default for each person)",
+    area: SEM,
+    bounds: "on or off",
+    input: "text",
+  },
+  owner_real_money_tools: {
+    label: "Owner tools for real money (recommendations, holdings and trades)",
+    area: OTH,
+    bounds: "on or off; every change is recorded in the audit log",
+    input: "text",
+  },
+  app_public_domain: {
+    label: "The public web address of the app, once you have bought one",
+    area: OTH,
+    bounds: "empty, or a lowercase host name such as praxis.example.com",
+    input: "text_optional",
+  },
+  pwa_push_enabled: {
+    label: "Push notifications on installed devices",
+    area: OTH,
+    bounds: "off only: web push is not built and e-mail stays the alert channel",
+    input: "text",
+  },
+  expert_poll_items_daily: {
+    label: "Most items the expert poller reads in a day",
+    area: LRN,
+    bounds: "whole number, 0 to 500",
+    input: "int",
+  },
+  llm_proposals_per_month: {
+    label: "Most model-written proposals for the Owner to review in a month",
+    area: LRN,
+    bounds: "whole number, 0 to 10",
+    input: "int",
+  },
+};
+
+// ---- M22 keys (ch. 15 §15.11.3 and the ten V2 keys; docs/M22_design.md section A, D-1402, D-1410, D-1455) ----
+// Fourteen keys, every default the safe one: no live role, no Workers AI neurons, MiniLM and the alt inputs off, and the two
+// token buckets that, with the five role caps, add up to 235,000 inside the unchanged 240,000 daily total (D-1410). Their
+// readers arrive with the M22 tasks that own them; until then nothing reads them but the budget.
+
+/** The names `llm_live_roles` may list (D-1402): the roles of the router and the words phase. There is no R4 in code. */
+const LIVE_ROLE_NAMES = ["R1", "R2", "R3", "R5", "R6", "R7", "words"] as const;
+
+/** A list of distinct names from LIVE_ROLE_NAMES; an empty list keeps every role on rules (LLM-077). */
+const validLiveRoles = async (v: unknown): Promise<string | null> =>
+  Array.isArray(v) &&
+  v.every((x) => typeof x === "string" && (LIVE_ROLE_NAMES as readonly string[]).includes(x)) &&
+  new Set(v).size === v.length
+    ? null
+    : `must be a list of distinct names from ${LIVE_ROLE_NAMES.join(", ")} (empty keeps every job on rules)`;
+
+const M22_ON_OFF = {
+  default: "off",
+  unit: "on/off",
+  editable: "O",
+  validate: oneOf(ON_OFF),
+} as const satisfies Omit<ConfigKeyDef, "ref">;
+
+const m22Int = (
+  def: number,
+  min: number,
+  max: number,
+  unit: string,
+  ref: string,
+  editable: "O" | "fixed" = "O",
+): ConfigKeyDef => ({
+  default: def,
+  unit,
+  editable,
+  ref,
+  range: [min, max],
+  validate: editable === "fixed" ? never : intRange(min, max),
+});
+
+const M22_KEYS = {
+  llm_live_roles: {
+    default: [] as string[],
+    unit: "jobs",
+    editable: "O",
+    ref: "LLM-077, D-1402",
+    validate: validLiveRoles,
+  },
+  llm_budget_workers_ai_daily: m22Int(0, 0, 10_000, "neurons/day", "LLM-078, D-936"),
+  minilm_enabled: { ...M22_ON_OFF, ref: "LLM-079, D-946" },
+  regime_altinputs_enabled: { ...M22_ON_OFF, ref: "DAT-248, D-945" },
+  llm_budget_committee_daily: m22Int(40_000, 0, 60_000, "tokens/day", "LLM-061, D-1410"),
+  committee_shortlist: m22Int(3, 0, 5, "picks", "AGT-132"),
+  committee_horizon_sessions: m22Int(20, 5, 60, "sessions", "ARN-105, D-1420"),
+  committee_trial_sessions: m22Int(126, 63, 252, "sessions", "VAL-111, D-1420"),
+  committee_min_settled: m22Int(150, 100, 500, "picks", "VAL-111, D-1420"),
+  committee_permutations: m22Int(20_000, 5_000, 100_000, "reshuffles", "VAL-111, D-1421", "fixed"),
+  committee_call_record_retention_months: m22Int(18, 6, 36, "months", "LLM-066, D-1455"),
+  llm_budget_experts_daily: m22Int(30_000, 0, 60_000, "tokens/day", "LLM-068, D-1410"),
+  expert_extract_daily: m22Int(20, 0, 60, "items/day", "DAT-228"),
+  expert_tracked_max: m22Int(150, 20, 300, "experts", "DAT-229"),
+} as const satisfies Record<string, ConfigKeyDef>;
+
+type M22Key = keyof typeof M22_KEYS;
+
+const M22_META_TABLES: Record<M22Key, ConfigMeta> = {
+  llm_live_roles: {
+    label: "AI jobs allowed to use a live model at night (empty keeps every job on written rules)",
+    area: LRN,
+    bounds:
+      "empty, or a list of distinct names from R1, R2, R3, R5, R6, R7, words; a job runs live only after its test run has passed",
+    input: "word_list",
+  },
+  llm_budget_workers_ai_daily: {
+    label: "Daily allowance for the platform's built-in AI service (0 keeps it off)",
+    area: "Quotas",
+    bounds: "whole number, 0 to 10,000",
+    input: "int",
+  },
+  minilm_enabled: {
+    label: "A small reader that double-checks announcement categories in the background",
+    area: LRN,
+    bounds: "on or off; it only compares and publishes its agreement, it changes nothing",
+    input: "text",
+  },
+  regime_altinputs_enabled: {
+    label: "Prediction-market odds as an extra check on the market mood",
+    area: LRN,
+    bounds: "on or off; a check on the mood only, never a buy or sell signal",
+    input: "text",
+  },
+  llm_budget_committee_daily: {
+    label: "Daily AI token budget for the Committee",
+    area: "Quotas",
+    bounds: "whole number, 0 to 60,000",
+    input: "int",
+  },
+  committee_shortlist: {
+    label: "Most picks the Committee reviews each night",
+    area: LRN,
+    bounds: "whole number, 0 to 5",
+    input: "int",
+  },
+  committee_horizon_sessions: {
+    label: "Sessions a Committee rating is followed before it is scored",
+    area: LRN,
+    bounds: "whole number, 5 to 60; frozen once a trial starts",
+    input: "int",
+  },
+  committee_trial_sessions: {
+    label: "Sessions the Committee trial runs",
+    area: LRN,
+    bounds: "whole number, 63 to 252; frozen once a trial starts",
+    input: "int",
+  },
+  committee_min_settled: {
+    label: "Fewest settled picks the Committee trial needs before it gives a verdict",
+    area: LRN,
+    bounds: "whole number, 100 to 500; frozen once a trial starts",
+    input: "int",
+  },
+  committee_permutations: {
+    label: "Reshuffles used to test the Committee trial result",
+    area: LRN,
+    bounds: "fixed",
+    input: "int",
+  },
+  committee_call_record_retention_months: {
+    label: "Months the Committee's raw answers are kept after its trial",
+    area: "Retention",
+    bounds: "whole number, 6 to 36",
+    input: "int",
+  },
+  llm_budget_experts_daily: {
+    label: "Daily AI token budget for reading experts' posts",
+    area: "Quotas",
+    bounds: "whole number, 0 to 60,000",
+    input: "int",
+  },
+  expert_extract_daily: {
+    label: "Most expert items the AI reads for claims in a day",
+    area: LRN,
+    bounds: "whole number, 0 to 60",
+    input: "int",
+  },
+  expert_tracked_max: {
+    label: "Most experts tracked at once",
+    area: LRN,
+    bounds: "whole number, 20 to 300",
+    input: "int",
+  },
+};
+
+// ---- M23 keys (ch. 15 §15.11.4; docs/M23_design.md section A, D-1612, D-1650) ----
+// Five fixed keys: no Owner edit. Readers arrive with the M23 tasks that own them (the monitors, the meters, the label
+// evaluation, the sector series and the look registry); until then nothing reads them.
+
+const M23_KEYS = {
+  sector_index_weighting: {
+    default: "equal",
+    unit: "equal or value",
+    editable: "fixed",
+    ref: "CXA-009, D-1612",
+    validate: never,
+  },
+  survivorship_loss_assumed_pct: m22Int(50, 30, 80, "percent", "CXA-003, D-1612", "fixed"),
+  label_golden_min: m22Int(500, 100, 2000, "labels", "CXA-005, D-1612, D-1650", "fixed"),
+  residual_monitor_alarm_pp: m22Int(5, 1, 20, "points", "CXA-010, D-1612, D-1650", "fixed"),
+  holdout_looks_max: m22Int(1, 1, 1, "looks", "CXA-015, D-1612", "fixed"),
+} as const satisfies Record<string, ConfigKeyDef>;
+
+type M23Key = keyof typeof M23_KEYS;
+
+const M23_META_TABLES: Record<M23Key, ConfigMeta> = {
+  sector_index_weighting: {
+    label: "How each industry group's index weights its members",
+    area: LRN,
+    bounds: "fixed: equal weights",
+    input: "text",
+  },
+  survivorship_loss_assumed_pct: {
+    label: "Share of the gap to the best-case result assumed lost to delisted companies",
+    area: LRN,
+    bounds: "fixed at 50 percent",
+    input: "int",
+  },
+  label_golden_min: {
+    label: "Fewest hand-checked announcements before the labelling check gives a verdict",
+    area: LRN,
+    bounds: "fixed",
+    input: "int",
+  },
+  residual_monitor_alarm_pp: {
+    label: "Gap in percentage points that makes a background watch raise a flag",
+    area: LRN,
+    bounds: "fixed",
+    input: "int",
+  },
+  holdout_looks_max: {
+    label: "Looks allowed at the held-back data for one test",
+    area: LRN,
+    bounds: "fixed at one",
+    input: "int",
+  },
+};
 // ---- Learning Cortex keys (O-81; cortex_learning_architecture C.9, D-929, D-940) ----
 // Defaults and bounds come from the learning loop's own spec (src/lib/cortex/learn/config.ts
 // LEARN_CONFIG_SPEC), one row per C.9 key, so the two can never disagree. None is a Cortex refit key:
@@ -1675,6 +2186,10 @@ const LEARN_META_TABLES = Object.fromEntries(
 export const LEARN_KEY_NAMES: readonly ConfigKey[] = LEARN_RANGED.map((r) => r[0]);
 
 export const CONFIG_KEYS = {
+  ...MKT_KEYS,
+  ...M21_KEYS,
+  ...M22_KEYS,
+  ...M23_KEYS,
   ...M4_RANGED_KEYS,
   ...M4_FIXED_KEYS,
   ...M5_RANGED_KEYS,
@@ -1913,19 +2428,61 @@ export const CONFIG_KEYS = {
     validate: intRange(1),
   },
   // Line 142: turso ceilings (storage 3 GB, writes 6M/month, reads 300M/month, staging <= 15%); DAT-141.
+  // M18 (OPS-104, D-958): the two row ceilings default to 20 % of the Turso FREE plan (10 M written,
+  // 500 M read a month), so the Usage page and the configuration agree with PRD-045 / O-81.
   turso_writes_ceiling_month: {
-    default: 6_000_000,
+    default: 2_000_000,
     unit: "rows/month",
     editable: "O",
-    ref: "DAT-141",
+    ref: "DAT-141, OPS-104, D-958",
     validate: intRange(1),
   },
   turso_reads_ceiling_month: {
-    default: 300_000_000,
+    default: 100_000_000,
     unit: "rows/month",
     editable: "O",
-    ref: "DAT-141",
+    ref: "DAT-141, OPS-104, D-958",
     validate: intRange(1),
+  },
+  // M18 (OPS-104, D-958, D-1796): the share of the Turso free plan this system may use, and the share at
+  // which the Owner is told. The Usage page draws the ceiling as the "20 % line".
+  turso_free_ceiling_pct: {
+    default: 20,
+    unit: "% of the free plan",
+    editable: "fixed",
+    ref: "OPS-104, PRD-045, O-81, D-1796",
+    validate: never,
+  },
+  turso_notice_pct: {
+    default: 15,
+    unit: "% of the free plan",
+    editable: "O",
+    range: [10, 19] as const,
+    ref: "OPS-104, D-958, D-1796",
+    validate: intRange(10, 19),
+  },
+  // M18 (D-1796): fixed registry entries shown on the Configuration page. The HMAC version mirrors
+  // HMAC_SCHEME_VERSION in src/lib/security/hmacCore.mjs (the one definition).
+  hmac_scheme_version: {
+    default: HMAC_SCHEME_VERSION,
+    unit: "version",
+    editable: "fixed",
+    ref: "SEC-115, D-1786, D-1796",
+    validate: never,
+  },
+  calendar_draft_markets: {
+    default: CALENDAR_MARKETS.join(", "), // the market codes as one text: "AU" (D-1796)
+    unit: "markets",
+    editable: "fixed",
+    ref: "OPS-103, D-961, D-1796",
+    validate: never,
+  },
+  restore_drill_reminder: {
+    default: "quarterly, first day",
+    unit: "schedule",
+    editable: "fixed",
+    ref: "OPS-105, D-962, D-1796",
+    validate: never,
   },
   turso_staging_share: {
     default: 0.15,
@@ -2035,7 +2592,7 @@ export const CONFIG_KEYS = {
   // also updates `market.mode` (the column the Worker and the pipeline read at run time) in the
   // same transaction. Editing only this row would change nothing at run time.
   market_mode: {
-    default: { AU: "data_only" },
+    default: MARKET_MODE_DEFAULT,
     unit: "mode",
     editable: "fixed",
     ref: "BLD-024",
@@ -2050,7 +2607,7 @@ export const CONFIG_KEYS = {
     unit: "profile",
     editable: "O",
     ref: "ARN-031",
-    validate: oneOf(COST_PROFILE_CODES),
+    validate: oneOf(allMarketCostProfileCodes()),
   },
   // Line 12 (stall_floor, computed, not editable) with D-069 decision 4: the entry slippage inside
   // the stall floor is max(10 bps, one price tick), so the 10 bps is a fixed key of its own.
@@ -2144,6 +2701,21 @@ export const CONFIG_KEYS = {
   },
   // Design 4.6: each market's share of the daily LLM role budgets. Not in the ch.15 extract
   // (D-079): AU is the only market and takes all of it.
+  // D-1809: the set of enabled markets. Fixed: the run-time truth is the `market.enabled` column; this key is the
+  // production assertion (PRAXIS_MARKETS_ENABLED split on commas, unset = AU only) the nightly invariant compares
+  // with the column. The only writer of `enabled` is `switchMarket` (src/lib/data/marketSwitch.ts, M20, D-1100): the
+  // key is DERIVED from the column, never written by it. After a switch the Owner sets PRAXIS_MARKETS_ENABLED by hand
+  // (D-1809); until then the nightly mismatch alarm reminds, and the database column decides what runs.
+  markets_enabled: {
+    default: marketsEnabledDefault(
+      typeof process === "undefined" ? {} : process.env,
+      builtMarkets(),
+    ).join(", "), // the codes as one text: "AU" (the calendar_draft_markets pattern, D-1796)
+    unit: "markets",
+    editable: "fixed",
+    ref: "MKT-110, D-1809, ch.15 E",
+    validate: never,
+  },
   llm_market_share: {
     default: { AU: 1 },
     unit: "fraction",
@@ -2173,7 +2745,8 @@ export type ConfigArea =
   | "Sentinel and email"
   | "Learning and knowledge"
   | "Other";
-export type ConfigInput = "int" | "number" | "list" | "object" | "text";
+export type ConfigInput =
+  "int" | "number" | "list" | "word_list" | "object" | "text" | "text_optional" | "bool";
 export type ConfigMeta = { label: string; area: ConfigArea; bounds: string; input: ConfigInput };
 
 /** Plain-English headings for the Configuration page (UXN-030); the area ids above stay stable. */
@@ -2206,6 +2779,13 @@ export const CONFIG_AREAS: ConfigArea[] = [
 ];
 
 export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
+  ...MKT_META,
+  markets_enabled: {
+    label: "Markets enabled (the production set; the database column is the run-time truth)",
+    area: "Other",
+    bounds: "fixed (PRAXIS_MARKETS_ENABLED; unset = AU only)",
+    input: "text",
+  },
   ...M4_META,
   ...M5_META_TABLES,
   ...M6_META_TABLES,
@@ -2217,6 +2797,9 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   ...M11L_META_TABLES,
   ...M13L_META_TABLES,
   ...MOVERS_META_TABLES,
+  ...M21_META_TABLES,
+  ...M22_META_TABLES,
+  ...M23_META_TABLES,
   ...LEARN_META_TABLES,
   evening_review_time: {
     label: "Evening Review send time",
@@ -2295,7 +2878,7 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
   llm_market_share: {
     label: "Share of the daily LLM budgets each market may use",
     area: "Quotas",
-    bounds: 'JSON such as {"AU": 1}, each share 0 to 1',
+    bounds: `JSON such as {"${HOME_MARKET}": 1}, each share 0 to 1`,
     input: "object",
   },
   retention_logs_days: {
@@ -2347,16 +2930,46 @@ export const CONFIG_META: Record<ConfigKey, ConfigMeta> = {
     input: "object",
   },
   turso_writes_ceiling_month: {
-    label: "Database writes ceiling",
+    label: "Database writes ceiling (20 % of the free plan)",
     area: "Quotas",
     bounds: "whole number, at least 1",
     input: "int",
   },
   turso_reads_ceiling_month: {
-    label: "Database reads ceiling",
+    label: "Database reads ceiling (20 % of the free plan)",
     area: "Quotas",
     bounds: "whole number, at least 1",
     input: "int",
+  },
+  turso_free_ceiling_pct: {
+    label: "Share of the Turso free plan this system may use",
+    area: "Quotas",
+    bounds: "fixed",
+    input: "int",
+  },
+  turso_notice_pct: {
+    label: "Share of the Turso free plan at which the Owner is told",
+    area: "Quotas",
+    bounds: "whole percent, 10 to 19",
+    input: "int",
+  },
+  hmac_scheme_version: {
+    label: "Signing scheme version of machine calls",
+    area: "Other",
+    bounds: "fixed",
+    input: "int",
+  },
+  calendar_draft_markets: {
+    label: "Markets whose next-year trading calendar is drafted",
+    area: "Other",
+    bounds: "fixed",
+    input: "text",
+  },
+  restore_drill_reminder: {
+    label: "When the restore-drill reminder appears",
+    area: "Other",
+    bounds: "fixed",
+    input: "text",
   },
   turso_staging_share: {
     label: "Staging share of the database limits",
@@ -2552,6 +3165,15 @@ export const M15_KEY_NAMES: readonly ConfigKey[] = [
   ...M15_RANGED.map((r) => r[0]),
   ...M15_FIXED.map((r) => r[0]),
 ];
+
+/** Every key added in M21 (docs/M21_design.md section A, D-1212): the nine §15.11.2 keys. */
+export const M21_KEY_NAMES: readonly ConfigKey[] = Object.keys(M21_KEYS) as M21Key[];
+
+/** Every key added in M22 (docs/M22_design.md section A, D-1455): the four §15.11.3 keys and the ten V2 keys. */
+export const M22_KEY_NAMES: readonly ConfigKey[] = Object.keys(M22_KEYS) as M22Key[];
+
+/** Every key added in M23 (docs/M23_design.md section A, D-1612): the five §15.11.4 keys, all fixed. */
+export const M23_KEY_NAMES: readonly ConfigKey[] = Object.keys(M23_KEYS) as M23Key[];
 
 /**
  * The Cortex keys whose Owner edit is a charged trial and refits the map (CTX-072): every editable

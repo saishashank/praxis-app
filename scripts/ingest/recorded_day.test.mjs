@@ -49,6 +49,8 @@ function setup() {
       codes: ["ZZA"],
       start: "2026-10-20",
       end: "2026-10-21",
+      suffix: ".AX",
+      currency: "AUD",
       indices: ["^AXJO", "^GSPC", "^VIX"],
       short_dates: ["2026-10-19"],
     }),
@@ -169,4 +171,71 @@ test("while it runs, fetch to ASX or Yahoo throws; afterwards fetch is restored"
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+// M18 OPS-107 / D-965: the CI recorded day runs this script with PRAXIS_ENV=recorded.
+test("PRAXIS_ENV=recorded is accepted like staging and writes the same files", async () => {
+  const dir = setup();
+  try {
+    const lines = [];
+    assert.equal(
+      await run(args(dir), { PRAXIS_ENV: "recorded" }, { out: (s) => lines.push(s) }),
+      0,
+    );
+    assert.equal(json(path.join(dir, "bars.json")).length, 2);
+    assert.match(lines[0], /^recorded_day: bars=2 /);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("--market IN reads recorded/in and copies the day files; AU is never read for it (D-1156)", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "praxis-recday-in-"));
+  const au = path.join(dir, "fixtures", "recorded", "au", "2026-11-12");
+  const inn = path.join(dir, "fixtures", "recorded", "in", "2026-11-12");
+  mkdirSync(au, { recursive: true });
+  mkdirSync(inn, { recursive: true });
+  writeFileSync(path.join(au, "bars.json"), "[]");
+  writeFileSync(path.join(inn, "bhavcopy.csv"), "TradDt\n2026-11-12\n");
+  writeFileSync(path.join(inn, "bands.csv"), "Symbol\n");
+  writeFileSync(
+    path.join(dir, "request.json"),
+    JSON.stringify({ codes: [], start: "2026-11-12", end: "2026-11-12" }),
+  );
+  const lines = [];
+  const outDir = path.join(dir, "day");
+  const code = await run(
+    [
+      "--request",
+      path.join(dir, "request.json"),
+      "--fixtures",
+      path.join(dir, "fixtures"),
+      "--output",
+      outDir,
+      "--market",
+      "IN",
+    ],
+    STAGING,
+    { out: (s) => lines.push(s) },
+  );
+  assert.equal(code, 0);
+  assert.match(lines.join(""), /market=IN files=2 date=2026-11-12/);
+  assert.equal(readFileSync(path.join(outDir, "bhavcopy.csv"), "utf8"), "TradDt\n2026-11-12\n");
+  // a market with no recording of its own never falls back to the AU one
+  const none = await run(
+    [
+      "--request",
+      path.join(dir, "request.json"),
+      "--fixtures",
+      path.join(dir, "fixtures"),
+      "--output",
+      outDir,
+      "--market",
+      "US",
+    ],
+    STAGING,
+    { out: (s) => lines.push(s) },
+  );
+  assert.equal(none, 2);
+  rmSync(dir, { recursive: true, force: true });
 });

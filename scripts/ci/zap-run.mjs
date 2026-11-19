@@ -1,10 +1,13 @@
 // Runs the OWASP ZAP baseline scan for .github/workflows/zap-baseline.yml (M8 T12;
 // docs/M8_design.md 2.3, decisions 7, 37; AT-29, SEC-107, SEC-110).
 //   node scripts/ci/zap-run.mjs local     the local production build (throwaway databases and secrets
-//                                         generated here), unauthenticated
-//   node scripts/ci/zap-run.mjs staging   the staging deployment, as the viewer test identity (TST-113)
+//                                         generated here), AUTHENTICATED as the seeded viewer test identity
+//                                         (TST-113 re-homed, M18 OPS-107 / D-964; there is no staging)
 // env: ZAP_IMAGE (container reference pinned by digest, required), ZAP_OUT (report folder, default
-//      $RUNNER_TEMP/zap). staging also needs APP_BASE_URL and TEST_IDENTITY_SECRET.
+//      $RUNNER_TEMP/zap). No other input: every secret is generated per run and never leaves the process.
+// The viewer session cookie is minted in this process with the claims the test-identity login route
+// issues (uid, sv, si, rec) and the same cookie name; the HTTP route itself cannot serve a file: database
+// (its replay store speaks only the Turso HTTP protocol) and answers 404 outside a staging environment.
 // The report (which holds URLs) is written to ZAP_OUT and is read by zap-summary.mjs; it is never
 // uploaded. ZAP's own output is discarded (stdio ignored), and this script prints fixed sentences
 // only, never a URL, cookie or secret. The session cookie reaches ZAP as one argument of a process
@@ -15,14 +18,17 @@ import { chmodSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { testLogin } from "../e2e/test-login.mjs";
+import { createClient } from "@libsql/client";
+import { encode } from "next-auth/jwt";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const IMAGE_PATTERN = /^ghcr\.io\/zaproxy\/zaproxy@sha256:[0-9a-f]{64}$/;
 const COOKIE_PAIR = /^(?:__Secure-)?authjs\.session-token=[\w.%~+/=-]+$/;
 const PORT = 3100; // threshold-ok: the e2e port, as playwright.config.ts
 const HEALTH_WAIT_MS = 300_000; // threshold-ok: the build and start allowance, as playwright.config.ts
-const VIEWER = "viewer@praxis.test";
+export const VIEWER = "viewer@praxis.test"; // the seeded test identity (e2e/prepare-db.mjs)
+const COOKIE_NAME = "authjs.session-token"; // plain-http name (src/lib/auth/cookies.ts)
+const SESSION_MAX_AGE_SEC = 3600; // threshold-ok: one scan hour, the cookie dies with the run
 
 /** The `docker run` arguments. `cookie` is added as a ZAP replacer rule on every request. */
 export function dockerArgs({ image, target, outDir, cookie, hostNetwork }) {
@@ -47,6 +53,39 @@ export function dockerArgs({ image, target, outDir, cookie, hostNetwork }) {
     );
   }
   return args;
+}
+
+/**
+ * The viewer session cookie ("name=value") for a LOCAL app whose auth database is `authDbUrl`
+ * (file:) and whose Auth.js secret is `authSecret`. Same claims as the test-identity login handler.
+ */
+export async function mintViewerCookie({
+  authDbUrl,
+  authSecret,
+  nowSec = Math.floor(Date.now() / 1000),
+}) {
+  const db = createClient({ url: authDbUrl });
+  try {
+    const res = await db.execute({
+      sql: "SELECT id, session_version FROM app_user WHERE email = ? AND status = 'active'",
+      args: [VIEWER],
+    });
+    if (!res.rows.length) throw new Error("the viewer test identity is not seeded");
+    const value = await encode({
+      token: {
+        uid: Number(res.rows[0].id),
+        sv: Number(res.rows[0].session_version),
+        si: nowSec,
+        rec: false,
+      },
+      secret: authSecret,
+      salt: COOKIE_NAME,
+      maxAge: SESSION_MAX_AGE_SEC,
+    });
+    return `${COOKIE_NAME}=${value}`;
+  } finally {
+    db.close();
+  }
 }
 
 function prepareOut(outDir) {
@@ -118,38 +157,31 @@ async function runLocal(outDir, image) {
       console.log("the local app did not start");
       return 2;
     }
+    let cookie;
+    try {
+      cookie = await mintViewerCookie({
+        authDbUrl: env.TURSO_AUTH_URL,
+        authSecret: env.AUTH_SECRET,
+      });
+    } catch {
+      console.log("the local viewer test login failed");
+      return 2;
+    }
+    // The cookie is per-run and local, but it is still kept out of any log.
+    console.log(`::add-mask::${cookie.split("=").slice(1).join("=")}`);
     prepareOut(outDir);
-    return scan(dockerArgs({ image, target, outDir, hostNetwork: true }), outDir) ? 0 : 2;
+    return scan(dockerArgs({ image, target, outDir, cookie, hostNetwork: true }), outDir) ? 0 : 2;
   } finally {
     if (server) server.kill();
     rmSync(dir, { recursive: true, force: true });
   }
 }
 
-async function runStaging(outDir, image) {
-  const base = process.env.APP_BASE_URL;
-  const secret = process.env.TEST_IDENTITY_SECRET;
-  if (!base || !secret) {
-    console.log("the staging address or the test identity is not configured");
-    return 2;
-  }
-  let cookie;
-  try {
-    cookie = await testLogin(base, secret, VIEWER);
-  } catch {
-    console.log("the staging test login failed");
-    return 2;
-  }
-  console.log(`::add-mask::${cookie.split("=").slice(1).join("=")}`);
-  prepareOut(outDir);
-  return scan(dockerArgs({ image, target: base, outDir, cookie }), outDir) ? 0 : 2;
-}
-
 export async function main(argv, env = process.env) {
   const mode = argv[0];
   const image = env.ZAP_IMAGE ?? "";
-  if (mode !== "local" && mode !== "staging") {
-    console.log("usage: zap-run.mjs local|staging");
+  if (mode !== "local") {
+    console.log("usage: zap-run.mjs local");
     return 2;
   }
   if (!IMAGE_PATTERN.test(image)) {
@@ -157,7 +189,7 @@ export async function main(argv, env = process.env) {
     return 2;
   }
   const outDir = env.ZAP_OUT ?? path.join(env.RUNNER_TEMP ?? tmpdir(), "zap");
-  const code = mode === "local" ? await runLocal(outDir, image) : await runStaging(outDir, image);
+  const code = await runLocal(outDir, image);
   if (code === 0) console.log("ZAP finished; the report is summarised by the next step");
   else console.log("ZAP produced no report");
   return code;

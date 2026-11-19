@@ -13,10 +13,8 @@ import { PAGES, allowedRoles } from "./pages";
 import { signIn } from "./helpers";
 import exceptionsFile from "./readability-exceptions.json";
 
-test.skip(
-  process.env.E2E_SCENARIO !== "populated",
-  "readability runs on the populated seed (E2E_SCENARIO=populated)",
-);
+import { requireScenario } from "./support/requireScenario";
+requireScenario("populated", "readability runs on the populated seed (E2E_SCENARIO=populated)");
 
 const splitTerms = (s: string) => s.split(/\s+\/\s+/);
 const TERM_LIST = [

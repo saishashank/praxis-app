@@ -1,0 +1,61 @@
+{
+  "comment": "D-922, D-1233: the only places an internal-code pattern may appear in a scanned source. Each entry is a genuine non-UI use (an identifier the reader never sees, a lookup key) or a place the design shows a code on purpose, with a reason. An entry that matches nothing fails the scan (stale).",
+  "entries": [
+    {
+      "file": "src/app/(app)/health/ControlRoomText.ts",
+      "patterns": ["specId"],
+      "reason": "Control Room details show a spec reference per part on purpose (UXN-283 'spec reference'); an operations screen, behind a closed details row, and the table is pinned by the Control Room tests."
+    },
+    {
+      "file": "src/app/(app)/health/ControlRoom.tsx",
+      "patterns": ["specId"],
+      "includes": "PLT-061",
+      "reason": "The fallback of the same Control Room spec reference line (UXN-283), shown only for a part with no table entry."
+    },
+    {
+      "file": "src/app/(app)/home/HomeContent.tsx",
+      "patterns": ["priorityTag"],
+      "reason": "The alert tier is compared as an identifier; the reader sees Urgent, Important or FYI (the same line)."
+    },
+    {
+      "file": "src/app/(app)/news/page.tsx",
+      "patterns": ["priorityTag"],
+      "reason": "The alert tier is an identifier (a comparison, a list order, an element id for aria-labelledby); every visible tier label is Urgent, Important or FYI."
+    },
+    {
+      "file": "src/components/shell/AlertBell.tsx",
+      "patterns": ["priorityTag"],
+      "reason": "Keys of the bell's dot colour table and the type of the top tier; nothing is printed, the bell is labelled by its count."
+    },
+    {
+      "file": "src/components/ui/Badges.tsx",
+      "patterns": ["priorityTag"],
+      "reason": "The tier is compared as an identifier to pick a colour; the printed text is the plain tier label (Urgent, Important, FYI)."
+    },
+    {
+      "file": "src/lib/review/sections.ts",
+      "patterns": ["priorityTag"],
+      "reason": "The stored alert tier is compared as an identifier to count and cap FYI alerts; the review prints plain words."
+    },
+    {
+      "file": "src/lib/email/templates/review.ts",
+      "patterns": ["priorityTag"],
+      "reason": "The type of the stored alert tier (an identifier in the facts shape); the review e-mail prints plain words (the D-922 e-mail test)."
+    },
+    {
+      "file": "src/lib/email/templates/reviewWords.ts",
+      "patterns": ["cohortWord"],
+      "reason": "Stored exit-type codes (stop-loss and closing signal) compared as identifiers and turned into plain words on the same lines."
+    },
+    {
+      "file": "src/lib/email/templates/alerts.ts",
+      "patterns": ["priorityTag", "nav"],
+      "reason": "Alert e-mail subject and headings 'Praxis P0:', '(P0)' and 'of NAV' are pinned by the AU e-mail snapshots (tests/fixtures/email/snapshots p0*, incident*) and the alert delivery tests; AU stays byte-identical (A-20), so the words are kept."
+    },
+    {
+      "file": "src/lib/view/terms.ts",
+      "patterns": ["nav", "priorityTag"],
+      "reason": "Glossary lookup keys: 'NAV' and 'P0 / P1 / P2' are the official terms the glossary and the hover show beside the plain word ('Official term: ...', UXN-001); the plain words are the shown text."
+    }
+  ]
+}

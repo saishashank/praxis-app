@@ -16,7 +16,6 @@ import { maskText, normCode, type StockAliases } from "@/lib/view/mask";
 import {
   intParam,
   isDateParam,
-  marketOf,
   maskKit,
   priceMicro,
   textParam,
@@ -87,7 +86,7 @@ type Day = { d: string; rows: DayRow[]; builtAt: number; sized: boolean };
 const MEMO = new WeakMap<Db, Map<string, { at: number; day: Promise<Day> }>>();
 
 async function loadDay(env: LoaderEnv): Promise<Day | null> {
-  const market = marketOf(env);
+  const market = env.market;
   const last = await env.main.execute({
     sql: "SELECT MAX(d) AS d FROM price_bar WHERE market = ?",
     args: [market],
@@ -265,7 +264,7 @@ export function codeFromSlug(slug: string, aliases: StockAliases): string | null
 // ---- stars -----------------------------------------------------------------------------------------
 
 export async function starredCodes(env: LoaderEnv): Promise<Set<string>> {
-  const market = marketOf(env);
+  const market = env.market;
   try {
     if (env.user.role === "owner") {
       const r = await env.main.execute({
@@ -449,7 +448,7 @@ export async function loadMarket(env: LoaderEnv, q: MarketQuery): Promise<Market
     slug: masked ? slugOf(label(r.code)) : r.code,
     name: masked ? null : displayName(r.name),
     sector: masked ? null : r.sector,
-    close: masked ? null : { micro: priceMicro(r.close), currency: "AUD", simulated: true },
+    close: masked ? null : { micro: priceMicro(r.close), currency: env.currency, simulated: true },
     changePpm: changePpm(r),
     volume: r.volume,
     volumeVsUsualPpm:
@@ -527,14 +526,14 @@ async function withLive(env: LoaderEnv, closeD: string, lists: MarketList[]): Pr
   const rows = lists.flatMap((l) => l.rows);
   const codes = [...new Set(rows.map((r) => r.slug))];
   if (codes.length === 0) return;
-  const quotes = await soft(() => readLatestQuotes(env.main, marketOf(env), codes), new Map());
+  const quotes = await soft(() => readLatestQuotes(env.main, env.market, codes), new Map());
   for (const r of rows) {
     const q = newerThanClose(quotes.get(r.slug), closeD);
     if (q === null || r.close === null) continue;
     const close = BigInt(r.close.micro);
     if (close <= 0n) continue;
     r.live = {
-      price: { micro: q.lastMicro.toString(), currency: "AUD", simulated: true },
+      price: { micro: q.lastMicro.toString(), currency: env.currency, simulated: true },
       changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
       at: quoteTimeMelbourne(q.quoteAt),
     };
@@ -573,7 +572,7 @@ export async function searchInstruments(env: LoaderEnv, q: string): Promise<Sear
           WHERE market = ? AND delisted_on IS NULL
             AND (code LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')
           ORDER BY (code LIKE ? ESCAPE '\\') DESC, code LIMIT ?`,
-    args: [marketOf(env), `${like}%`, `%${like}%`, `${like}%`, SEARCH_MAX],
+    args: [env.market, `${like}%`, `%${like}%`, `${like}%`, SEARCH_MAX],
   });
   const stars = await starredCodes(env);
   const results = r.rows.map((x) => ({
@@ -597,7 +596,7 @@ export type OverviewModel = {
   close: MoneyView | null;
   changePpm: number | null;
   /** Delayed quote newer than the close (display only, as on the company page); a masked viewer gets the change only. */
-  live: { priceMicro: string | null; changePpm: number; at: string } | null;
+  live: { priceMicro: string | null; currency: string; changePpm: number; at: string } | null;
   volume: number | null;
   announcements: Array<{ id: number; title: string; published: string; url: string | null }>;
   /** Facts only until the summary writer is live (decision 48). */
@@ -610,7 +609,7 @@ export type OverviewModel = {
 /** `code` is a real code (unmasked users) or an opaque slug (masked users); null = unknown to this user. */
 export async function loadOverview(env: LoaderEnv, key: string): Promise<OverviewModel | null> {
   const masked = env.mask.masked;
-  const market = marketOf(env);
+  const market = env.market;
   let code: string | null;
   let kit: Awaited<ReturnType<typeof maskKit>> | null = null;
   if (masked) {
@@ -652,6 +651,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
         if (q === null || close <= 0n) return null;
         return {
           priceMicro: masked ? null : q.lastMicro.toString(),
+          currency: env.currency,
           changePpm: quoteChangePpm(q.lastMicro, close, q.prevCloseMicro) ?? 0,
           at: quoteTimeMelbourne(q.quoteAt),
         };
@@ -668,7 +668,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
     close:
       masked || !last
         ? null
-        : { micro: priceMicro(Number(last.c)), currency: "AUD", simulated: true },
+        : { micro: priceMicro(Number(last.c)), currency: env.currency, simulated: true },
     changePpm: chg,
     volume: last ? Number(last.volume) : null, // money-float-ok: stored volume
     announcements: ann.rows.map((x) => ({
@@ -690,7 +690,7 @@ export async function loadOverview(env: LoaderEnv, key: string): Promise<Overvie
 async function latestBarDay(env: LoaderEnv): Promise<string | null> {
   const r = await env.main.execute({
     sql: "SELECT MAX(d) AS d FROM price_bar WHERE market = ?",
-    args: [marketOf(env)],
+    args: [env.market],
   });
   return r.rows[0]?.d ? String(r.rows[0].d) : null;
 }

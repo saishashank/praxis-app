@@ -29,7 +29,7 @@ describe("main 0012_golive", () => {
   it("is the twelfth main migration and the runner is idempotent", async () => {
     const { db, ms } = await fresh();
     expect(ms[11]).toMatchObject({ version: 12, name: "golive" });
-    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 33 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 0, version: 43 });
     const cols = (await db.execute("PRAGMA table_info(go_live_signoff)")).rows.map((c) => c.name);
     expect(cols).toEqual([
       "id",
@@ -55,7 +55,8 @@ describe("main 0012_golive", () => {
     await expect(add(db, { note: "x".repeat(501) })).rejects.toThrow(/CHECK/);
     await add(db, { note: "x".repeat(500) });
     await expect(add(db, { by: 0 })).rejects.toThrow(/CHECK/);
-    await expect(add(db, { market: "" })).rejects.toThrow(/CHECK/);
+    // M19 0038: an empty market is also a market that is not enabled; the write guard fires before the CHECK
+    await expect(add(db, { market: "" })).rejects.toThrow(/CHECK|MarketNotEnabled/);
   });
 
   it("is append-only: UPDATE and DELETE are refused", async () => {
@@ -78,7 +79,7 @@ describe("main 0012_golive", () => {
     const { db, ms } = await fresh();
     const before = await schemaOf(db);
     // 0015 (vendor actions), 0014 (pick checks, D-187) and 0013 (calendar history, D-175) sit on top: three steps reach the schema before 0012
-    expect(await migrateDown(db, ms, 22)).toEqual({ rolledBack: 22, version: 11 });
+    expect(await migrateDown(db, ms, 32)).toEqual({ rolledBack: 32, version: 11 });
     expect((await schemaOf(db)).join("\n")).not.toContain("go_live_signoff");
     await migrateUp(db, ms);
     expect(await schemaOf(db)).toEqual(before);

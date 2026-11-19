@@ -14,6 +14,7 @@ const actions = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}) }));
+vi.mock("@/lib/market/resolve", () => ({ resolveMarketOrNotFound: async () => "AU" }));
 vi.mock("@/lib/data/corporateActions/queue", () => queue);
 vi.mock("@/app/(app)/review/actions", () => actions);
 

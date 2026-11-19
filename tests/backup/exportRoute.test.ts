@@ -19,6 +19,8 @@ import { restoreDatabase } from "@/lib/backup/restore";
 import type { NonceStore } from "@/lib/security/replay";
 import { cleanupTempDbs, freshDb, tempDbUrl, track } from "../db/helpers";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/backup-export" };
+
 afterEach(cleanupTempDbs);
 
 const SECRET = "9".repeat(64);
@@ -68,9 +70,9 @@ const post = (body = BODY, headers?: Record<string, string>, nonce = nextNonce()
   new Request("https://praxis-host.vercel.app/api/internal/backup-export", {
     method: "POST",
     body,
-    headers: headers ?? (sign(SECRET, body, NOW, nonce) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, body, NOW, nonce, SIGN_TARGET) as Record<string, string>),
   });
-const signed = (body: string) => post(body, sign(SECRET, body, NOW, nextNonce()));
+const signed = (body: string) => post(body, sign(SECRET, body, NOW, nextNonce(), SIGN_TARGET));
 
 describe("backup export handler", () => {
   it("200: octet-stream age ciphertext only; no plaintext, no row text; counts header", async () => {
@@ -114,14 +116,24 @@ describe("backup export handler", () => {
 
   it("401 generic body for bad signature, missing headers, replay, stale and future timestamps", async () => {
     const h = make();
-    const bad = sign("8".repeat(64), BODY, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, BODY, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const future = sign(SECRET, BODY, NOW + 301, "d".repeat(32)) as Record<string, string>;
+    const bad = sign("8".repeat(64), BODY, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, BODY, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const future = sign(SECRET, BODY, NOW + 301, "d".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
     const tampered = sign(
       SECRET,
       '{"purpose":"backup-export","date":"2023-11-14"}',
       NOW,
       "e".repeat(32),
+      SIGN_TARGET,
     ) as Record<string, string>;
     for (const headers of [bad, stale, future, tampered, {}]) {
       const r = await h(post(BODY, headers));
@@ -129,7 +141,7 @@ describe("backup export handler", () => {
       expect(r.headers.get("content-type")).toContain("application/json");
       expect(await r.json()).toEqual({ error: "unauthorized" });
     }
-    const ok = sign(SECRET, BODY, NOW, "c".repeat(32)) as Record<string, string>;
+    const ok = sign(SECRET, BODY, NOW, "c".repeat(32), SIGN_TARGET) as Record<string, string>;
     expect((await h(post(BODY, ok))).status).toBe(200);
     const replay = await h(post(BODY, ok));
     expect(replay.status).toBe(401);

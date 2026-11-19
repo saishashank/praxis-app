@@ -1,0 +1,175 @@
+// @vitest-environment node
+// M20 A2 (D-1116, closing D-1016): the schema hash of a night manifest covers a pinned table list. The base list is
+// exactly the table set of the V3 tree at its old schema 35 (now 38 once main's 0031 to 0033 sit below it) minus
+// market_profile*, so the AU `schemaSha` is byte-identical after migration 0039 (A-20, AT-32/AT-50); an IN or US profile adds its rule-set tables, AU never does.
+import { createHash } from "node:crypto";
+import { createClient } from "@libsql/client";
+import { afterEach, describe, expect, it } from "vitest";
+import { loadMigrations, migrateUp } from "@/lib/db/migrate-core.mjs";
+import { STAGE_TABLES, stageTablesFor } from "@/lib/cortex/stageTables.mjs";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
+import { cleanupTempDbs, MIGRATIONS } from "../db/helpers";
+
+afterEach(cleanupTempDbs);
+
+const sha = (names: readonly string[]) =>
+  createHash("sha256").update(names.join(",")).digest("hex");
+
+/**
+ * The ten tables main's 0031 to 0033 add (the learning Cortex, My portfolio and the pick scorecard, D-1775). They
+ * were not in the schema the AU baseline hashes were recorded on, so the pinned base list never holds them (D-1775, D-1778).
+ */
+const MAIN_TABLES = [
+  "cortex_angle_day",
+  "cortex_base_version",
+  "cortex_feature_probe",
+  "cortex_leader",
+  "cortex_learn_compare",
+  "cortex_learn_event",
+  "pick_portfolio_hold",
+  "pick_portfolio_split",
+  "pick_scorecard_day",
+  "pick_scorecard_run",
+];
+
+/** The pre-M20 computation: a scan of sqlite_master after the first `upTo` migrations, without main's tables. */
+async function scan(upTo: number): Promise<string[]> {
+  const db = createClient({ url: ":memory:" });
+  try {
+    const all = await loadMigrations(MIGRATIONS("main"));
+    await migrateUp(
+      db,
+      all.filter((m) => m.version <= upTo),
+    );
+    const r = await db.execute(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'market_profile%' ORDER BY name",
+    );
+    return r.rows.map((x) => String(x.name)).filter((n) => !MAIN_TABLES.includes(n));
+  } finally {
+    db.close();
+  }
+}
+
+const M20_TABLES = [
+  "announcement_category",
+  "bar_latency_sample",
+  "fundamental_fact",
+  "holdout_look",
+  "label_item",
+  "market_switch",
+  "price_band",
+  "surveillance_list",
+  "trading_halt",
+];
+
+// The six tables 0041 adds (M21 A1, D-1236): none is read by a night, so STAGE_TABLES and the AU schemaSha are unchanged.
+const M21_TABLES = [
+  "golden_label",
+  "owner_holding",
+  "owner_trade",
+  "owner_trade_void",
+  "short_shadow_decision",
+  "short_shadow_outcome",
+];
+
+// The thirteen tables 0042 adds (M22 A1, D-1444): opinions and records no night reads, so STAGE_TABLES and the AU schemaSha are unchanged.
+const M22_TABLES = [
+  "alt_input_point",
+  "cluster_expression",
+  "committee_call",
+  "committee_prereg",
+  "committee_rating",
+  "committee_trial_result",
+  "expert_call_confirm",
+  "expert_call_proposal",
+  "expert_poll_run",
+  "expert_source_licence",
+  "minilm_shadow",
+  "opinion_promotion_request",
+  "regime_alt_reading",
+];
+
+// The eight tables 0043 adds (M23 A1, D-1611): records and opinions no night reads, so STAGE_TABLES and the AU schemaSha are unchanged.
+const M23_TABLES = [
+  "angle_proposal",
+  "holdout_look_refusal",
+  "research_meter",
+  "research_prereg",
+  "research_result",
+  "residual_monitor",
+  "sector_index",
+  "shock_stop_outcome",
+];
+
+describe("the base list", () => {
+  it("equals the schema-38 table set minus market_profile*, sorted, with no duplicate", async () => {
+    expect([...STAGE_TABLES]).toEqual(await scan(38));
+    expect([...STAGE_TABLES]).toEqual([...STAGE_TABLES].sort());
+    expect(new Set(STAGE_TABLES).size).toBe(STAGE_TABLES.length);
+    expect(STAGE_TABLES.some((t) => t.startsWith("market_profile"))).toBe(false);
+  });
+
+  it("is the whole migrated schema minus the market_profile tables, the nine tables 0039 adds, the six 0041 adds, the thirteen 0042 adds and the eight 0043 adds", async () => {
+    const now = await scan(43);
+    expect(
+      now.filter(
+        (t) =>
+          !M20_TABLES.includes(t) &&
+          !M21_TABLES.includes(t) &&
+          !M22_TABLES.includes(t) &&
+          !M23_TABLES.includes(t),
+      ),
+    ).toEqual([...STAGE_TABLES]);
+    expect(now.filter((t) => M20_TABLES.includes(t))).toEqual(M20_TABLES);
+    expect(now.filter((t) => M21_TABLES.includes(t))).toEqual(M21_TABLES);
+    expect(now.filter((t) => M22_TABLES.includes(t))).toEqual(M22_TABLES);
+    expect(now.filter((t) => M23_TABLES.includes(t))).toEqual(M23_TABLES);
+  });
+
+  it("the AU schemaSha equals the pre-M20 scan of a schema-38 database, byte for byte", async () => {
+    const au = staticProfile("AU");
+    expect(stageTablesFor(au)).toEqual([...STAGE_TABLES]);
+    expect(sha(stageTablesFor(au))).toBe(sha(await scan(38)));
+    // pinned: a change of the base list moves the AU hash and the AT-32 baseline with it
+    expect(sha(STAGE_TABLES)).toBe(sha(await scan(38)));
+    expect(STAGE_TABLES).toHaveLength(170);
+    expect(sha(STAGE_TABLES)).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("stageTablesFor", () => {
+  it("an IN profile adds price_band, surveillance_list and announcement_category", () => {
+    const names = stageTablesFor(staticProfile("IN"));
+    expect(names.filter((t) => !STAGE_TABLES.includes(t))).toEqual([
+      "announcement_category",
+      "price_band",
+      "surveillance_list",
+    ]);
+    expect(names).toEqual([...names].sort());
+    expect(sha(names)).not.toBe(sha(STAGE_TABLES));
+  });
+
+  it("a US profile adds trading_halt and announcement_category", () => {
+    const names = stageTablesFor(staticProfile("US"));
+    expect(names.filter((t) => !STAGE_TABLES.includes(t))).toEqual([
+      "announcement_category",
+      "trading_halt",
+    ]);
+  });
+
+  it("a plain profile shape: cx16 and no category map is the base list; a null profile too", () => {
+    expect(
+      stageTablesFor({ haltModel: "cx16", fields: { category_map: { value: { kind: "none" } } } }),
+    ).toEqual([...STAGE_TABLES]);
+    expect(stageTablesFor(null)).toEqual([...STAGE_TABLES]);
+    expect(stageTablesFor({ haltModel: "us_luld" })).toEqual(
+      [...STAGE_TABLES, "trading_halt"].sort(),
+    );
+  });
+
+  it("returns a copy: mutating the result leaves the pinned list alone", () => {
+    const a = stageTablesFor(staticProfile("AU"));
+    a.push("x");
+    expect(stageTablesFor(staticProfile("AU"))).toHaveLength(STAGE_TABLES.length);
+  });
+});

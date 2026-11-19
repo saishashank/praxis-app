@@ -3,9 +3,12 @@
 // commit). All logic lives here so the tests can call it with fakes.
 //
 //   bakeoff [--golden DIR] [--date YYYY-MM-DD] [--run-id ID] [--report-out FILE] [--pause-ms N]
+//           [--reports DIR]
 //           [--candidate KIND:MODEL]... [--trains KIND=yes|no]... [--checked KIND=YYYY-MM-DD]...
 //
-// KIND is google | groq | openrouter (OpenRouter models must end in ":free", LLM-003). Without
+// KIND is google | groq | openrouter (OpenRouter models must end in ":free", LLM-003).
+// A candidate already run on this golden set and roster day (a committed report under --reports, default
+// docs/test-reports, or a stored run) is refused (exit 2, D-1405): one run per candidate per golden version. Without
 // --candidate the run is a SELF-CHECK: a perfect oracle provider over the golden set, no network, never
 // stored. A provider without `--trains KIND=no` is treated as training on prompts (facts only, cannot
 // pass); without `--checked KIND=DATE` its value is undated (cannot pass, LLM-040).
@@ -13,24 +16,30 @@
 // never printed); TURSO_MAIN_URL + TURSO_MAIN_TOKEN: when the URL is set, the rows of a live run are
 // written to `bakeoff_result`. Output: the markdown report only (no prompts, no model text, no keys).
 // Exit codes: 0 report produced, 1 failed, 2 usage.
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import {
   createOracleProvider,
   goldenProblems,
+  BakeoffRefused,
   goldenSha,
   insertBakeoffRows,
   parseGolden,
+  priorRunsFromReport,
   runBakeoff,
   type BakeoffRun,
   type Candidate,
+  type PriorRun,
 } from "./bakeoff";
 import { createLiveProvider, KEY_ENV, type LiveKind, type LlmProvider } from "./providers";
 import { isRetired } from "./roster";
 
 const DEFAULT_GOLDEN = "tests/fixtures/llm/golden-zz";
-const KINDS: readonly LiveKind[] = ["google", "groq", "openrouter"];
+const KINDS: readonly string[] = ["google", "groq", "openrouter"];
+const DEFAULT_REPORTS = "docs/test-reports";
+const STORED_RUN_RE = new RegExp("^bakeoff-(\d{4}-\d{2}-\d{2})-([0-9a-f]{8})$");
 const DATE_RE = new RegExp("^\\d{4}-\\d{2}-\\d{2}$");
 const LIVE_TIMEOUT_MS = 60_000; // threshold-ok: HTTP timeout per call
 const DEFAULT_PAUSE_MS = 4_000; // threshold-ok: stays under free-tier request-per-minute limits
@@ -47,9 +56,43 @@ export type CliDeps = {
     trainsOnPrompts: boolean;
   }) => LlmProvider;
   readonly cwd?: string;
+  /** Earlier runs, replacing the reports folder and the stored rows (tests). */
+  readonly prior?: readonly PriorRun[];
 };
 
 class Usage extends Error {}
+
+/** The earlier runs the committed reports record (D-1405). A missing folder is no earlier run. */
+function readReportRuns(dir: string): PriorRun[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((n) => n.endsWith(".md"))
+    .sort()
+    .flatMap((n) => priorRunsFromReport(readFileSync(path.join(dir, n), "utf8")));
+}
+
+/**
+ * The earlier runs the stored rows record. A row has no golden hash or roster day, so only a run id of the default form
+ * `bakeoff-DATE-SHA8` counts, and the run's own date stands in for the roster day (D-1405).
+ */
+async function storedRuns(db: Client): Promise<PriorRun[]> {
+  // rows-ok: one "overall" row per model per run, tens of rows over the project's life; no paging
+  const res = await db.execute(
+    "SELECT DISTINCT run_id, model_id FROM bakeoff_result WHERE category = 'overall'",
+  );
+  const out: PriorRun[] = [];
+  for (const r of res.rows) {
+    const m = STORED_RUN_RE.exec(String(r.run_id));
+    if (m)
+      out.push({
+        model: String(r.model_id),
+        goldenSha: m[2]!,
+        rosterChecked: null,
+        runDate: m[1]!,
+      });
+  }
+  return out;
+}
 
 function flags(args: readonly string[], name: string): string[] {
   const out: string[] = [];
@@ -116,7 +159,7 @@ export async function bakeoffMain(
     } else {
       for (const spec of specs) {
         const i = spec.indexOf(":");
-        const kind = spec.slice(0, i) as LiveKind;
+        const kind = spec.slice(0, i);
         const model = spec.slice(i + 1);
         if (i <= 0 || !KINDS.includes(kind) || model === "")
           throw new Usage(`bad candidate ${spec}`);
@@ -125,54 +168,76 @@ export async function bakeoffMain(
         if (isRetired(kind, model))
           throw new Usage(`${kind}:${model} is retired in the LLM roster (LLM-070)`);
         const trainsOnPrompts = trains.get(kind) !== "no";
-        const provider = deps.makeProvider
-          ? deps.makeProvider({ kind, model, trainsOnPrompts })
-          : createLiveProvider({
-              kind,
-              models: { R1: model, R2: model, R3: model, R5: model },
-              trainsOnPrompts,
-              timeoutMs: LIVE_TIMEOUT_MS,
-              env,
-            });
-        if (!provider.available()) throw new Usage(`${kind}: ${KEY_ENV[kind]} is not set`);
+        const models = { R1: model, R2: model, R3: model, R5: model, R6: model, R7: model };
+        let provider: LlmProvider;
+        if (deps.makeProvider) {
+          provider = deps.makeProvider({ kind: kind as LiveKind, model, trainsOnPrompts });
+        } else {
+          provider = createLiveProvider({
+            kind: kind as LiveKind,
+            models,
+            trainsOnPrompts,
+            timeoutMs: LIVE_TIMEOUT_MS,
+            env,
+          });
+        }
+        if (!provider.available())
+          throw new Usage(`${kind}: ${KEY_ENV[kind as LiveKind]} is not set`);
         candidates.push({ provider, trainsOnPromptsCheckedD: checked.get(kind) ?? null });
       }
     }
 
     const runId = flags(argv, "--run-id")[0] ?? `bakeoff-${date}-${goldenSha(items).slice(0, 8)}`;
-    const run: BakeoffRun = await runBakeoff({
-      runId,
-      date,
-      items,
-      candidates,
-      mode: live ? "live" : "mock",
-      pauseMs: live ? pauseMs : 0,
-      sleep: deps.sleep ?? (live ? (ms) => new Promise((r) => setTimeout(r, ms)) : undefined),
-      now: deps.now,
-    });
-    out(run.report);
-    if (!live) out("Self-check only: oracle provider, nothing stored.");
-
-    const reportOut = flags(argv, "--report-out")[0];
-    if (reportOut) writeFileSync(reportOut, run.report);
-
     const url = env.TURSO_MAIN_URL;
-    if (live && url && url.trim() !== "") {
-      const db = (deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t })))(
-        url,
-        env.TURSO_MAIN_TOKEN,
-      );
-      try {
+    const db =
+      live && url && url.trim() !== ""
+        ? (deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t })))(url, env.TURSO_MAIN_TOKEN)
+        : null;
+    let run: BakeoffRun;
+    try {
+      const prior = live
+        ? (deps.prior ?? [
+            ...readReportRuns(
+              path.resolve(
+                deps.cwd ?? process.cwd(),
+                flags(argv, "--reports")[0] ?? DEFAULT_REPORTS,
+              ),
+            ),
+            ...(db ? await storedRuns(db) : []),
+          ])
+        : undefined;
+      run = await runBakeoff({
+        runId,
+        date,
+        items,
+        candidates,
+        mode: live ? "live" : "mock",
+        pauseMs: live ? pauseMs : 0,
+        sleep: deps.sleep ?? (live ? (ms) => new Promise((r) => setTimeout(r, ms)) : undefined),
+        now: deps.now,
+        prior,
+      });
+      out(run.report);
+      if (!live) out("Self-check only: oracle provider, nothing stored.");
+
+      const reportOut = flags(argv, "--report-out")[0];
+      if (reportOut) writeFileSync(reportOut, run.report);
+
+      if (db) {
         const n = await insertBakeoffRows(db, run.rows);
         out(`bakeoff_result: ${n} rows written (${run.rows.length} offered)`);
-      } finally {
-        db.close();
+      } else if (live) {
+        out("No database URL: report printed, rows not stored.");
       }
-    } else if (live) {
-      out("No database URL: report printed, rows not stored.");
+    } finally {
+      db?.close();
     }
     return 0;
   } catch (e) {
+    if (e instanceof BakeoffRefused) {
+      out(`refused: ${e.message}`);
+      return 2;
+    }
     if (e instanceof Usage) {
       out(`usage: ${e.message}`);
       return 2;

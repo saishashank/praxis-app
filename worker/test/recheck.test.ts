@@ -13,7 +13,7 @@ import {
   type StoredState,
 } from "../src/clock";
 import { sydneyLocal } from "../src/localtime";
-import { AU_SLOTS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet } from "./fakeTurso";
 
 const ENV: ClockEnv = {

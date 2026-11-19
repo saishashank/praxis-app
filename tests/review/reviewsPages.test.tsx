@@ -101,6 +101,8 @@ const envAt = (role: "owner" | "editor" | "viewer", masked: boolean, now: Date):
   user: { id: uid, role },
   mask: { masked },
   now,
+  market: "AU",
+  currency: "AUD",
 });
 const noLeak = (html: string) => {
   for (const c of CODES) {

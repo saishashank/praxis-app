@@ -5,8 +5,11 @@
 // (`health_snapshot` purpose `reminder`, append-only, INSERT OR IGNORE) in exactly the JSON shape
 // src/lib/health/attention.ts parses, plus `reason`, `since_d`, `fix` and `fix_path` per item, which
 // Evening Review section 9 reads. openItems applies the snooze rules.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { getConfig } from "@/lib/config/store";
+import { enabledCalendarMarkets } from "@/lib/data/calendarAdmin";
+import { calendarEscalation, readDraftedYears } from "@/lib/data/calendarEscalation";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { CREDENTIAL_NAMES } from "@/lib/sentinel/schema";
 import { getMeters, usageEnvironment, worstMeter } from "@/lib/usage/meters";
@@ -17,6 +20,8 @@ import {
   type HealthItem,
   type JobFact,
   type LevelFact,
+  quarterStart,
+  type RestoreRun,
 } from "./components";
 import { getHealthSummary } from "./summary";
 
@@ -47,11 +52,14 @@ export async function gatherHealthFacts(
     quotaLevel: "no data",
   };
   try {
-    const m = await db.execute({ sql: "SELECT mode FROM market WHERE code = 'AU'", args: [] });
+    const m = await db.execute({
+      sql: "SELECT mode FROM market WHERE code = ?",
+      args: [HOME_MARKET],
+    });
     f.marketActive = m.rows.length > 0 && String(m.rows[0]!.mode) === "full";
     const s = await db.execute({
-      sql: "SELECT MAX(last_ok_at) AS t FROM sentinel_poll_day WHERE market = 'AU'",
-      args: [],
+      sql: "SELECT MAX(last_ok_at) AS t FROM sentinel_poll_day WHERE market = ?",
+      args: [HOME_MARKET],
     });
     f.sentinelLastOkAt = s.rows[0]?.t ? String(s.rows[0].t) : null;
     f.emailMode = (await readEmailSwitch(db, today)).mode;
@@ -103,6 +111,64 @@ export async function gatherHealthFacts(
     f.quotaLevel = worstMeter(meters).level;
   } catch {
     // meters unreadable: levels stay "no data"
+  }
+  // OPS-103 (D-961): a drafted next-year calendar the Owner has not confirmed.
+  try {
+    f.calendar = calendarEscalation(
+      today,
+      await readDraftedYears(db, await enabledCalendarMarkets(db), today),
+    );
+  } catch {
+    // unreadable: no finding (the heartbeat raises the incident from its own read)
+  }
+  // OPS-105 (D-962): the restore drills the drill script recorded (run_record job restore-drill).
+  try {
+    // rows-ok: one job of run_record through idx_run_record_job_started, a handful of rows a quarter
+    const q = await db.execute({
+      sql: `SELECT started_at, details_json FROM run_record
+            WHERE job = 'restore-drill' AND status = 'success' AND started_at >= ?
+            ORDER BY started_at DESC LIMIT 50`,
+      args: [quarterStart(today)],
+    });
+    // rows-ok: the same index, the newest real-key drill only
+    const last = await db.execute({
+      sql: `SELECT started_at FROM run_record
+            WHERE job = 'restore-drill' AND status = 'success'
+              AND json_extract(details_json, '$.keyMode') = 'real'
+              AND json_extract(details_json, '$.mode') IN ('drill', 'restore')
+            ORDER BY started_at DESC LIMIT 1`,
+      args: [],
+    });
+    const run = (x: Record<string, unknown>): RestoreRun => {
+      let d: Record<string, unknown> = {};
+      try {
+        d = JSON.parse(String(x.details_json)) as Record<string, unknown>;
+      } catch {
+        // an unreadable record counts as no drill
+      }
+      return {
+        at: String(x.started_at),
+        keyMode: String(d.keyMode ?? ""),
+        mode: String(d.mode ?? ""),
+      };
+    };
+    f.restore = {
+      thisQuarter: q.rows.map((x) => run(x as Record<string, unknown>)),
+      lastRealDrillAt: last.rows[0]?.started_at ? String(last.rows[0].started_at) : null,
+    };
+  } catch {
+    // unreadable: no reminder item rather than a false one
+  }
+  // PLT-080 (D-963): the plan name from the newest daily usage sample that carries one.
+  try {
+    // rows-ok: one row through the primary key of usage_sample, newest first
+    const p = await db.execute({
+      sql: "SELECT plan_name FROM usage_sample WHERE plan_name IS NOT NULL ORDER BY sampled_at DESC LIMIT 1",
+      args: [],
+    });
+    f.tursoPlan = { name: p.rows[0]?.plan_name ? String(p.rows[0].plan_name) : null };
+  } catch {
+    // unreadable: no plan finding
   }
   return f;
 }

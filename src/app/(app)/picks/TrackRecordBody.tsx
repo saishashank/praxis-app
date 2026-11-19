@@ -33,9 +33,13 @@ function levels(r: TrackRow, masked: boolean) {
   if (masked) return <Masked />;
   return (
     <span className="block">
-      {p.buyUpTo ? <Money micro={p.buyUpTo.micro} /> : <NotMeasured />} /{" "}
-      {p.stop ? <Money micro={p.stop.micro} /> : <NotMeasured />} /{" "}
-      {p.aim ? <Money micro={p.aim.micro} /> : <NotMeasured />}
+      {p.buyUpTo ? (
+        <Money micro={p.buyUpTo.micro} currency={p.buyUpTo.currency} />
+      ) : (
+        <NotMeasured />
+      )}{" "}
+      / {p.stop ? <Money micro={p.stop.micro} currency={p.stop.currency} /> : <NotMeasured />} /{" "}
+      {p.aim ? <Money micro={p.aim.micro} currency={p.aim.currency} /> : <NotMeasured />}
     </span>
   );
 }
@@ -44,6 +48,19 @@ function VsMarket({ v }: { v: NonNullable<TrackRow["vsMarket"]> }) {
   return (
     <span className="block text-text-muted" data-testid="vs-market">
       {vsMarketRowText(v)} — {v.basisLabel}
+    </span>
+  );
+}
+
+/** UXN-288, D-1425: the AI-written note under a settled pick; nothing when none was written. */
+export const LOOKING_BACK_TITLE = "Looking back (AI-written)";
+
+function LookingBack({ r }: { r: TrackRow }) {
+  if (r.lookingBack === null) return null;
+  return (
+    <span className="mt-2 block text-text-muted" data-testid="looking-back">
+      <span className="block font-medium">{LOOKING_BACK_TITLE}</span>
+      <span className="block break-words">{r.lookingBack}</span>
     </span>
   );
 }
@@ -102,7 +119,16 @@ export async function TrackRecordBody({
           `${pct(r.published.badPpm)} to ${pct(r.published.goodPpm)}`
         ),
     },
-    { key: "result", header: "What happened", cell: (r) => result(r) },
+    {
+      key: "result",
+      header: "What happened",
+      cell: (r) => (
+        <>
+          {result(r)}
+          <LookingBack r={r} />
+        </>
+      ),
+    },
   ];
 
   return (

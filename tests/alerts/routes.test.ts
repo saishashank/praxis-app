@@ -52,6 +52,8 @@ import * as ackRoute from "@/app/api/alerts/[key]/ack/route";
 import * as snoozeRoute from "@/app/api/alerts/[key]/snooze/route";
 import * as quietRoute from "@/app/api/alerts/quiet-hours/route";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/alert-flush" };
+
 afterEach(() => {
   cleanupTempDbs();
   vi.unstubAllEnvs();
@@ -126,7 +128,12 @@ const post = (
   return new Request(url, {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(SECRET, raw, NOW, nc) as Record<string, string>),
+    headers:
+      headers ??
+      (sign(SECRET, raw, NOW, nc, { method: "POST", path: new URL(url).pathname }) as Record<
+        string,
+        string
+      >),
   });
 };
 const setMode = (mode: string) =>
@@ -155,10 +162,19 @@ describe("POST /api/internal/alert-flush: signed-route refusal", () => {
   it("401 generic body: wrong secret, no headers, stale, future, tampered body, replay", async () => {
     const h = createAlertFlushHandler(deps());
     const raw = JSON.stringify(flushBody());
-    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32)) as Record<string, string>;
-    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32)) as Record<string, string>;
+    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32), SIGN_TARGET) as Record<string, string>;
     const once = "c".repeat(32);
     expect((await h(post(URL_FLUSH, raw, undefined, once))).status).toBe(200);
     const tampered = JSON.stringify(flushBody({ d: "2026-10-20" }));

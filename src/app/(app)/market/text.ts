@@ -1,5 +1,9 @@
 // Fixed texts and small formatters of the Market pages (UXN-270..273). Plain words, no internals.
+import type { CurrencyFormat } from "@/lib/market/profileCore.mjs";
 import { formatMicro, formatPpm } from "@/lib/view/format";
+
+/** Index points are not money: no symbol, standard grouping. */
+const INDEX_POINTS: CurrencyFormat = { code: "", symbol: "", locale: "und" };
 import type { MaRelation } from "@/lib/ui/loaders/company";
 
 export const PRICE_LABEL = "End of day";
@@ -32,7 +36,7 @@ export function rangePositionText(ppm: number | null): string {
 
 /** Index level in micro points -> "8,679.70" (index points: never "A$", never the raw micro number). */
 export function formatIndexPoints(micro: number | string | bigint): string {
-  return formatMicro(micro).replace("A$", "");
+  return formatMicro(micro, INDEX_POINTS);
 }
 
 /** Average sector move in ppm -> percent for the heat grid. */

@@ -18,7 +18,7 @@ import { eventFactFromRow, reversedNextClose } from "@/lib/agents/families/facts
 import { defaultAgentParams } from "@/lib/agents/params";
 import type { CalendarRow, MarketHours } from "@/lib/data/calendar";
 import { makeRational } from "@/lib/money/rational";
-import { summarise } from "../../scripts/data/split-frequency.mjs";
+import { summarise } from "@/lib/data/splitFrequency";
 import { cleanupTempDbs, freshDb, ROOT } from "../db/helpers";
 
 vi.setConfig({ testTimeout: 60000 });

@@ -729,6 +729,8 @@ export const NON_ROTATING_SECRET_NAMES: Readonly<Record<string, string>> = {
   OWNER_EMAIL_STAGING: "Your sign-in address; configuration, not a credential.",
   OWNER_RECOVERY_EMAIL_PROD: "Break-glass address; configuration, not a credential (OPS-040a).",
   BACKUP_PUBLIC_KEY: "Row (k): kept at go-live, replaced only on suspicion (OPS-037a).",
+  TURSO_PLATFORM_TOKEN_USAGE:
+    "Turso platform token for the daily usage sample (OPS-104, D-958): created by you after go-live, only a production-environment secret read by one workflow step, never on Vercel; absent = the Usage page shows the labelled estimate. Rotated by creating a new token and replacing the secret (docs/runbooks/rotate-secrets.md).",
 };
 
 export const rowById = (id: string): SecretRow => {

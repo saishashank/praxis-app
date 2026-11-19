@@ -9,6 +9,9 @@ import { clientIp } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
 import type { Claims } from "@/lib/auth/claims";
 import { buildCsp, newNonce } from "./csp";
+import { isKnownRoute } from "./appRoutes";
+import { GENERATED_EXPORT_ROUTES } from "./appRoutes.generated";
+import { hiddenEntryFor, hiddenFor } from "./hiddenRoutes";
 import type { RateLimits } from "./limits";
 import { rateLimit } from "./rateLimit";
 
@@ -22,6 +25,8 @@ export type GateDeps = {
   nonce?: () => string;
   // D-371: true only for the pinned Owner. Absent or throwing counts as false (fail closed).
   isPinnedOwner?: (claims: Claims) => Promise<boolean>;
+  // D-1215: the Owner switch through the 60 s config cache. Absent or throwing counts as off (fail closed).
+  ownerToolsOn?: () => Promise<boolean>;
 };
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -51,9 +56,18 @@ const MACHINE_ROUTES = new Set([
   TEST_LOGIN_ROUTE,
 ]);
 // SEC-014 exports (Content-Disposition attachments): ≤ exports_per_hour_user per user and hour.
-// Keep in step with the routes that set Content-Disposition (tests/http/gate.test.ts walks src/app/api).
-export const EXPORT_ROUTES = new Set(["/api/blueprint/export"]);
-const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/robots.txt"]);
+// Generated from the routes that set Content-Disposition (scripts/routes/gen-app-routes.mjs, D-1210).
+export const EXPORT_ROUTES = new Set(GENERATED_EXPORT_ROUTES);
+// /manifest.webmanifest and /sw.js are served to signed-out browsers too (PWA, D-1231).
+const PUBLIC_EXACT = new Set([
+  "/signin",
+  "/privacy",
+  "/terms",
+  "/api/health",
+  "/robots.txt",
+  "/manifest.webmanifest",
+  "/sw.js",
+]);
 
 // Paths that must be indistinguishable from a missing route for anyone but the pinned Owner.
 // A non-owner is not rewritten by the proxy (that leaks x-middleware-rewrite to the client). The
@@ -62,14 +76,7 @@ const PUBLIC_EXACT = new Set(["/signin", "/privacy", "/terms", "/api/health", "/
 export const ABSENT_PATH = "/_praxis-absent";
 export const HIDE_HEADER = "x-praxis-hide";
 export function isBlueprintPath(raw: string): boolean {
-  let p: string;
-  try {
-    p = decodeURIComponent(raw);
-  } catch {
-    return false;
-  }
-  p = p.replace(/\/{2,}/g, "/");
-  return /^\/(?:api\/)?blueprint(?:\/|$)/.test(p);
+  return hiddenEntryFor(raw)?.id === "blueprint";
 }
 
 export function isPublicPath(p: string): boolean {
@@ -160,18 +167,29 @@ export async function gate(req: NextRequest, deps: GateDeps): Promise<NextRespon
       }
     }
 
-    // D-371 (amends D-361): an anonymous Blueprint request gets exactly what any other missing
-    // path gets (sign-in redirect / 401). A signed-in user who is not the pinned Owner is
-    // marked for the config rewrite to an absent path, so Next renders its own 404, never a 503 or a 403.
+    // D-371 (amends D-361), D-1210: an anonymous request gets exactly what any other missing path gets
+    // (sign-in redirect / 401). A signed-in request that is not for this viewer is marked for the config rewrite
+    // to an absent path, so Next renders its own 404, never a 503 or a 403. "Not for this viewer" is ONE
+    // decision (hiddenFor: Blueprint, Owner tools) plus every unknown path, so a hidden route and a missing
+    // route take the same rewrite and answer the same status, headers and body, for pages, RSC and API.
     let hide = false;
-    if (claims && isBlueprintPath(path)) {
-      let pinned = false;
-      try {
-        pinned = (await deps.isPinnedOwner?.(claims)) === true;
-      } catch {
-        pinned = false;
+    if (claims) {
+      // Next's dev overlay and HMR endpoints (/__nextjs_*) are not ours to hide while developing (D-1247).
+      const unknown = !isKnownRoute(path) && !(deps.dev && path.startsWith("/__nextjs_"));
+      // D-1247: a hidden path costs one pin read (inside hiddenFor); an unknown path costs the same single read,
+      // result ignored, so the two are not told apart by timing or by DB load.
+      if (unknown && hiddenEntryFor(path) === null) {
+        try {
+          await deps.isPinnedOwner?.(claims);
+        } catch {
+          // ignored: the path is hidden either way
+        }
       }
-      hide = !pinned;
+      hide =
+        (await hiddenFor(path, claims, {
+          isPinnedOwner: async (cl) => (await deps.isPinnedOwner?.(cl)) === true,
+          ownerToolsOn: async () => (await deps.ownerToolsOn?.()) === true,
+        })) || unknown;
     }
 
     // SEC-014: authenticated writes per user (public paths such as sign-out under /api/auth

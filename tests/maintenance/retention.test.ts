@@ -220,7 +220,7 @@ describe("run record and concurrency (PLT-017, PLT-076)", () => {
     expect(r.scheduled_for).toBe(DATE);
     expect(r.items_processed).toBe(1);
     expect(Number(r.rows_written)).toBe(1);
-    expect(Number(r.rows_read)).toBe(5); // + the price-bar step (D-717)
+    expect(Number(r.rows_read)).toBeGreaterThanOrEqual(5); // + the price-bar step (D-717) and the row-by-market probes (D-960)
     expect(JSON.parse(String(r.details_json))).toEqual({
       prunedRuns: 0,
       prunedLogs: 1,

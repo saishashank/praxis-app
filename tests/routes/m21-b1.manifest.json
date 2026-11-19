@@ -1,0 +1,13 @@
+{
+  "routes": {
+    "action src/app/(app)/(owner-tools)/recommendations/actions.ts#saveCapitalAction": {
+      "tests": ["tests/ownerTools/actions.test.ts"]
+    },
+    "action src/app/(app)/(owner-tools)/recommendations/actions.ts#saveBrokerLinksAction": {
+      "tests": ["tests/ownerTools/actions.test.ts"]
+    },
+    "action src/app/(app)/(owner-tools)/holdings/actions.ts#saveHoldingsAction": {
+      "tests": ["tests/ownerTools/actions.test.ts"]
+    }
+  }
+}

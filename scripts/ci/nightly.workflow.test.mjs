@@ -5,15 +5,23 @@ import { assertHardened, assertNoUrlOutput, load, secretsByStep } from "./workfl
 
 const w = load("nightly");
 
-test("triggers: one nightly cron (off the hour, away from 11:40 UTC) and dispatch", () => {
-  assert.deepEqual(Object.keys(w.wf.on), ["schedule", "workflow_dispatch"]);
-  assert.equal(w.wf.on.schedule.length, 1);
-  const cron = w.wf.on.schedule[0].cron;
-  assert.match(cron, /^\d+ \d+ \* \* \*$/);
-  const [min, hour] = cron.split(" ").map(Number);
-  assert.notEqual(min, 0);
-  assert.notEqual(`${hour}:${min}`, "11:40");
-  assert.doesNotMatch(w.text, /^\s*(push|pull_request\w*):/m);
+// M18 OPS-107 / D-964 (AT-84): the retired staging workflows are dispatch-only and say why.
+const HEADER =
+  /^# Disabled 2026-11-09 \(D-906, OPS-107\): staging is retired; kept for history and the rollback runbook\./;
+test("triggers: dispatch only (the nightly cron was removed, D-964), with the retirement header", () => {
+  assert.deepEqual(Object.keys(w.wf.on), ["workflow_dispatch"]);
+  assert.doesNotMatch(w.text, /^\s*(schedule|push|pull_request\w*|workflow_run):/m);
+  assert.doesNotMatch(w.text, /^\s*-?\s*cron:/m);
+  assert.match(w.text, HEADER);
+});
+
+test("deploy-staging and staging-e2e-day are dispatch-only too, with the retirement header", () => {
+  for (const name of ["deploy-staging", "staging-e2e-day"]) {
+    const x = load(name);
+    assert.deepEqual(Object.keys(x.wf.on), ["workflow_dispatch"], name);
+    assert.doesNotMatch(x.text, /^\s*(schedule|push|pull_request\w*|workflow_run):/m, name);
+    assert.match(x.text, HEADER, name);
+  }
 });
 
 test("jobs: gate -> staging -> streak, staging in the staging environment on main's code", () => {

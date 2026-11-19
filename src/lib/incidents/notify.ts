@@ -71,6 +71,13 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     fix: "Check the cron list on the production project, run the evening heartbeat once by hand, and look at System Health.",
     fixPath: "/health",
   },
+  quote_starvation: {
+    component: "Delayed prices",
+    impact:
+      "A held position has had no fresh delayed price for 30 minutes during market hours; the live price and its alerts may be out of date.",
+    fix: "Look at the Quotes lines and the request budget on System Health; the next polls may recover on their own.",
+    fixPath: "/health",
+  },
   calendar_horizon: {
     component: "Trading calendar",
     impact: "The trading calendar ends within 60 days; after that every weekday would be skipped.",
@@ -149,6 +156,27 @@ export const INCIDENT_SPECS: Readonly<Record<string, Spec>> = {
     impact:
       "A trading session was not closed, so the next night refused to run: orders would fill at the wrong open and stops would be skipped.",
     fix: "Dispatch Arena close again: it closes the missed sessions oldest first, up to 10 per run (dispatch again if the log says more remain); or run close-books.mjs --date for each missed day, oldest first, before the next session's close.",
+    fixPath: "/health",
+  },
+  market_not_enabled: {
+    component: "Markets",
+    impact:
+      "A job tried to write data for a market that is not enabled; the database refused it, so nothing was stored.",
+    fix: "Find which job or script named that market (the table is in the incident) and stop it; no data was written.",
+    fixPath: "/health",
+  },
+  market_kill_incomplete: {
+    component: "Markets",
+    impact:
+      "A market rolled back to off still holds a position the kill could not sell (halted or no price); the market stays enabled until it is closed.",
+    fix: "The kill tries again at the next open. If a share stays halted, check the exchange halt list; the books of the market stay frozen until then.",
+    fixPath: "/settings/region",
+  },
+  markets_enabled_mismatch: {
+    component: "Markets",
+    impact:
+      "The markets switched on in the database differ from the production setting; the database decides what runs.",
+    fix: "Compare the market rows with PRAXIS_MARKETS_ENABLED and correct whichever is wrong.",
     fixPath: "/health",
   },
   provider_auth: {

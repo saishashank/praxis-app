@@ -2,6 +2,7 @@
 // Format, terms, staleness and honesty helpers of the view-model foundation (M7 T2). Missing, zero,
 // negative and very large values are covered on purpose (TST-128).
 import { describe, expect, it } from "vitest";
+import { currencyFormatOf } from "@/lib/market/profileCore.mjs";
 import {
   formatCents,
   formatCount,
@@ -38,36 +39,39 @@ import {
 import { STRATEGY_NAMES_DEFAULT } from "@/lib/config/keys";
 import { LABELS } from "@/lib/agents/schema";
 
+const AUD = currencyFormatOf("AUD");
+const USD = currencyFormatOf("USD");
+
 describe("format", () => {
   it("cents: grouping, sign, zero, missing", () => {
-    expect(formatCents(123456)).toBe("A$1,234.56");
-    expect(formatCents(-5)).toBe("-A$0.05");
-    expect(formatCents(0)).toBe("A$0.00");
-    expect(formatCents(0, { sign: "always" })).toBe("A$0.00");
-    expect(formatCents(1, { sign: "always" })).toBe("+A$0.01");
-    expect(formatCents(-100000000, { sign: "always" })).toBe("-A$1,000,000.00");
-    expect(formatCents(null)).toBe(MISSING);
-    expect(formatCents(undefined)).toBe(MISSING);
-    expect(formatCents(Number.NaN)).toBe(MISSING);
-    expect(formatCents(Infinity)).toBe(MISSING);
-    expect(formatCents(150, { currency: "USD " })).toBe("USD 1.50");
+    expect(formatCents(123456, AUD)).toBe("A$1,234.56");
+    expect(formatCents(-5, AUD)).toBe("-A$0.05");
+    expect(formatCents(0, AUD)).toBe("A$0.00");
+    expect(formatCents(0, AUD, { sign: "always" })).toBe("A$0.00");
+    expect(formatCents(1, AUD, { sign: "always" })).toBe("+A$0.01");
+    expect(formatCents(-100000000, AUD, { sign: "always" })).toBe("-A$1,000,000.00");
+    expect(formatCents(null, AUD)).toBe(MISSING);
+    expect(formatCents(undefined, AUD)).toBe(MISSING);
+    expect(formatCents(Number.NaN, AUD)).toBe(MISSING);
+    expect(formatCents(Infinity, AUD)).toBe(MISSING);
+    expect(formatCents(150, USD)).toBe("US$1.50");
   });
   it("micro-AUD: strings, bigint, rounding half away from zero, bad input", () => {
-    expect(formatMicro("1500000")).toBe("A$1.50");
-    expect(formatMicro("150000000")).toBe("A$150.00");
-    expect(formatMicro(1_234_567_890n)).toBe("A$1,234.57");
-    expect(formatMicro("5000")).toBe("A$0.01");
-    expect(formatMicro("4999")).toBe("A$0.00");
-    expect(formatMicro("-5000")).toBe("-A$0.01");
-    expect(formatMicro("-4999")).toBe("A$0.00");
-    expect(formatMicro("0", { sign: "always" })).toBe("A$0.00");
-    expect(formatMicro(2_500_000)).toBe("A$2.50");
-    expect(formatMicro(null)).toBe(MISSING);
-    expect(formatMicro("1.5")).toBe(MISSING);
-    expect(formatMicro("abc")).toBe(MISSING);
-    expect(formatMicro(1.5)).toBe(MISSING);
-    expect(formatMicro("9".repeat(31))).toBe(MISSING);
-    expect(formatMicro("123456789012345678901234567890")).toMatch(/^A\$[\d,]+\.\d\d$/);
+    expect(formatMicro("1500000", AUD)).toBe("A$1.50");
+    expect(formatMicro("150000000", AUD)).toBe("A$150.00");
+    expect(formatMicro(1_234_567_890n, AUD)).toBe("A$1,234.57");
+    expect(formatMicro("5000", AUD)).toBe("A$0.01");
+    expect(formatMicro("4999", AUD)).toBe("A$0.00");
+    expect(formatMicro("-5000", AUD)).toBe("-A$0.01");
+    expect(formatMicro("-4999", AUD)).toBe("A$0.00");
+    expect(formatMicro("0", AUD, { sign: "always" })).toBe("A$0.00");
+    expect(formatMicro(2_500_000, AUD)).toBe("A$2.50");
+    expect(formatMicro(null, AUD)).toBe(MISSING);
+    expect(formatMicro("1.5", AUD)).toBe(MISSING);
+    expect(formatMicro("abc", AUD)).toBe(MISSING);
+    expect(formatMicro(1.5, AUD)).toBe(MISSING);
+    expect(formatMicro("9".repeat(31), AUD)).toBe(MISSING);
+    expect(formatMicro("123456789012345678901234567890", AUD)).toMatch(/^A\$[\d,]+\.\d\d$/);
   });
   it("percent and ppm", () => {
     expect(formatPercent(12.3456)).toBe("12.35%");

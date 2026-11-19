@@ -43,7 +43,10 @@ export async function run(argv, env, fetchImpl, out, nowMs = () => Date.now()) {
   }
   const headers = {
     'Content-Type': 'application/json',
-    ...sign(env.ACTIONS_HMAC_SECRET, BODY, Math.floor(nowMs() / 1000), randomBytes(16).toString('hex')),
+    ...sign(env.ACTIONS_HMAC_SECRET, BODY, Math.floor(nowMs() / 1000), randomBytes(16).toString('hex'), {
+      method: 'POST',
+      path: '/api/internal/self-check',
+    }),
   };
   let report;
   try {

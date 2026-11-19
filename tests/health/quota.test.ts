@@ -22,19 +22,19 @@ async function seedWrites(n: number) {
 
 describe("health quota line", () => {
   it("owner gets worst level, meter name and ratio", async () => {
-    await seedWrites(5_400_000);
+    await seedWrites(1_800_000);
     const s = await getHealthSummary(db, NOW, "owner", {});
     expect(s.quota).toEqual({ level: "alert", meter: "Turso rows written", ratio: 0.9 });
   });
 
   it.each(["editor", "viewer"] as const)("%s gets the level only", async (role) => {
-    await seedWrites(5_400_000);
+    await seedWrites(1_800_000);
     const s = await getHealthSummary(db, NOW, role, {});
     expect(s.quota).toEqual({ level: "alert" });
   });
 
   it("uses staging limits when TEST_IDENTITY_SECRET is present", async () => {
-    await seedWrites(900_000);
+    await seedWrites(300_000);
     const s = await getHealthSummary(db, NOW, "viewer", { TEST_IDENTITY_SECRET: "x" });
     expect(s.quota.level).toBe("degrade");
   });

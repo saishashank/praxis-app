@@ -5,6 +5,7 @@
 // a failure is a `not_written` outcome with a reason (D-484). Nothing here can reach an order, a breaker
 // or a rule (PRD-033): the only tables written are the steelman tables and, through `recordOpinion`,
 // `opinion_track`.
+import { randomUUID } from "node:crypto";
 import type { LlmParams } from "@/lib/agents/params";
 import { allowance, scaledCap, type Role } from "@/lib/llm/budget";
 import { reserveAfterLeft } from "@/lib/llm/dropOrder";
@@ -57,6 +58,8 @@ export type WriteDeps = {
   readonly providers: readonly LlmProvider[];
   /** Usage reader for the pre-call reservation (D-481, D-482). */
   readonly store: LlmStore;
+  /** Tokens the pick reflections of tonight still need from the writer role (D-1493); absent = 0. */
+  readonly reflectionReserve?: number;
 };
 
 const ROLE: Role = "R6";
@@ -117,7 +120,7 @@ const triedAndFailed = (attempts: readonly { outcome: string }[]): boolean =>
  * cap alike). False = not enough room: the subject is skipped (`budget`).
  */
 export async function hasRoom(
-  deps: Pick<WriteDeps, "params" | "store" | "market" | "d">,
+  deps: Pick<WriteDeps, "params" | "store" | "market" | "d" | "reflectionReserve">,
   reservation: number,
 ): Promise<boolean> {
   const usage = await deps.store.usage(ROLE, deps.market, deps.d);
@@ -125,8 +128,12 @@ export async function hasRoom(
   const share = deps.params.marketShare[deps.market];
   const totalLeft = scaledCap(deps.params.dailyTotal, share) - usage.totalDay;
   const nightLeft = deps.params.nightlyTokensPerMarket - usage.marketNight;
-  const later = await reserveAfterLeft("steelman", deps.params, deps.market, (role) =>
-    deps.store.usage(role, deps.market, deps.d),
+  const later = await reserveAfterLeft(
+    "steelman",
+    deps.params,
+    deps.market,
+    (role) => deps.store.usage(role, deps.market, deps.d),
+    deps.reflectionReserve ?? 0,
   );
   return reservation <= Math.min(allow.allowed, totalLeft - later, nightLeft - later);
 }
@@ -311,7 +318,29 @@ async function writeInner(
   }
 
   const criticRouter = deps.criticRouterFor(author);
-  if (criticRouter === null) return none("critic_unavailable", claims);
+  if (criticRouter === null) {
+    // OPS-111 (4), D-1794: a critic that was never called leaves a call row of its own (provider `none`,
+    // no tokens), written through the router's store, so "no checker" is visible next to real calls.
+    try {
+      await deps.store.recordCall({
+        id: randomUUID(),
+        role: ROLE,
+        provider: "none",
+        modelId: null,
+        fallbackDepth: "rules-only",
+        tokensIn: 0,
+        tokensOut: 0,
+        cached: 0,
+        outcome: "critic_unavailable",
+        injectionFiltered: 0,
+        market: deps.market,
+        d: deps.d,
+      });
+    } catch {
+      // the counter on the night row stands; a missing log row never changes the outcome
+    }
+    return none("critic_unavailable", claims);
+  }
   const listed: Listed[] = [
     ...v.kept.bull.map((point) => ({ side: "bull" as const, point })),
     ...v.kept.bear.map((point) => ({ side: "bear" as const, point })),

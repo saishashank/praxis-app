@@ -6,20 +6,28 @@
 // sees the Sentinel polling. Bundled and run by scripts/asx/ingest.mjs. Output: counts only, never
 // a row, a URL or a driver error.
 //   asx-ingest --dir <dir>
+//   asx-ingest --write-state <file>   read-only: the delisted codes, the list-failure counter and
+//                                     whether the Wikidata fallback row is enabled (D-1789, D-1791)
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { getConfig } from "@/lib/config/store";
 import { ASX_SOURCE } from "@/lib/data/asxToken";
 import { sydneyDate } from "@/lib/data/pipeline/rules.mjs";
+import { HOME_CUTOFF, HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { cutoffPollStatement } from "@/lib/sentinel/cutoffPoll";
 import { importUniverse } from "@/lib/data/universe/import";
+import { parseListedCompanies } from "@/lib/data/universe/parse.mjs";
+import { applyFetchStatus, parseFetchStatus, readFetchState } from "@/lib/data/codeHistory";
+import { loadEffectiveCap } from "@/lib/sentinel/cap";
 import { ingestFeed } from "@/lib/sentinel/ingest";
 
-const MARKET = "AU";
+/** The market of the ASX feed this module ingests: the home market (M19 C2, D-1051). */
+const MARKET = HOME_MARKET;
 
 export type AsxIngestDeps = {
   readonly openDb?: (url: string, token: string | undefined) => Client;
@@ -54,16 +62,35 @@ export async function asxIngestMain(
   const nowMs = deps.nowMs ?? Date.now;
   const i = argv.indexOf("--dir");
   const dir = i >= 0 ? argv[i + 1] : undefined;
-  if (!has(dir)) {
-    out("asx-ingest: failed (usage: --dir <dir>)");
+  const w = argv.indexOf("--write-state");
+  const stateFile = w >= 0 ? argv[w + 1] : undefined;
+  if (w >= 0 ? !has(stateFile) : !has(dir)) {
+    out("asx-ingest: failed (usage: --dir <dir> | --write-state <file>)");
     return 2;
   }
   if (!has(env.TURSO_MAIN_URL)) {
     out("asx-ingest: failed (database not configured)");
     return 1;
   }
-  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
   const db = open(env.TURSO_MAIN_URL, has(env.TURSO_MAIN_TOKEN) ? env.TURSO_MAIN_TOKEN : undefined);
+  if (w >= 0 && has(stateFile)) {
+    try {
+      const s = await readFetchState(db);
+      writeFileSync(stateFile, JSON.stringify(s));
+      out(
+        `asx-ingest state: delisted=${s.delisted.length} list_failures=${s.consecutiveFailures} fallback_row=${s.wikidataEnabled ? "enabled" : "off"}`,
+      );
+      return 0;
+    } catch {
+      // the fetch then runs without a skip list and without the fallback: never a reason to stop
+      out("asx-ingest state: unreadable (the fetch runs without a skip list)");
+      return 0;
+    } finally {
+      db.close();
+    }
+  }
+  if (!has(dir)) return 2;
   const now = new Date(nowMs()).toISOString();
   const today = sydneyDate(nowMs());
   const read = (name: string): string | null => {
@@ -72,7 +99,8 @@ export async function asxIngestMain(
   };
   let exit = 0;
   try {
-    const cap = await getConfig(db, "sentinel_max_items_per_run").catch(() => undefined);
+    // DAT-251 b (D-1783): the key, bounded by the LLM headroom and, near the Turso line, by 40.
+    const cap = await loadEffectiveCap(db, new Date(nowMs())).catch(() => undefined);
     let feedOk = false;
     const history = existsSync(dir)
       ? readdirSync(dir)
@@ -89,7 +117,7 @@ export async function asxIngestMain(
         sha,
         today,
         now,
-        maxItems: typeof cap === "number" ? cap : undefined,
+        maxItems: cap?.cap,
       });
       if (r.ok) {
         if (name === "feed.json") feedOk = true;
@@ -107,7 +135,7 @@ export async function asxIngestMain(
       try {
         const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
         const cutoffMs = Date.parse(
-          decisionCutoffUtc(today, typeof cutoffHm === "string" ? cutoffHm : "18:10"),
+          decisionCutoffUtc(today, typeof cutoffHm === "string" ? cutoffHm : HOME_CUTOFF),
         );
         const fetchedMs = statSync(path.join(dir, "feed.json")).mtimeMs;
         if (fetchedMs >= cutoffMs) {
@@ -118,11 +146,40 @@ export async function asxIngestMain(
         // the marker is best effort: batch 2b falls back to cut-off + 4 minutes
       }
     }
-    const csv = read("companies.csv");
+    const asxCsv = read("companies.csv");
+    // D-1791: the Wikidata CSV is taken only when the ASX file did not arrive (fetch.mjs wrote it only
+    // after three failed runs with the register row enabled).
+    const csv = asxCsv ?? read("companies-wikidata.csv");
+    const fromWikidata = asxCsv === null && csv !== null;
     if (csv !== null) {
-      const u = await importUniverse({ db, csv, today, now: () => now, env });
-      out(`asx-ingest companies: ${u.ok ? u.status : `failed (${u.error})`}`);
+      const u = await importUniverse({
+        db,
+        csv,
+        today,
+        now: () => now,
+        env,
+        source: fromWikidata ? "wikidata" : undefined,
+      });
+      out(
+        `asx-ingest companies${fromWikidata ? " (wikidata fallback)" : ""}: ${u.ok ? u.status : `failed (${u.error})`}`,
+      );
       if (!u.ok) exit = 1;
+    }
+    // D-1789 / D-1791: what the fetch learned (causes, not_found codes, the list-failure counter).
+    const status = parseFetchStatus(read("fetch-status.json"));
+    if (status !== null) {
+      try {
+        const parsed = asxCsv !== null ? parseListedCompanies(asxCsv) : null;
+        const fileCodes =
+          parsed !== null && parsed.ok ? new Set(parsed.rows.map((r) => r.code)) : null;
+        const a = await applyFetchStatus(db, status, fileCodes, today, now);
+        out(
+          `asx-ingest history: list_failures=${a.consecutiveFailures} delisted=${a.delisted.length} reappeared=${a.reappeared.length}`,
+        );
+      } catch {
+        out("asx-ingest history: failed (could not store the fetch status)");
+        exit = 1;
+      }
     }
   } catch (e) {
     out(`asx-ingest: failed (unexpected error ${e instanceof Error ? e.name : "unknown"})`);

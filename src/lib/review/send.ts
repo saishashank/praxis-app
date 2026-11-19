@@ -28,6 +28,9 @@ import { LiveSendBlockedError, type EmailEnvVars, type EmailProvider } from "@/l
 import { emailEnvName, sendEmail, type SendOutcome } from "@/lib/email/send";
 import type { EnvName } from "@/lib/email/templates/core";
 import { notifyIncident } from "@/lib/incidents/notify";
+import { enabledMarkets } from "@/lib/market/profile";
+import { withMarketSections } from "./marketSections";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import {
   assembleReview,
   buildFacts,
@@ -39,7 +42,6 @@ import type { StoredKind } from "./facts";
 
 export const UNREAD_INCIDENT_KIND = "review_unread_7";
 export const UNREAD_INCIDENT_DAYS = 7;
-export const MARKET = "AU";
 
 export type ReviewSendStatus =
   | "waiting"
@@ -88,7 +90,7 @@ function minutesOf(v: unknown, fallback: number): number {
 }
 
 const minuteFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
@@ -234,6 +236,10 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     return { ...base, status: "suppressed_off", reason: "no_app_url" };
   }
   const today = melbourneDate(now);
+  // One review per date, built for the first enabled market; every further enabled market that trades on the date
+  // adds its own section (D-1828, D-1124, M20): with one market the review is exactly what it was.
+  const markets = await enabledMarkets(db);
+  if (markets.length === 0) return { ...base, status: "paused", reason: "no_market" };
   const minute = melbourneMinute(now);
   const lateDay = d < today; // a send that finishes after midnight keeps its date
   const t = await readTimes(db);
@@ -243,7 +249,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
   if (!final && !lateDay && minute < t.start) return { ...base, reason: "early" };
 
   const o = {
-    market: MARKET,
+    market: markets[0]!,
     d,
     env: templateEnv(emailEnvName(env)),
     appUrl,
@@ -260,7 +266,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     let created = false;
     if (prior === "sent" && !have) {
       // Only a partial or the watchdog's minimal mail went out: keep the best version in the app.
-      const again = await buildFacts(db, o);
+      const again = await withMarketSections(db, await buildFacts(db, o), o, markets);
       if (isComplete(again) || newest === null) {
         latest = await assembleReview(db, { ...o, built: again });
         created = latest.created && (latest.kind === "full" || latest.kind === "non_trading");
@@ -278,7 +284,7 @@ export async function runReviewSend(ctx: ReviewSendCtx, d: string): Promise<Revi
     };
   }
 
-  const built: BuiltFacts = await buildFacts(db, o);
+  const built: BuiltFacts = await withMarketSections(db, await buildFacts(db, o), o, markets);
   if (!isComplete(built) && !lateDay && minute < t.partial) {
     return { ...base, reason: "inputs_missing" };
   }

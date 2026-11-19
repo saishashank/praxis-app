@@ -1,6 +1,8 @@
 import type { Client } from "@libsql/client";
 export const FORMAT: string;
 export const MIN_SCHEMA: number;
+export const MIN_SCHEMA_V2: number;
+export function preregSha(text: string): string;
 export function canonical(v: unknown): string;
 export function itemId(url: string, contentHash?: string | null): string;
 export function insideRepo(dir: string): boolean;

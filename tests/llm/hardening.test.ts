@@ -248,7 +248,7 @@ describe("budget reserves the first call plus one repair (LLM-074)", () => {
       tokensIn: a.allowed - left,
       tokensOut: 0,
       cached: 0,
-      outcome: "ok",
+      outcome: "spent", // budget filler, not an answered call: the measured mean (OPS-111 (2)) ignores it
       injectionFiltered: 0,
       market: req.market,
       d: req.d,

@@ -255,6 +255,29 @@ export function pickContent(p: Omit<Pick, "pickSha" | "createdAt" | "luckCode">)
   };
 }
 
+/**
+ * The night's sizing maths for one pick, extracted unchanged (M21 D-1217): the size is the smaller of the profile cap
+ * (`maxPct` of the amount) and the risk cap (`riskPct` of the amount spread over the per-share risk), floored; the risk
+ * at the stop is that size's share of the per-share risk, rounded up. Pure exact integer micro, no float. Null when the
+ * size is not positive. The night calls it with the profile's portfolio amount; the Owner's page (M21 B1) calls it with
+ * the Owner's own capital, so the two always agree.
+ */
+export function sizeForAmount(
+  caps: { amountMicro: bigint; maxPct: string; riskPct: string },
+  buyMax: bigint,
+  perShareRisk: bigint,
+): { size: bigint; risk: bigint } | null {
+  const maxPct = parseRational(caps.maxPct);
+  const riskPct = parseRational(caps.riskPct);
+  const sizeCap = divFloor(caps.amountMicro * maxPct.num, maxPct.den * PERCENT);
+  const riskBudget = divFloor(caps.amountMicro * riskPct.num, riskPct.den * PERCENT);
+  const sizeByRisk = divFloor(riskBudget * buyMax, perShareRisk);
+  const size = sizeCap < sizeByRisk ? sizeCap : sizeByRisk;
+  if (size <= 0n) return null;
+  const risk = divCeil(size * perShareRisk, buyMax);
+  return { size, risk };
+}
+
 function build(
   inp: PickInput,
   profile: string,
@@ -270,14 +293,9 @@ function build(
   const aimRaw = ref + (ref * BigInt(sc.goodPpm) + PPM / 2n) / PPM; // threshold-ok: half-up rounding
   const perShareRisk = buyMax - stop;
   if (perShareRisk <= 0n || aimRaw <= ref) return null;
-  const maxPct = parseRational(caps.maxPct);
-  const riskPct = parseRational(caps.riskPct);
-  const sizeCap = divFloor(caps.amountMicro * maxPct.num, maxPct.den * PERCENT);
-  const riskBudget = divFloor(caps.amountMicro * riskPct.num, riskPct.den * PERCENT);
-  const sizeByRisk = divFloor(riskBudget * buyMax, perShareRisk);
-  const size = sizeCap < sizeByRisk ? sizeCap : sizeByRisk;
-  if (size <= 0n) return null;
-  const risk = divCeil(size * perShareRisk, buyMax);
+  const sized = sizeForAmount(caps, buyMax, perShareRisk);
+  if (sized === null) return null;
+  const { size, risk } = sized;
   const base = {
     market: ctx.market,
     d: ctx.d,

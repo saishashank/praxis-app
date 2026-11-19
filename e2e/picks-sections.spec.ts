@@ -2,7 +2,9 @@
 // explainer, empty state with the last scan time, "Unrated"/"unvalidated"); My alerts and Settings > Alerts
 // render; masking holds for Editor and Viewer; all of it at 1280 and 375 px in the six themes with axe clean
 // and no horizontal scroll. Reuses the M8.1 theme walk helpers (setTheme, signIn, axeViolations).
-// The E2E seed may have no candidates: the empty state is then what is checked.
+// The E2E seed may have no candidates: the empty state is then what is checked. Named states it can start
+// from (E2E_STATES, e2e/seed/states.mjs, TST-135): `picks-two-sections` (a pick and a recorded scan) and
+// `alerts-muted` (a muted pick alert for My alerts).
 import { expect, test } from "@playwright/test";
 import {
   axeViolations,

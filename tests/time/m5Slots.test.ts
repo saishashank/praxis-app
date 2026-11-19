@@ -17,7 +17,8 @@ import { createMockProvider } from "@/lib/email/mock";
 import { pollDue } from "../../worker/src/asx/slots";
 import { sydneyLocal, isWeekend } from "../../worker/src/localtime";
 import { routeSlotsDue } from "../../worker/src/routes";
-import { AU_SLOTS, type Slot } from "../../worker/src/schedule";
+import { type Slot } from "../../worker/src/schedule";
+import { AU_SLOTS } from "../../worker/test/auRow";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
 afterEach(cleanupTempDbs);

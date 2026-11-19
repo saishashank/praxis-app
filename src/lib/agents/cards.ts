@@ -17,10 +17,14 @@ import { feeFor, type CostProfile } from "@/lib/arena/costs";
 import { slippageFill } from "@/lib/arena/slippage";
 import { checkGrounding } from "@/lib/llm/grounding";
 import type { LlmRouter } from "@/lib/llm/router";
-import { divCeil, makeRational, mulRat, type Rational } from "@/lib/money/rational";
+import { divCeil, makeRational, mulRat, ratFromInt, type Rational } from "@/lib/money/rational";
 import type { Fraction } from "@/lib/replay/returns";
 import type { AgentParams } from "./params";
 import { initialStop } from "./families/exits";
+import { targetLevel } from "./families/targetOf";
+import { marketMoney } from "@/lib/arena/marketMoney";
+import { roundToTick } from "@/lib/money/round";
+import { TICK_TABLE, tickFor, type TickBand } from "@/lib/money/tick";
 import type { Candidate, CsRule, EventFact, ExitPlan, Family, RegimeLabel } from "./families/types";
 import { roundHalfAway } from "./regime";
 import { ENTRY_SKIP_REASONS } from "./schema";
@@ -288,12 +292,18 @@ function csDetail(r: CsRule): Detail {
       return { categories: r.categories === null ? null : [...r.categories].sort() };
     case "close_below_level":
       return { level_micro: r.levelMicro.toString() };
+    case "target":
+      return { target_r: ratOrNull(r.targetR), target_pct: ratOrNull(r.targetPct) };
     case "volume_dry_up":
       return { ratio_below: ratText(r.ratioBelow), sessions: r.sessions };
   }
 }
 
-export function buildExitPlan(plan: ExitPlan, closeMicro: bigint): CardExit[] {
+export function buildExitPlan(
+  plan: ExitPlan,
+  closeMicro: bigint,
+  tickTable: readonly TickBand[] = TICK_TABLE,
+): CardExit[] {
   const out: CardExit[] = [];
   for (const s of plan.initialStops) {
     out.push({
@@ -320,7 +330,21 @@ export function buildExitPlan(plan: ExitPlan, closeMicro: bigint): CardExit[] {
     });
   }
   for (const c of plan.cs) {
-    out.push({ rule: c.id, tag: "CS", via: c.via, kind: c.kind, detail: csDetail(c) });
+    let detail: Detail = csDetail(c);
+    if (c.kind === "target") {
+      // C2 (D-1225): the real target at the card's reference close, from the tightest initial stop
+      let stop = 0n; // the tightest initial stop at the reference close (ARN-021)
+      for (const r of plan.initialStops) {
+        const v = initialStop(r.spec, closeMicro);
+        if (v > stop) stop = v;
+      }
+      const level = targetLevel({ r: c.targetR, pct: c.targetPct }, closeMicro, stop);
+      // display only: a price shown on the market's tick grid, rounded up (the rule itself trades on the exact level)
+      const shown =
+        level === null ? null : roundToTick(ratFromInt(level), tickFor(level, tickTable), "up");
+      detail = { ...detail, target_at_close_micro: shown === null ? null : shown.toString() };
+    }
+    out.push({ rule: c.id, tag: "CS", via: c.via, kind: c.kind, detail });
   }
   return out;
 }
@@ -443,7 +467,7 @@ export function buildCost(inputs: CardInputs): DecisionCard["cost"] {
   if (exitValue < 1n) return off("no_quantity");
   const entrySlip = z.qty * z.slipMicro;
   const exitSlip = z.qty * quote.slipMicro;
-  const exitBrok = feeFor(inputs.costProfile, exitValue, "sell");
+  const exitBrok = feeFor(inputs.costProfile, exitValue, "sell", { quantity: z.qty });
   const total = z.brokerageMicro + entrySlip + exitBrok + exitSlip;
   return {
     available: true,
@@ -497,7 +521,7 @@ export function buildCard(inputs: CardInputs): DecisionCard {
       p,
       { closeMicro: inputs.closeMicro, eventLowMicro: inputs.eventLowMicro },
     ),
-    exit_plan: buildExitPlan(inputs.plan, inputs.closeMicro),
+    exit_plan: buildExitPlan(inputs.plan, inputs.closeMicro, marketMoney(inputs.market).tickTable),
     sizing: buildSizing(inputs),
     cost: buildCost(inputs),
     scenario,

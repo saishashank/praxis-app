@@ -1,6 +1,7 @@
 // M17 WP5: today's Sentinel catalysts (AGT-141a). Read only: `item_assessment` joined to `announcement`
 // (and `event` for the category) for items published on the session date, up to `beforeIso`, with
 // materiality 2 or more. One catalyst per code: the highest materiality, then the latest publication.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { localToUtc } from "@/lib/data/calendar";
 import type { Exec } from "@/lib/cortex/store/common";
 
@@ -15,7 +16,7 @@ export type Catalyst = {
 };
 
 export const CATALYST_MIN_MATERIALITY = 2; // threshold-ok: AGT-141a "materiality 2 or more"
-const MARKET_TZ = "Australia/Melbourne";
+const MARKET_TZ = OWNER_TZ;
 
 export async function todayCatalysts(
   db: Exec,

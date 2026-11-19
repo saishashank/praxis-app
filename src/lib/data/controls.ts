@@ -69,6 +69,8 @@ import {
   validateMarketModes,
 } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
+import { isMarketEnabled } from "@/lib/market/profile";
 import { anyMarketFull, fullModeRefusal, isProductionEnv } from "@/lib/golive/interlock";
 import {
   EMAIL_MODE_KEY,
@@ -148,7 +150,13 @@ export type ControlError =
   | "signoff_required"
   | "email_off"
   | "constants_unverified"
+  | "market_not_enabled"
   | "market_full"
+  | "checklist_open"
+  | "two_step"
+  | "reason_required"
+  | "fx_missing"
+  | "rollback_pending"
   | "confirm_required"
   | "items_missing"
   | "commit_unknown"
@@ -197,7 +205,7 @@ export function parseOn(raw: unknown): boolean {
 
 const onValue = (on: boolean): string => JSON.stringify(on ? "1" : "0");
 
-type Exec = Pick<Client, "execute"> | Pick<Transaction, "execute">;
+export type Exec = Pick<Client, "execute"> | Pick<Transaction, "execute">;
 
 async function readSwitch(db: Exec, key: string): Promise<boolean> {
   const r = await db.execute({
@@ -252,12 +260,12 @@ export async function readQuoteSourceState(db: Exec): Promise<QuoteSourceState> 
 }
 
 async function calendarConfirmed(db: Exec, now: string): Promise<boolean> {
-  const year = marketDate(new Date(now), "Australia/Sydney").slice(0, 4);
+  const year = marketDate(new Date(now), HOME_TZ).slice(0, 4);
   const r = await db.execute({
     sql:
       "SELECT COUNT(*) AS total, COALESCE(SUM(confirmed = 0), 0) AS open FROM trading_calendar " +
-      "WHERE market = 'AU' AND d >= ? AND d <= ?",
-    args: [`${year}-01-01`, `${year}-12-31`],
+      "WHERE market = ? AND d >= ? AND d <= ?",
+    args: [HOME_MARKET, `${year}-01-01`, `${year}-12-31`],
   });
   return Number(r.rows[0].total) > 0 && Number(r.rows[0].open) === 0;
 }
@@ -496,12 +504,12 @@ export type MarketModeInput = ControlBase & {
   unverifiedConstants?: readonly string[];
 };
 
-type ModeMap = Record<string, unknown>;
+export type ModeMap = Record<string, unknown>;
 
 const isModeMap = (v: unknown): v is ModeMap =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: ModeMap }> {
+export async function readConfigModes(db: Exec): Promise<{ raw: string | null; map: ModeMap }> {
   const r = await db.execute({
     sql:
       "SELECT value_json FROM config_version WHERE key = ? AND scope = 'global' " +
@@ -541,11 +549,13 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
   const to = p.mode;
   try {
     const row = await p.mainDb.execute({
-      sql: "SELECT mode FROM market WHERE code = ?",
+      sql: "SELECT mode, enabled FROM market WHERE code = ?",
       args: [market],
     });
     if (row.rows.length !== 1) return fail("invalid");
     const columnMode = String(row.rows[0].mode);
+    // D-1809: a market that is not enabled can only be `off`; the Owner's switch-on is the M20 two-step.
+    if (to !== "off" && Number(row.rows[0].enabled) !== 1) return fail("market_not_enabled");
     const { map } = await readConfigModes(p.mainDb);
     if (columnMode === to && map[market] === to) return NOOP;
     const today = localDay(now);
@@ -601,7 +611,7 @@ export async function setMarketMode(p: MarketModeInput): Promise<ControlResult> 
 //  - 12 BLD-024: emails stay off in production data-only mode (the `email_mode` switch).
 
 const MELBOURNE = "Australia/Melbourne";
-const localDay = (nowIso: string): string => marketDate(new Date(nowIso), MELBOURNE);
+export const localDay = (nowIso: string): string => marketDate(new Date(nowIso), MELBOURNE);
 const daysBetween = (from: string, to: string): number =>
   Math.round(
     (Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86_400_000,
@@ -781,6 +791,8 @@ export async function addWatchListCode(p: WatchListAddInput): Promise<ControlRes
   const code = p.code;
   const today = localDay(now);
   try {
+    // D-1812 (M19 A2): a market parameter outside the enabled set is invalid (MODE_MARKETS is the built set now)
+    if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid");
     const max = await ownerAddExpiryDays(p.mainDb);
     const days = p.days === undefined ? max : p.days;
     if (days < 1 || days > max) return fail("invalid");
@@ -837,6 +849,7 @@ export async function removeWatchListCode(p: WatchListRemoveInput): Promise<Cont
   const market = p.market;
   const code = p.code;
   try {
+    if (!(await isMarketEnabled(p.mainDb, market))) return fail("invalid"); // D-1812, as in the add
     const open = await p.mainDb.execute({
       sql: "SELECT id FROM watch_list_owner WHERE market = ? AND code = ? AND removed_at IS NULL",
       args: [market, code],

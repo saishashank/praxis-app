@@ -95,7 +95,8 @@ async function fails(db: Client, sql: string): Promise<string> {
 describe("0031_cortex_learning", () => {
   it("creates the six tables, rolls back and comes back identical", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
-    const ms = await loadMigrations(MIGRATIONS("main"));
+    // pinned to 0033: the V3 migrations (0034 and later) sit on top (their own tests)
+    const ms = (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 33);
     expect(ms[30]).toMatchObject({ version: 31, name: "cortex_learning" });
     await migrateUp(db, ms);
     const after = await schemaOf(db);

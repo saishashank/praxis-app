@@ -1,7 +1,7 @@
 // Evening Review in the app (UX-080, UXN-113, EML-010/015/036, design 4.6 step 5; M7 T17).
 // All signed-in roles read the stored review; only the Owner gets "Mark as read" (ROL-102a). The
 // page shows the stored HTML (rendered once by the T4 template and frozen in `evening_review`) in a
-// sandboxed frame, so what is read is exactly what was sent. Opening it never writes: an email-link
+// sandboxed frame (ReviewFrame: allow-same-origin, no scripts, sized to its content, D-1203), so what is read is exactly what was sent. Opening it never writes: an email-link
 // arrival marks read through the POST action after load (decision 34). Beside it: the AI / no-AI
 // badge (UXN-113), the partial marker, the delivery status and section 7a "New picks".
 // Masking (DAT-124, ROL-107, UX-009; D-128): the stored HTML holds stock codes, prices and links, so
@@ -27,6 +27,8 @@ import {
 } from "../SectionIndex";
 import { MarkRead } from "./MarkRead";
 import { NewPicks } from "./NewPicks";
+import { ReviewFrame } from "./ReviewFrame";
+import { estimateReviewHeightPx } from "./reviewHeight";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +37,7 @@ export default async function ReviewDatePage({
   searchParams,
 }: {
   params: Promise<{ date: string }>;
-  searchParams: Promise<{ v?: string; src?: string }>;
+  searchParams: Promise<{ v?: string; src?: string; market?: string }>;
 }) {
   const { date: raw } = await params;
   const date = safeDecode(raw);
@@ -43,7 +45,7 @@ export default async function ReviewDatePage({
   const user = await requireUser("read", `/reviews/${date}`);
   const sp = await searchParams;
   const wanted = sp.v !== undefined && /^\d{1,4}$/.test(sp.v) ? Number(sp.v) : undefined;
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const model = await loadReviewPage(env, date, wanted);
   if (model === null && isReviewRef(date)) notFound();
   const base = `/reviews/${encodeURIComponent(date)}`;
@@ -115,11 +117,10 @@ export default async function ReviewDatePage({
             <MarkRead date={model.d} auto={sp.src === "email"} alreadyRead={model.read !== null} />
           )}
           {model.html !== null ? (
-            <iframe
+            <ReviewFrame
               title={model.title}
-              sandbox=""
-              srcDoc={model.html}
-              className="h-[80vh] w-full rounded border border-border bg-white"
+              html={model.html}
+              initialHeightPx={estimateReviewHeightPx(model.text)}
             />
           ) : null}
           {model.html !== null && model.text ? (

@@ -8,6 +8,8 @@ import path from "node:path";
 import type { Client } from "@libsql/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CurrentUser } from "@/lib/auth/session";
+import { invalidateConfigCache } from "@/lib/config/runtime";
+import { setConfig } from "@/lib/config/store";
 import { addUser, KEY } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 import {
@@ -319,6 +321,9 @@ const FIELD_OVERRIDE: Record<string, string[]> = {
   updateAppearanceAction: ["theme", "motion"],
   updateRegionAction: ["default_market", "times_in"],
   updateAlertSettingsAction: ["pick_alerts", "cleared_pick_emails", "intraday_candidate_emails"],
+  // M21 B1: the Owner-tool forms post repeated fields read with getAll
+  saveBrokerLinksAction: ["broker_name", "broker_template"],
+  saveHoldingsAction: ["mode", "code", "qty", "cost", "csv_file", "csv_text"],
 };
 // Actions with no form input at all: nothing for a bad input to reach.
 const NO_INPUT = new Set([
@@ -351,9 +356,29 @@ describe("SEC-013: server actions refuse bad form input with an error code and c
     return load() as Promise<Record<string, (arg: unknown) => Promise<unknown>>>;
   };
 
+  // M21 A2/B1 (D-1214, D-1247): an Owner-tools action answers as a missing route unless the switch is on, so the sweep turns
+  // the switch on first (before the state is captured) for those actions only.
+  const isOwnerTool = (file: string) => file.includes("(owner-tools)");
+  let switchedOn = false;
+  const ownerToolsOn = async () => {
+    // an earlier test may have unstubbed the environment; the guard pins the Owner by OWNER_EMAIL
+    vi.stubEnv("OWNER_EMAIL", "owner@example.test");
+    if (switchedOn) return;
+    await setConfig(main, {
+      key: "owner_real_money_tools",
+      value: "on",
+      userId: null,
+      reason: "SEC-013 sweep",
+      now: "2030-01-01T00:00:00.000Z",
+    });
+    invalidateConfigCache();
+    switchedOn = true;
+  };
+
   for (const a of withInput) {
     it(`${a.name} -> a code for empty, oversized, control-character, negative, NaN and file input`, async () => {
       const mod = await find(a.file);
+      if (isOwnerTool(a.file)) await ownerToolsOn();
       const names = (FIELD_OVERRIDE[a.name] ?? fieldsOf(a.file)).filter((n) => !CHECKBOX.has(n));
       const mk = (v: string | Blob) => {
         const fd = new FormData();
@@ -431,7 +456,7 @@ describe("SEC-013: server actions refuse bad form input with an error code and c
           mod[a.name](a.name === "setSortPreferenceAction" ? "name" : new FormData()),
         ),
         a.name,
-      ).rejects.toThrow("NEXT_REDIRECT");
+      ).rejects.toThrow(isOwnerTool(a.file) ? "NEXT_NOT_FOUND" : "NEXT_REDIRECT");
     }
     expect(await state()).toEqual(before);
     mem.user = signedIn;

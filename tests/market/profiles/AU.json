@@ -1,0 +1,14 @@
+{
+  "code": "AU",
+  "name": "Australia (ASX)",
+  "tz": "Australia/Sydney",
+  "decisionTz": "Australia/Melbourne",
+  "openTime": "10:00",
+  "closeTime": "16:00",
+  "cutoffTime": "18:10",
+  "currency": "AUD",
+  "productionMode": "full",
+  "seededMode": "data_only",
+  "built": true,
+  "note": "Generated from src/lib/market/seed/AU.mjs (M19 A1): today's constants to the byte; tests/market/profiles.test.ts proves the loaded profile equals it."
+}

@@ -15,6 +15,7 @@ import { addDays, isWeekend, marketDate } from "@/lib/data/calendar";
 import { maskAlertViews } from "@/lib/view/alerts";
 import { formatDay, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
+import { readNoPicksLine } from "@/lib/picks/noPicks";
 import { pickRef } from "./picks";
 import { loadPickNow, ppmOf, type PickNow } from "./pickNow";
 import {
@@ -24,6 +25,9 @@ import {
   readLatestQuotes,
   type LatestQuote,
 } from "@/lib/data/quotes/latest";
+import { HOME_SLOTS, HOME_TZ } from "@/lib/market/homeMarket.mjs";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
+import { loadProfile } from "@/lib/market/profile";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { liveDayChange } from "./liveDay";
 import { pendingRoundNote } from "./roundNote";
@@ -60,9 +64,9 @@ const PRICE_WINDOW_DAYS = 10; // threshold-ok: calendar days that hold the two n
 const DAY_MS = 86_400_000; // threshold-ok: unit conversion
 const SPARK_DAYS = 30; // threshold-ok: sessions in the Home sparkline
 const MAX_NEEDS = 3; // threshold-ok: UXR-020 items in Needs you
-const RUN_HHMM = "18:10"; // threshold-ok: Batch 2 slot shown as the next run (controlRoom.ts A2)
-const RUN_MINUTES = 18 * 60 + 10; // threshold-ok: same slot in minutes of the Melbourne day
-const MEL_TZ = "Australia/Melbourne";
+const RUN_HHMM = HOME_SLOTS.b2b; // threshold-ok: Batch 2 slot shown as the next run (controlRoom.ts A2)
+const RUN_MINUTES = Number(RUN_HHMM.slice(0, 2)) * 60 + Number(RUN_HHMM.slice(3, 5)); // threshold-ok: HH:MM, same slot in minutes of the Melbourne day
+const MEL_TZ = OWNER_TZ;
 const MEL_PARTS = new Intl.DateTimeFormat("en-AU", {
   timeZone: MEL_TZ,
   weekday: "short",
@@ -137,7 +141,9 @@ export type HomePick = {
   family: string;
   tier: string;
   label: string;
-  /** Prices in micro-AUD; null for a masked viewer. */
+  /** ISO 4217 code of the prices below. */
+  currency: string;
+  /** Prices in micro units of the market currency; null for a masked viewer. */
   referenceMicro: number | null;
   stopMicro: number | null;
   aimMicro: number | null;
@@ -200,7 +206,7 @@ export type StrategyTile = {
 };
 
 export type HomeHeadline = {
-  currency: "AUD";
+  currency: string;
   /** Combined result since the strategies started, as a share of what they started with (not a sum of amounts). */
   sinceStartPpm: number | null;
   /** The same ratio for the last session only. */
@@ -264,6 +270,8 @@ export type HomeView = {
   since: HomeSinceRow[];
   needs: HomeNeed[];
   picksTotal: number;
+  /** OPS-110: "No picks tonight: …" from the latest night when nothing is on the list; else null. */
+  noPicksLine: string | null;
   /**
    * D-192: one tile per live strategy (its own pretend money, never added up across strategies,
    * Owner 2026-10-26), unlevered strategies only (D-191).
@@ -318,6 +326,7 @@ function emptyView(): HomeView {
     since: [],
     needs: [],
     picksTotal: 0,
+    noPicksLine: null,
     summary: { strategies: 0, d: null, tiles: [], note: null },
     day: { regime: null, regimeD: null, quality: [], openFlags: 0, index: null },
     picks: { d: null, items: [] },
@@ -388,11 +397,11 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     return {
       id: str(r.execution_id),
       name: names[family]?.name ?? family,
-      seed: money(seed),
-      value: money(value),
-      sinceStart: money(value - seed),
+      seed: money(seed, v.currency),
+      value: money(value, v.currency),
+      sinceStart: money(value - seed, v.currency),
       sinceStartPpm: ratioPpm(value - seed, seed),
-      dayChange: prev === null ? null : money(value - prev),
+      dayChange: prev === null ? null : money(value - prev, v.currency),
       dayChangePpm: prev === null ? null : ratioPpm(value - prev, prev),
       startD: str(r.start_d),
     };
@@ -434,10 +443,10 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
         const now = base + c.changeMicro;
         tiles[i] = {
           ...t,
-          value: money(now),
-          sinceStart: money(now - num(r.seed_micro)),
+          value: money(now, v.currency),
+          sinceStart: money(now - num(r.seed_micro), v.currency),
           sinceStartPpm: ratioPpm(now - num(r.seed_micro), num(r.seed_micro)),
-          dayChange: money(c.changeMicro),
+          dayChange: money(c.changeMicro, v.currency),
           dayChangePpm: ratioPpm(c.changeMicro, base),
         };
         liveSum = {
@@ -451,7 +460,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
       if (liveAt !== null)
         nav.rows.forEach((r, i) => {
           if (live.updated.has(i)) return;
-          tiles[i] = { ...tiles[i]!, dayChange: money(0), dayChangePpm: 0 };
+          tiles[i] = { ...tiles[i]!, dayChange: money(0, v.currency), dayChangePpm: 0 };
           liveSum = {
             change: liveSum?.change ?? 0,
             base: (liveSum?.base ?? 0) + num(r.liq_nav_micro),
@@ -468,7 +477,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     };
   } else {
     // a round ended and the next has not started trading: one line instead of "No strategy is running yet"
-    view.summary.note = await pendingRoundNote(deps.mainDb, v.market, v.now);
+    view.summary.note = await pendingRoundNote(deps.mainDb, v.market, v.currency, v.now);
   }
 
   // Day line.
@@ -485,20 +494,22 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   });
   // D-907: the ASX 200 line (two newest closes by primary key, plus the delayed quote). Soft: a
   // failure leaves the line out, never the page.
-  const index =
-    v.market === "AU"
-      ? await soft(async () => {
-          const r = await deps.mainDb.execute({
-            sql: "SELECT d, c_micro FROM index_bar WHERE market = ? AND index_code = ? ORDER BY d DESC LIMIT 2",
-            args: [v.market, MARKET_INDEX_CODE],
-          });
-          const q = await readLatestQuotes(deps.mainDb, v.market, [MARKET_INDEX_CODE]);
-          return indexLine(
-            r.rows.map((x) => ({ d: str(x.d), cMicro: num(x.c_micro) })),
-            q.get(MARKET_INDEX_CODE),
-          );
-        }, null)
-      : null;
+  // The line is the benchmark of the market that quotes it (the home market's index, D-907).
+  const quotesIndex =
+    (await loadProfile(deps.mainDb, v.market)).benchmarkIndex === MARKET_INDEX_CODE;
+  const index = quotesIndex
+    ? await soft(async () => {
+        const r = await deps.mainDb.execute({
+          sql: "SELECT d, c_micro FROM index_bar WHERE market = ? AND index_code = ? ORDER BY d DESC LIMIT 2",
+          args: [v.market, MARKET_INDEX_CODE],
+        });
+        const q = await readLatestQuotes(deps.mainDb, v.market, [MARKET_INDEX_CODE]);
+        return indexLine(
+          r.rows.map((x) => ({ d: str(x.d), cMicro: num(x.c_micro) })),
+          q.get(MARKET_INDEX_CODE),
+        );
+      }, null)
+    : null;
   view.day = {
     regime: regime?.state ?? null,
     regimeD: regime?.d ?? null,
@@ -592,6 +603,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
         family: str(r.family),
         tier: str(r.tier),
         label: scope ? scope.text(str(r.label)) : str(r.label),
+        currency: v.currency,
         referenceMicro: masked ? null : num(r.reference_micro),
         stopMicro: masked ? null : num(r.stop_micro),
         aimMicro: masked ? null : num(r.aim_micro),
@@ -731,7 +743,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     const prev = hist[hist.length - 2];
     view.headline = [
       {
-        currency: "AUD",
+        currency: v.currency,
         // Same live NAV as the tiles and the day change when the live overlay applies (display only).
         sinceStartPpm:
           liveSum !== null && last && num(last.s) > 0
@@ -759,6 +771,9 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
   view.picksTotal = pickD
     ? await count("SELECT COUNT(*) AS n FROM pick WHERE market = ? AND d = ?", [v.market, pickD])
     : 0;
+  if (view.picksTotal === 0) {
+    view.noPicksLine = await soft(() => readNoPicksLine(deps.mainDb, v.market, null), null);
+  }
   view.top5Line = await soft(() => loadTop5Line(deps.mainDb, v.market), null);
   const since: HomeSinceRow[] = [];
   if (view.picksTotal > 0) {
@@ -804,6 +819,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
     mask: { masked },
     now: v.now,
     market: v.market,
+    currency: v.currency,
   };
   const alertFacts = await loadAlertHomeFacts(
     alertEnv,
@@ -911,7 +927,7 @@ export async function loadHome(deps: LoaderDeps): Promise<Loaded<HomeView>> {
 /** "Today" when `d` is today's date in Sydney (the market's clock), else "Fri 6 Nov". */
 export function dayLabel(d: string | null, now: Date): string | null {
   if (!d) return null;
-  if (d === marketDate(now, "Australia/Sydney")) return "Today";
+  if (d === marketDate(now, HOME_TZ)) return "Today";
   return shortDay(d);
 }
 

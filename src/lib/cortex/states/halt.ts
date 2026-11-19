@@ -161,12 +161,57 @@ function outcomeAt(view: AsOfView, code: string, t: number, sinceD: string): Sus
   return "unknown";
 }
 
+/** One source row of a halt model: an announcement (type, title) or a `trading_halt` row (kind, haltedAt, resumedAt). */
+export type HaltSourceRow = {
+  readonly type?: string | null;
+  readonly title?: string;
+  readonly kind?: "luld" | "suspension" | "halt";
+  /** ISO UTC instants of a `trading_halt` row; `resumedAt` null = still halted. */
+  readonly haltedAt?: string;
+  readonly resumedAt?: string | null;
+};
+
+/**
+ * D-1110: the market-specific front end of the halt machine. The machine below (CTX-016) is the same for every
+ * market: it reads the view's per-session `halted` flags and the notice kinds. A model decides where those come
+ * from: `viewFor` returns the view whose `halted`/`haltSince` the machine reads, `notices` the notice kind by
+ * session date, `noticeKind` classifies one source row. AU's `cx16` model leaves the view and the notices as they are.
+ */
+export type HaltModel = {
+  readonly id: string;
+  noticeKind(row: HaltSourceRow): HaltNoticeKind | null;
+  viewFor(view: AsOfView, code: string, rows: readonly HaltSourceRow[]): AsOfView;
+  notices(
+    view: AsOfView,
+    code: string,
+    rows: readonly HaltSourceRow[],
+  ): ReadonlyMap<string, HaltNoticeKind>;
+};
+
+const NO_NOTICES: ReadonlyMap<string, HaltNoticeKind> = new Map();
+
+/** The AU model: today's machine over the view as it stands (the ASX announcement classifier). Unchanged by M20. */
+export function cx16Model(id = "cx16"): HaltModel {
+  return {
+    id,
+    noticeKind: (row) => haltNoticeKind(row.type ?? null, row.title ?? ""),
+    viewFor: (view) => view,
+    notices: () => NO_NOTICES,
+  };
+}
+
+/** The home model (reader `cx16`); the one every call without a model runs. */
+export const CX16_MODEL: HaltModel = cx16Model();
+
 export type HaltStepInput = {
   /** Notice kind by session date (from `haltNoticeKind` on the day's announcements); absent = none. */
   readonly notices?: ReadonlyMap<string, HaltNoticeKind>;
+  /** D-1110: the market's halt model and the source rows of the code; absent = the `cx16` path, unchanged. */
+  readonly model?: HaltModel;
+  readonly rows?: readonly HaltSourceRow[];
 };
 
-/** One session of the machine; pure over the view at t. */
+/** One session of the machine under a model (the view and notices the model supplies); no model = unchanged. */
 export function stepHalt(
   view: AsOfView,
   code: string,
@@ -174,6 +219,23 @@ export function stepHalt(
   prev: HaltState | null,
   params: HaltParams = DEFAULT_STATES_PARAMS,
   input: HaltStepInput = {},
+): HaltStep {
+  const m = input.model;
+  if (m === undefined) return stepHaltCore(view, code, t, prev, params, input);
+  const rows = input.rows ?? [];
+  return stepHaltCore(m.viewFor(view, code, rows), code, t, prev, params, {
+    notices: input.notices ?? m.notices(view, code, rows),
+  });
+}
+
+/** One session of the machine; pure over the view at t. */
+function stepHaltCore(
+  view: AsOfView,
+  code: string,
+  t: number,
+  prev: HaltState | null,
+  params: HaltParams,
+  input: HaltStepInput,
 ): HaltStep {
   const d = view.sessions[t]!;
   const s = prev ?? HALT_NONE;
@@ -397,8 +459,12 @@ export function haltStateAt(
 ): HaltStep {
   let s: HaltState | null = null;
   let last: HaltStep | null = null;
+  const m = input.model;
+  const v = m === undefined ? view : m.viewFor(view, code, input.rows ?? []);
+  const run: HaltStepInput =
+    m === undefined ? input : { notices: input.notices ?? m.notices(view, code, input.rows ?? []) };
   for (let i = 0; i <= t; i += 1) {
-    last = stepHalt(view, code, i, s, params, input);
+    last = stepHaltCore(v, code, i, s, params, run);
     s = last.next;
   }
   return last!;

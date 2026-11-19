@@ -19,8 +19,12 @@ export async function ensureSteelman(): Promise<string> {
       args: [PACK],
     });
     if (have.rows.length > 0) return String(have.rows[0].card_id);
-    const c = (await m.execute("SELECT id, card_json FROM decision_card ORDER BY id LIMIT 1"))
-      .rows[0];
+    // The rich scenario's own card (execution E01); the steelman-cards state adds a card without a market.
+    const c = (
+      await m.execute(
+        "SELECT id, card_json FROM decision_card WHERE execution_id = 'E01' ORDER BY id LIMIT 1",
+      )
+    ).rows[0];
     const cardId = String(c.id);
     const card = JSON.parse(String(c.card_json)) as {
       market: string;

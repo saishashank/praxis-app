@@ -2,6 +2,7 @@
 // No I/O, no Cortex, no order or book type: an alert knows a limit, a stop and a quote, nothing else.
 import type { DelayedQuote } from "@/lib/data/quotes/types";
 import type { Exec } from "@/lib/cortex/store/common";
+import type { StopHitItem } from "./stopHit";
 
 export const CLEAR_REASONS = [
   "left_list",
@@ -113,6 +114,12 @@ export type PickAlertMailer = {
   notify: (ctx: MailerCtx, transitions: readonly MailableTransition[]) => Promise<void>;
   /** Step 3 of the tick: the held-mail digest after quiet hours. */
   digest: (ctx: MailerCtx) => Promise<void>;
+  /**
+   * M21 C3 (EML-043, D-1226): the stop-hit mails due this tick (a hit alert whose delayed price is under its
+   * stop). Optional, so a mailer that predates it is unchanged. The implementation applies the user's opt-in,
+   * quiet hours and the pick caps, and is key-idempotent per alert and session.
+   */
+  stopHit?: (ctx: MailerCtx, due: readonly StopHitItem[]) => Promise<void>;
 };
 
 export const NO_MAILER: PickAlertMailer = {

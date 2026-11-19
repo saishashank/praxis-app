@@ -100,7 +100,7 @@ describe("sharing acknowledgement (ROL-107)", () => {
   });
 
   it("rejects an unknown market or bad text version", async () => {
-    expect(await recordSharingAck(ctx, "US", "v1")).toEqual({ ok: false, error: "invalid" });
+    expect(await recordSharingAck(ctx, "JP", "v1")).toEqual({ ok: false, error: "invalid" });
     expect(await recordSharingAck(ctx, "AU", "")).toEqual({ ok: false, error: "invalid" });
     expect(await recordSharingAck(ctx, "AU", "x".repeat(40))).toEqual({
       ok: false,

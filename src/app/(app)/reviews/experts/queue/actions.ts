@@ -8,11 +8,14 @@ import { headers } from "next/headers";
 import { requestMeta } from "@/lib/auth/audit";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { maskContextFor } from "@/lib/view/mask";
 import {
   bulkConfirmExpert,
+  confirmCall,
   confirmCluster,
   confirmClaim,
+  confirmTypedCall,
   editClaim,
   mergeCluster,
   mergeClaimToCluster,
@@ -32,7 +35,7 @@ const field = (fd: FormData, name: string): string | undefined => {
 };
 
 async function run(
-  fn: (ctx: ReviewCtx) => Promise<ReviewResult<object>>,
+  fn: (ctx: ReviewCtx & { market: string }) => Promise<ReviewResult<object>>,
   opts: { unmaskedOnly?: boolean } = {},
 ): Promise<QueueResult> {
   const user = await requireUser("review_claims", PATH);
@@ -49,6 +52,7 @@ async function run(
       env: process.env,
       meta: requestMeta(await headers()),
       actorId: user.id,
+      market: HOME_MARKET,
     });
     if ("error" in result) return { error: result.error };
     revalidatePath(PATH);
@@ -104,4 +108,33 @@ export async function confirmClusterAction(fd: FormData): Promise<QueueResult> {
 
 export async function mergeClusterAction(fd: FormData): Promise<QueueResult> {
   return run((c) => mergeCluster(c, { from: field(fd, "cluster"), into: field(fd, "into") }));
+}
+
+// M22 E3 (KB-084, D-1435): a call is tracked only after the person confirms it. One click confirms the proposal
+// shown; the typed form lets the person write the code, direction, date and horizon. A masked Editor only ever saw
+// masked codes, so both are refused for them server-side, as editing is (D-633).
+export async function confirmCallAction(fd: FormData): Promise<QueueResult> {
+  return run(
+    (c) => confirmCall(c, { claimId: field(fd, "claim"), proposalId: field(fd, "proposal") }),
+    {
+      unmaskedOnly: true,
+    },
+  );
+}
+
+export async function typedCallAction(fd: FormData): Promise<QueueResult> {
+  return run(
+    (c) =>
+      confirmTypedCall(c, {
+        claimId: field(fd, "claim"),
+        code: field(fd, "code"),
+        direction: field(fd, "direction"),
+        callD: field(fd, "date"),
+        horizon: field(fd, "horizon"),
+        priceBasis: field(fd, "basis"),
+        target: field(fd, "target"),
+        stop: field(fd, "stop"),
+      }),
+    { unmaskedOnly: true },
+  );
 }

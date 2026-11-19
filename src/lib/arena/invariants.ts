@@ -666,6 +666,8 @@ export function checkSleeveDay(
 export type CohortCheckOptions = {
   readonly mode: SettlementMode;
   readonly calendar: readonly CalendarRow[];
+  /** The market's settlement lag in sessions (`settlement_days`); default: the home market's (M20 A4, D-1113). */
+  readonly lagSessions?: number;
   /** Dates to verify, oldest first. */
   readonly dates: readonly string[];
   /** Stored nav_daily rows to compare with the recomputation, if any. */
@@ -713,6 +715,7 @@ export function checkCohortBooks(books: CohortBooks, options: CohortCheckOptions
       books.fills.filter((f) => f.d <= d),
       settled,
       options.calendar,
+      options.lagSessions,
     );
     out.push(...checkPending(balances, pending, d));
 

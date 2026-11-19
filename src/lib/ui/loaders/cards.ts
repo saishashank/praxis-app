@@ -8,6 +8,8 @@
 // unknown id (D-135). The page body is the existing masked `cardViewModel`; T13 adds the explainer
 // parts (src/lib/ui/loaders/cardParts.ts: "Based on", past setups, factors, checklist, headwinds,
 // scenario rows, "Why?", afterwards) and the notes, all built from stored facts and masked here.
+import { loadProfile } from "@/lib/market/profile";
+import { currencyFormatOf } from "@/lib/market/profileCore.mjs";
 import "server-only";
 import { loadScenarioInput, type DecisionCard } from "@/lib/agents/cards";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
@@ -224,7 +226,8 @@ export async function loadCardPage(deps: LoaderDeps, idOrRef: string): Promise<L
   const scope = await v.masker.scope(card.d, [card.code]);
   const stratNames = await strategyNames(deps.mainDb);
   const strategyName = `${stratNames[card.family]?.name ?? "Strategy"}${card.variant === "L" ? " (with leverage sleeve)" : ""}`;
-  const view = cardViewModel(card, note, v.masker.ctx, aliases, lookup, strategyName);
+  const fmt = currencyFormatOf((await loadProfile(deps.mainDb, card.market)).currency ?? "");
+  const view = cardViewModel(card, note, v.masker.ctx, aliases, fmt, lookup, strategyName);
   const seen = new Set<string>();
   const breakers: BreakerCheck[] = [];
   for (const x of bk.rows) {

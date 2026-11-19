@@ -1,17 +1,19 @@
 // Settings > Region & markets (UXN-282, UX-112 view, MKT-106). Every role sets the market the app opens
 // in and whether times show in Melbourne or exchange time (own preferences). The markets table lists
-// exchange, currency, hours in Melbourne time, status and build progress; Editors and Viewers see only
-// AU and the markets the Owner has shared. Activating a market is the Owner's job elsewhere, not here.
+// exchange, currency, hours in Melbourne time, status and build progress; the Owner sees every profile row,
+// Editors and Viewers the enabled markets the Owner has shared (D-1812). The Owner's switch-on card (checklist, quota projection, the two-step control and the rollback) follows the table (M20, UXN-312).
 // Totals are never converted between currencies (O-34).
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { requireUser } from "@/lib/auth/guard";
-import { loadSettings } from "@/lib/ui/loaders/settings";
+import { loadMarketSwitch, loadSettings } from "@/lib/ui/loaders/settings";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { melbourneDate } from "@/lib/view/active";
 import { SettingsForm } from "../SettingsForm";
 import { Select, SettingsFrame } from "../SettingsNav";
 import { updateRegionAction } from "../actions";
+import { MarketSwitch } from "./MarketSwitch";
+import { switchMarketAction } from "./actions";
 import {
   disabledReason,
   marketRows,
@@ -24,18 +26,48 @@ import {
 export const dynamic = "force-dynamic";
 
 const COLUMNS: Column<MarketRow>[] = [
-  { key: "code", header: "Market", cell: (r) => <strong>{r.code}</strong> },
+  { key: "code", header: "Market", cell: (r) => <strong data-market={r.code}>{r.code}</strong> },
   { key: "exchange", header: "Exchange", cell: (r) => r.exchange },
   { key: "currency", header: "Currency", cell: (r) => r.currency },
   { key: "hours", header: "Hours (Melbourne)", cell: (r) => r.hours ?? "n/a" },
-  { key: "status", header: "Status", cell: (r) => r.statusText },
+  {
+    key: "status",
+    header: "Status",
+    cell: (r) => (
+      <>
+        {r.statusText}
+        {r.evidence !== null && <span className="block text-xs text-text-muted">{r.evidence}</span>}
+        {r.gateItems.map((g) => (
+          <span key={g} className="block text-xs text-text-muted">
+            Open: {g}
+          </span>
+        ))}
+        {r.profileLine !== null && (
+          <span className="block text-xs text-text-muted">{r.profileLine}</span>
+        )}
+      </>
+    ),
+  },
   {
     key: "progress",
     header: "Build progress",
     cell: (r) =>
-      r.status === "active" ? "Built" : r.progressPct === null ? "n/a" : `${r.progressPct} %`,
+      r.status === "active" || r.status === "built"
+        ? "Built"
+        : r.progressPct === null
+          ? "n/a"
+          : `${r.progressPct} %`,
   },
 ];
+
+/** The Owner's switch-on card model; any failure leaves the card out (the table above stands on its own). */
+async function switchModelOf(env: Awaited<ReturnType<typeof envFor>>) {
+  try {
+    return await loadMarketSwitch(env);
+  } catch {
+    return null;
+  }
+}
 
 export default async function RegionPage() {
   const user = await requireUser("own_preferences", "/settings/region");
@@ -46,6 +78,8 @@ export default async function RegionPage() {
     readProfiles(env.main).catch((): MarketProfiles => ({})),
     readSharedMarkets(env.auth).catch(() => new Set<string>()),
   ]);
+  // Owner only (UXN-312): the checklist, the quota projection and the switch; a failing read leaves the card out
+  const switchModel = isOwner ? await switchModelOf(env) : null;
   const today = melbourneDate(env.now.toISOString()) ?? "";
   const rows = marketRows(model, profiles, shared, isOwner, today);
   const prefs = model.preferences;
@@ -65,7 +99,7 @@ export default async function RegionPage() {
             name="default_market"
             label="Open the app in"
             value={prefs.default_market}
-            options={choosable.length ? choosable : [["AU", "AU (ASX)"]]}
+            options={choosable.length ? choosable : [[prefs.default_market, prefs.default_market]]}
             hint="Only active markets can be chosen."
           />
           {blocked.length > 0 && (
@@ -93,12 +127,14 @@ export default async function RegionPage() {
         </fieldset>
       </SettingsForm>
       <Card title="Markets" headingLevel={2}>
-        <DataTable
-          caption="Markets, their hours in Melbourne time and status"
-          columns={COLUMNS}
-          rows={rows}
-          rowKey={(r) => r.code}
-        />
+        <div data-markets-table>
+          <DataTable
+            caption="Markets, their hours in Melbourne time and status"
+            columns={COLUMNS}
+            rows={rows}
+            rowKey={(r) => r.code}
+          />
+        </div>
         {isOwner && model.sharing !== null && (
           <p className="mt-3 text-xs text-text-muted" data-testid="sharing-summary">
             Sharing acknowledgements recorded: {model.sharing.acknowledgements}
@@ -111,6 +147,7 @@ export default async function RegionPage() {
           </p>
         )}
       </Card>
+      {switchModel !== null && <MarketSwitch markets={switchModel} action={switchMarketAction} />}
     </SettingsFrame>
   );
 }

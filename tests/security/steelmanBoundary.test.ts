@@ -205,23 +205,23 @@ describe("steelman boundary (ii): SQL write allowlist", () => {
 });
 
 describe("steelman boundary (iii): who may import the steelman and name its tables", () => {
-  // The readers and the one stage: the card page, /review, the health line, the review line, and the
-  // nightly orchestrator. Nothing that decides, sizes, places, learns or picks is on the list.
-  const IMPORTERS = new Set([
-    "src/app/(app)/cards/[id]/Steelman.tsx",
-    "src/app/(app)/review/DismissForm.tsx",
-    "src/app/(app)/review/Suggestions.tsx",
-    "src/app/(app)/review/actions.ts",
-    "src/app/(app)/review/page.tsx",
-    "src/lib/health/steelman.ts",
-    "src/lib/review/sections.ts",
-    "src/lib/ui/loaders/cards.ts",
-  ]);
+  // The readers: generated from the import graph by scripts/ci/steelman-readers.mjs (OPS-111 (9), D-1794) and
+  // stored in tests/security/steelman-readers.json; a new reader is a reviewed diff of that file. Nothing
+  // that decides, sizes, places, learns or picks may be on it (the forbidden checks in (i) and below).
+  const IMPORTERS = new Set(
+    (
+      JSON.parse(
+        fs.readFileSync(path.join(ROOT, "tests/security/steelman-readers.json"), "utf8"),
+      ) as { readers: string[] }
+    ).readers,
+  );
   const TABLES =
     /\b(steelman_pack|steelman_point|steelman_night|steelman_suggestion|pick_reflection)\b/;
   const TABLE_NAMERS = new Set([
     "src/lib/config/keys.ts", // config key names that contain the words only
     "src/lib/llm/dropOrder.ts",
+    "src/lib/cortex/stageTables.mjs", // D-1116: the pinned name list of the night schema hash; reads and writes nothing
+    "src/lib/opinions/meter.ts", // M22 C4, D-1518: one read-only lookup of the model that wrote a settled opinion; imports no steelman module
   ]);
 
   const srcFiles = walk(path.join(ROOT, "src"));
@@ -234,8 +234,16 @@ describe("steelman boundary (iii): who may import the steelman and name its tabl
     const got = srcFiles
       .filter((f) => !rel(f).startsWith("src/lib/steelman/") && importsSteelman(f))
       .map(rel);
-    expect(got.filter((f) => !IMPORTERS.has(f))).toEqual([]);
+    expect(got.sort()).toEqual([...IMPORTERS].sort()); // the stored list is the live graph, no more, no less
     expect(got.length).toBeGreaterThan(3); // the scan finds the known readers
+    for (const r of got) {
+      expect(
+        r,
+        "a reader may not be a decision, arena, learning or pick-writer module",
+      ).not.toMatch(
+        /^src\/lib\/(arena|learning|cortex\/night|picks\/(store|track|generate|nightly)|agents\/(batch2b|batch3|orderPlan))/,
+      );
+    }
   });
 
   it("the nightly scripts other than signals.mjs do not load the steelman bundle", () => {

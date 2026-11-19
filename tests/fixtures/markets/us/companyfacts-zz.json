@@ -1,0 +1,48 @@
+{
+  "_note": "Synthetic company-facts JSON in the SEC's shape (invented company, invented accessions). Revenues for FY2025 is first filed in the 10-K and restated by a later 10-K/A; the fourth-quarter duration shares the 10-K's period end and must lose to the fiscal-year duration.",
+  "cik": 1234567,
+  "entityName": "ZZ Test Corp",
+  "facts": {
+    "us-gaap": {
+      "Revenues": {
+        "label": "Revenues",
+        "units": {
+          "USD": [
+            { "start": "2025-01-01", "end": "2025-12-31", "val": 1000, "accn": "0001234567-26-000010", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20" },
+            { "start": "2025-10-01", "end": "2025-12-31", "val": 260, "accn": "0001234567-26-000010", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20" },
+            { "start": "2025-01-01", "end": "2025-12-31", "val": 940, "accn": "0001234567-26-000030", "fy": 2025, "fp": "FY", "form": "10-K/A", "filed": "2026-04-10" },
+            { "start": "2026-01-01", "end": "2026-03-31", "val": 250, "accn": "0001234567-26-000040", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-05-08" },
+            { "end": "2026-03-31" , "val": 5, "accn": "0001234567-26-000040", "filed": "2026-05-08" },
+            { "start": "2025-01-01", "val": 1, "accn": "0001234567-26-000099", "filed": "2026-02-20" }
+          ]
+        }
+      },
+      "NetIncomeLoss": {
+        "units": {
+          "USD": [
+            { "start": "2025-01-01", "end": "2025-12-31", "val": 120, "accn": "0001234567-26-000010", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20" }
+          ]
+        }
+      },
+      "Assets": {
+        "units": {
+          "USD": [
+            { "end": "2025-12-31", "val": 5000, "accn": "0001234567-26-000010", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20" }
+          ],
+          "USD-alt": [
+            { "end": "2025-12-31", "val": 1, "accn": "0001234567-26-000010", "filed": "2026-02-20" }
+          ]
+        }
+      }
+    },
+    "dei": {
+      "EntityCommonStockSharesOutstanding": {
+        "units": {
+          "shares": [
+            { "end": "2026-02-10", "val": 900000, "accn": "0001234567-26-000010", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-02-20" }
+          ]
+        }
+      }
+    }
+  }
+}

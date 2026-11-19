@@ -128,9 +128,10 @@ function feeAt(
   valueMicro: Micro,
   side: "buy" | "sell",
   first: boolean,
+  quantity: bigint,
 ): Micro {
   if (valueMicro <= 0n) return 0n;
-  return feeFor(profile, valueMicro, side, { firstBuyOfSecurityToday: first });
+  return feeFor(profile, valueMicro, side, { firstBuyOfSecurityToday: first, quantity });
 }
 
 /** Re-cost one cohort-night under every key. Pure; the order of fills in the input does not matter. */
@@ -153,7 +154,7 @@ export function recostCohortDay(input: RecostInput): RecostResult[] {
         const move = value - f.valueMicro; // a buy pays more, a sell receives less
         cashDelta += f.side === "buy" ? -move : move;
       }
-      const fee = feeAt(profile, value, f.side, first.has(f.id));
+      const fee = feeAt(profile, value, f.side, first.has(f.id), f.qty);
       fees += fee;
       feeDelta += f.brokerageMicro - fee;
     }

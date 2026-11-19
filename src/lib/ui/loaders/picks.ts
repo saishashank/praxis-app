@@ -7,11 +7,17 @@ import { chanceDisplay, chanceLine, type ChanceDisplay } from "@/lib/picks/chanc
 import { CANDIDATE_RULE_PREFIX, isCandidateRule } from "@/lib/picks/candidates";
 import { familyStatusMap } from "@/lib/cortex/store/status";
 import { modelSuccess, successLine, type ModelSuccess } from "@/lib/picks/success";
-import { benchmarkLabel, type BenchBasis } from "@/lib/picks/benchmark";
+import {
+  benchmarkLabel,
+  outcomeBasisLabel,
+  type BenchBasis,
+  type OutcomeBasisValue,
+} from "@/lib/picks/benchmark";
 import { vsMarketSummary, type VsMarketSummary } from "@/lib/picks/vsMarket";
-import { formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
+import { displayName, formatDay, formatPpm, isoWeek, MISSING } from "@/lib/view/format";
 import { dateStaleness } from "@/lib/view/staleness";
-import { maskText } from "@/lib/view/mask";
+import { maskText, PRICE_HIDDEN } from "@/lib/view/mask";
+import { readWrittenForProfile } from "@/lib/steelman/reflectRead";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import { soft, strategyNames } from "./common";
 import { melTime } from "./pickAlerts";
@@ -20,7 +26,6 @@ import { loadPickNow, ppmOf } from "./pickNow";
 import { LATEST_READ_MAX, newerThanClose, readLatestQuotes } from "@/lib/data/quotes/latest";
 import {
   isDateParam,
-  marketOf,
   maskKit,
   maskKitByDate,
   money,
@@ -56,7 +61,7 @@ const publicPickId = (realId: string, masked: boolean): string =>
 async function resolvePickRef(env: LoaderEnv, ref: string): Promise<string | null> {
   const r = await env.main.execute({
     sql: "SELECT d, profile, rank FROM pick WHERE market = ? ORDER BY d DESC, profile, rank LIMIT ?",
-    args: [marketOf(env), MAX_REF_ROWS],
+    args: [env.market, MAX_REF_ROWS],
   });
   for (const x of r.rows) {
     const real = `${String(x.d)}.${String(x.profile)}.${Number(x.rank)}`; // money-float-ok: SQL integer column
@@ -189,23 +194,34 @@ export type PicksModel = {
   /** The real list date, for server-side joins only (alert chips); never rendered. */
   realD: string | null;
   staleText: string | null;
-  success: (ModelSuccess & { line: string }) | null;
+  success: (ModelSuccess & { line: string; basisLabel?: string }) | null;
   picks: PickRowView[];
 };
 
 async function successFor(env: LoaderEnv, profile: string, d: string) {
   const minN = Number(await getConfig(env.main, "pick_success_min_n"));
   const confidence = Number(await getConfig(env.main, "cif_confidence"));
-  const s = await modelSuccess(env.main, { market: marketOf(env), profile, d, minN, confidence });
+  const s = await modelSuccess(env.main, { market: env.market, profile, d, minN, confidence });
+  // ARN-123 (D-1785): the money basis the closed results were settled on ("Price only" for rows from
+  // before M18, "Total return" for later ones, both named when the record holds both).
+  const bases = await env.main.execute({
+    sql: `SELECT DISTINCT outcome_basis FROM pick_outcome
+          WHERE market = ? AND profile = ? AND kind = 'pick' AND state = 'closed'`,
+    args: [env.market, profile],
+  });
+  const basisLabel = outcomeBasisLabel(
+    bases.rows.map((x) => String(x.outcome_basis) as OutcomeBasisValue),
+  );
   // The "since" date is a trade date: a masked user sees the week (UX-009). The line has a short date.
   if (env.mask.masked) {
     return {
       ...s,
       since: s.since === null ? null : (isoWeek(s.since) ?? MISSING),
       line: successLine({ ...s, since: null }),
+      basisLabel,
     };
   }
-  return { ...s, line: successLine(s) };
+  return { ...s, line: successLine(s), basisLabel };
 }
 
 const toNum = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v)); // money-float-ok: SQL integer column
@@ -222,7 +238,7 @@ const parseList = (json: unknown): string[] => {
 async function pickCodes(env: LoaderEnv, d: string): Promise<string[]> {
   const r = await env.main.execute({
     sql: "SELECT DISTINCT code FROM pick WHERE market = ? AND d = ?",
-    args: [marketOf(env), d],
+    args: [env.market, d],
   });
   return r.rows.map((x) => String(x.code));
 }
@@ -235,7 +251,7 @@ async function pickCodesInRange(
   const ds = rows.map((x) => x.d).sort();
   const r = await env.main.execute({
     sql: "SELECT DISTINCT d, code FROM pick WHERE market = ? AND d >= ? AND d <= ?",
-    args: [marketOf(env), ds[0]!, ds[ds.length - 1]!],
+    args: [env.market, ds[0]!, ds[ds.length - 1]!],
   });
   return r.rows.map((x) => ({ d: String(x.d), code: String(x.code) }));
 }
@@ -245,17 +261,18 @@ function nowView(
   n: { micro: bigint; label: string } | undefined,
   entry: unknown,
   masked: boolean,
+  currency: string,
 ): PickRowView["now"] {
   if (n === undefined) return null;
   return {
-    money: masked ? null : money(n.micro.toString()),
+    money: masked ? null : money(n.micro.toString(), currency),
     changePpm: ppmOf(n.micro, entry),
     label: masked ? null : n.label,
   };
 }
 
 export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const profiles = await profileNames(env);
   const latest = await env.main.execute({
     sql: "SELECT MAX(d) AS d FROM pick WHERE market = ? AND profile = ? AND d <= ?",
@@ -326,7 +343,9 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
     return {
       id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
       rank: Number(x.rank), // money-float-ok: SQL integer column
-      familyName: names[String(x.family)]?.name ?? String(x.family),
+      familyName: names[String(x.family)]
+        ? displayName(names[String(x.family)]!.name)
+        : String(x.family),
       familyInfo: names[String(x.family)]
         ? {
             oneLiner: names[String(x.family)]!.one_liner,
@@ -341,33 +360,33 @@ export async function loadPicks(env: LoaderEnv, q: PicksQuery): Promise<PicksMod
       entry: masked
         ? null
         : bought
-          ? money(String(x.o_entry))
+          ? money(String(x.o_entry), env.currency)
           : x.reference_micro === null
             ? null
-            : money(String(x.reference_micro)),
+            : money(String(x.reference_micro), env.currency),
       entryBought: !masked && bought,
       lastCloseD: masked ? null : d,
-      now: nowView(nowOf.get(code), bought ? x.o_entry : x.reference_micro, masked),
-      size: masked ? null : money(String(x.size_micro)),
-      riskAtStop: masked ? null : money(String(x.risk_micro)),
+      now: nowView(nowOf.get(code), bought ? x.o_entry : x.reference_micro, masked, env.currency),
+      size: masked ? null : money(String(x.size_micro), env.currency),
+      riskAtStop: masked ? null : money(String(x.risk_micro), env.currency),
       outcome:
         x.o_state === null
           ? null
           : {
               state: String(x.o_state),
-              entry: masked || x.o_entry === null ? null : money(String(x.o_entry)),
+              entry: masked || x.o_entry === null ? null : money(String(x.o_entry), env.currency),
               exitReason: x.o_reason === null ? null : String(x.o_reason),
               netPpm: toNum(x.o_net),
               withdrawnReason: x.o_withdrawn === null ? null : String(x.o_withdrawn),
             },
       stock: kit ? kit.aliases.label(code) : code,
-      company: masked ? null : x.name === null ? null : String(x.name),
+      company: masked ? null : x.name === null ? null : displayName(String(x.name), { code }),
       family: String(x.family),
       tier: String(x.tier),
       label: String(x.label),
-      buyUpTo: masked ? null : money(String(x.buy_max_micro)),
-      stop: masked ? null : money(String(x.stop_micro)),
-      aim: masked ? null : money(String(x.aim_micro)),
+      buyUpTo: masked ? null : money(String(x.buy_max_micro), env.currency),
+      stop: masked ? null : money(String(x.stop_micro), env.currency),
+      aim: masked ? null : money(String(x.aim_micro), env.currency),
       validUntil: masked ? (isoWeek(valid) ?? MISSING) : valid,
       scenario,
       aimReachPpm: toNum(x.aim_reach_ppm),
@@ -431,7 +450,7 @@ export async function loadPickDetail(env: LoaderEnv, id: string): Promise<PickDe
   const real = PK_RE.test(id) ? await resolvePickRef(env, id) : env.mask.masked ? null : id;
   const key = real === null ? null : parsePickId(real);
   if (key === null) return null;
-  const market = marketOf(env);
+  const market = env.market;
   const model = await loadPicks(env, { profile: key.profile, d: key.d });
   const pick = model.picks.find((p) => p.rank === key.rank);
   if (!pick) return null;
@@ -478,8 +497,10 @@ export async function loadPickDetail(env: LoaderEnv, id: string): Promise<PickDe
         ? null
         : {
             state: String(x.state),
-            entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro)),
-            exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro)),
+            entry:
+              masked || x.entry_micro === null ? null : money(String(x.entry_micro), env.currency),
+            exit:
+              masked || x.exit_micro === null ? null : money(String(x.exit_micro), env.currency),
             exitReason: x.exit_reason === null ? null : String(x.exit_reason),
             netPpm: net,
             netText: net === null ? "not closed yet" : formatPpm(net),
@@ -508,6 +529,8 @@ export type TrackRow = {
     badPpm: number | null;
     goodPpm: number | null;
   };
+  /** M22 C3 (AGT-146, D-1425): the AI-written note looking back at a settled pick; null when none was written. Masked as the row is. */
+  lookingBack: string | null;
   /** A closed result against the published range. */
   position: "inside" | "below" | "above" | null;
   /** ARN-103/UXN-288: the stored market figures of a settled pick; null before settlement. */
@@ -527,14 +550,56 @@ export type TrackModel = {
   masked: boolean;
   profile: string;
   profiles: string[];
-  success: (ModelSuccess & { line: string }) | null;
+  success: (ModelSuccess & { line: string; basisLabel?: string }) | null;
   rows: TrackRow[];
   /** ARN-104: summary over filled, settled picks (missed excluded); null with no settled rows. */
   vsMarket: (VsMarketSummary & { basisLabel: string }) | null;
 };
 
+/** A price figure as the reflections write it: two decimals (a percentage has one). */
+const PRICE_NUMBER_RE = /\b\d+\.\d{2}\b/g;
+
+/**
+ * M22 C3 (D-1425): the written reflections of the listed picks, set on their rows. Soft: a failed read leaves the rows without
+ * a note. A masked viewer gets the note through `maskText` (codes and names to letters, dates to weeks) and with every price
+ * figure hidden, as the row hides its prices (O-54). `not_written` rows show nothing.
+ */
+async function attachLookingBack(
+  env: LoaderEnv,
+  profile: string,
+  raw: ReadonlyArray<{ d: string; code: string; x: Record<string, unknown> }>,
+  rows: TrackRow[],
+  kit: Awaited<ReturnType<typeof maskKitByDate>> | null,
+): Promise<void> {
+  if (raw.length === 0) return;
+  const days = raw.map((r) => r.d).sort();
+  try {
+    const r = await readWrittenForProfile(env.main, {
+      market: env.market,
+      profile,
+      fromD: days[0]!,
+      toD: days[days.length - 1]!,
+      limit: TRACK_ROWS,
+    });
+    const byId = new Map(
+      r.map((x) => [publicPickId(`${x.d}.${profile}.${x.rank}`, env.mask.masked), x]),
+    );
+    for (const row of rows) {
+      const hit = byId.get(row.id);
+      if (!hit) continue;
+      const d = hit.d;
+      const text = hit.text;
+      row.lookingBack = kit
+        ? maskText(text, kit.aliasOf(d), kit.lookup).replace(PRICE_NUMBER_RE, PRICE_HIDDEN)
+        : text;
+    }
+  } catch {
+    // no note shown
+  }
+}
+
 export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): Promise<TrackModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const r = await env.main.execute({
     sql: `SELECT o.d, o.rank, o.code, o.state, o.exit_reason, o.net_ppm, o.entry_micro, o.exit_micro,
                  p.buy_max_micro, p.stop_micro, p.aim_micro, p.bad_ppm, p.good_ppm,
@@ -565,15 +630,16 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
     exitReason: x.exit_reason === null ? null : String(x.exit_reason),
     withdrawnReason: x.withdrawn === null ? null : String(x.withdrawn),
     netPpm: toNum(x.net_ppm),
-    entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro)),
-    exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro)),
+    entry: masked || x.entry_micro === null ? null : money(String(x.entry_micro), env.currency),
+    exit: masked || x.exit_micro === null ? null : money(String(x.exit_micro), env.currency),
     published: {
-      buyUpTo: masked ? null : money(String(x.buy_max_micro)),
-      stop: masked ? null : money(String(x.stop_micro)),
-      aim: masked ? null : money(String(x.aim_micro)),
+      buyUpTo: masked ? null : money(String(x.buy_max_micro), env.currency),
+      stop: masked ? null : money(String(x.stop_micro), env.currency),
+      aim: masked ? null : money(String(x.aim_micro), env.currency),
       badPpm: toNum(x.bad_ppm),
       goodPpm: toNum(x.good_ppm),
     },
+    lookingBack: null,
     position:
       String(x.state) === "closed"
         ? rangePosition(toNum(x.net_ppm), toNum(x.bad_ppm), toNum(x.good_ppm))
@@ -593,6 +659,7 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
             windowToD: masked ? (isoWeek(String(x.window_to_d)) ?? MISSING) : String(x.window_to_d),
           },
   }));
+  await attachLookingBack(env, q.profile, raw, rows, kit);
   const settled = rows.filter((x) => x.vsMarket !== null);
   const vsMarket =
     settled.length === 0
@@ -759,7 +826,7 @@ export async function loadPickHistory(
   env: LoaderEnv,
   q: { profile: string; filter: HistoryFilter; cursor: string | null },
 ): Promise<HistoryModel> {
-  const market = marketOf(env);
+  const market = env.market;
   const masked = env.mask.masked;
   const after = masked ? null : parseHistoryCursor(q.cursor);
   const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
@@ -851,17 +918,17 @@ export async function loadPickHistory(
       plan: masked
         ? null
         : {
-            buyUpTo: money(String(x.buy_max_micro)),
-            stop: money(String(x.stop_micro)),
-            aim: money(String(x.aim_micro)),
+            buyUpTo: money(String(x.buy_max_micro), env.currency),
+            stop: money(String(x.stop_micro), env.currency),
+            aim: money(String(x.aim_micro), env.currency),
           },
       status,
       entryD: masked ? null : entryD,
-      entry: masked || entry === null ? null : money(entry.toString()),
+      entry: masked || entry === null ? null : money(entry.toString(), env.currency),
       exitD: masked ? null : exitD,
-      exit: masked || exit === null ? null : money(exit.toString()),
+      exit: masked || exit === null ? null : money(exit.toString(), env.currency),
       exitReason: x.exit_reason === null ? null : String(x.exit_reason),
-      now: masked || now === null ? null : money(now.toString()),
+      now: masked || now === null ? null : money(now.toString(), env.currency),
       daysHeld:
         entryD === null
           ? null

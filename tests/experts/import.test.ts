@@ -6,10 +6,25 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createClient } from "@libsql/client";
 import { loadMigrations, migrateUp } from "@/lib/db/migrate-core.mjs";
-import { run, itemId } from "../../scripts/experts/import.mjs";
+import { run, itemId, preregSha } from "../../scripts/experts/import.mjs";
 import { wordCount } from "../../scripts/experts/validate.mjs";
-import { cleanupTempDbs, freshDb, MIGRATIONS, tempDbUrl, track } from "../db/helpers";
+import {
+  allowMarket,
+  cleanupTempDbs,
+  freshDb as baseFreshDb,
+  MIGRATIONS,
+  tempDbUrl,
+  track,
+} from "../db/helpers";
+
+// M19 0038: the ZZ seed holds one US call; the write guard needs that market enabled to store it.
+const freshDb = async (name: "main" | "auth") => {
+  const db = await baseFreshDb(name);
+  if (name === "main") await allowMarket(db, "US");
+  return db;
+};
 import { type SeedFiles, writeSeed, zzSeedFiles } from "./zzSeed";
+import { PREREG_TEXT, type SeedFilesV2, zzSeedV2 } from "./zzExpress";
 
 const cleanups: (() => void)[] = [];
 afterEach(() => {
@@ -460,5 +475,216 @@ describe("word count", () => {
   it("counts whitespace-separated words", () => {
     expect(wordCount("")).toBe(0);
     expect(wordCount("  a  b\nc ")).toBe(3);
+  });
+});
+
+// ---- format praxis-expert-seed/2 (M22 E4; KB-085, D-1437, D-1523) -----------------------------------------------
+
+function seed2(mod?: (f: SeedFilesV2) => void) {
+  const f = zzSeedV2();
+  mod?.(f);
+  const a = writeSeed(f as unknown as SeedFiles);
+  cleanups.push(a.cleanup);
+  return a.dir;
+}
+
+describe("format 2: licence check, call proposals, expressions", () => {
+  it("dry run counts the new rows and the checked proposals; nothing is written", async () => {
+    const r = await go([seed2(), "--dry-run"]);
+    expect(r.code).toBe(0);
+    expect(r.text).toContain('"licence":3');
+    expect(r.text).toContain('"expressions":4');
+    expect(r.text).toContain("call proposals checked 2 (not stored)");
+    expect(r.text).not.toContain("ZZ pre-registration");
+    expect(r.text).not.toContain("ZZ low oscillator");
+  });
+
+  it("writes licence rows (actor import, the time of the file), expressions and no call proposal; a second run adds nothing", async () => {
+    const db = await freshDb("main");
+    const dir = seed2();
+    const first = await go([dir], db);
+    expect(first.code).toBe(0);
+    expect(first.text).toContain('"licence":3');
+    const lic = await db.execute(
+      "SELECT expert_id, source_key, checked_at, robots, status, actor, note FROM expert_source_licence ORDER BY expert_id",
+    );
+    expect(lic.rows.map((r) => [r.expert_id, r.status, r.actor, r.checked_at])).toEqual([
+      ["X-ZZ1", "enabled", "import", "2030-02-10T00:00:00.000Z"],
+      ["X-ZZ2", "no", "import", "2030-02-10T00:00:00.000Z"],
+      ["X-ZZ3", "unchecked", "import", "2030-02-10T00:00:00.000Z"],
+    ]);
+    const ex = await db.execute(
+      "SELECT cluster_id, version, outcome, rule_json, exit_json, park_reason, reason_text, prereg_sha FROM cluster_expression ORDER BY cluster_id",
+    );
+    expect(ex.rows.map((r) => [r.cluster_id, Number(r.version), r.outcome, r.park_reason])).toEqual(
+      [
+        ["K-ZZ2", 1, "expressed", null],
+        ["K-ZZ3", 1, "expressed", null],
+        ["K-ZZ4", 1, "parked", "overlay_only"],
+        ["K-ZZ5", 1, "parked", "not_testable"],
+      ],
+    );
+    // the pre-registration text is not stored: only its sha is
+    expect(ex.rows[0]!.prereg_sha).toBe(preregSha(PREREG_TEXT));
+    expect(JSON.stringify(ex.rows)).not.toContain("pre-registration");
+    expect(JSON.parse(String(ex.rows[0]!.rule_json))).toEqual({
+      entry: { field: "rsi2", op: "<", value: 10 },
+      schema_version: 2,
+    });
+    expect(ex.rows[2]).toMatchObject({ rule_json: null, exit_json: null, prereg_sha: null });
+    // a proposal is not stored (the Owner queue recomputes it) and no call is created from it
+    expect(await count(db, "expert_call_proposal")).toBe(0);
+    expect(await count(db, "expert_call")).toBe(2);
+
+    const second = await go([dir], db);
+    expect(second.code).toBe(0);
+    expect(second.text).toContain('"licence":0');
+    expect(second.text).toContain('"expressions":0');
+    expect(await count(db, "expert_source_licence")).toBe(3);
+    expect(await count(db, "cluster_expression")).toBe(4);
+  });
+
+  it("an older licence file never replaces a newer row: the latest by time stays the status", async () => {
+    const db = await freshDb("main");
+    await go([seed2()], db);
+    await db.execute(
+      "INSERT INTO expert_source_licence (expert_id, source_key, checked_at, robots, summarisation, status, actor) VALUES ('X-ZZ1', 'origin:zz1.example.test', '2030-03-01T00:00:00.000Z', 'disallows', 'unknown', 'no', 'job')",
+    );
+    await go([seed2()], db);
+    const r = await db.execute(
+      "SELECT status FROM expert_source_licence WHERE expert_id = 'X-ZZ1' ORDER BY checked_at DESC LIMIT 1",
+    );
+    expect(r.rows[0]!.status).toBe("no");
+  });
+
+  it("a database below schema 42 refuses format-2 rows and still takes a plain seed", async () => {
+    const db = await freshDb("main");
+    await db.execute("DELETE FROM schema_migrations WHERE version >= 42");
+    const refused = await go([seed2()], db);
+    expect(refused.code).toBe(1);
+    expect(refused.text).toMatch(/below 42/);
+    expect(await count(db, "expert")).toBe(0);
+    expect((await go([seed()], db)).code).toBe(0);
+  });
+
+  describe("rejections name the file and the field and never the value; nothing is written", () => {
+    const cases: [string, (f: SeedFilesV2) => void, string][] = [
+      [
+        "owner-accepted-risk is not an importable status",
+        (f) => {
+          f["licence-check.json"].results[0]!.status = "owner-accepted-risk";
+        },
+        "licence-check.json: results[0].status",
+      ],
+      [
+        "a licence row for an unknown expert",
+        (f) => {
+          f["licence-check.json"].results[1]!.expert_id = "X-NOPE";
+        },
+        "licence-check.json: results[1].expert_id: unknown expert",
+      ],
+      [
+        "an unknown key in a licence row",
+        (f) => {
+          f["licence-check.json"].results[0]!.page_text = "ZZ-SECRET-PAGE-TEXT";
+        },
+        "licence-check.json: results[0].page_text: unknown key",
+      ],
+      [
+        "a licence note that is too long",
+        (f) => {
+          f["licence-check.json"].results[0]!.note = "ZZ-LONG-NOTE".repeat(30);
+        },
+        "licence-check.json: results[0].note",
+      ],
+      [
+        "a call proposal for a claim that is not a call",
+        (f) => {
+          f["call-proposals.json"].proposals[0]!.claim_id = "C-ZZ-001";
+        },
+        "call-proposals.json: proposals[0].claim_id: claim is not of type call",
+      ],
+      [
+        "an expression for an unknown cluster",
+        (f) => {
+          f["expressions.json"].expressions[0]!.cluster_id = "K-NOPE";
+        },
+        "expressions.json: expressions[0].cluster_id: unknown cluster",
+      ],
+      [
+        "an expression for a cluster that has a family fit",
+        (f) => {
+          f["expressions.json"].expressions[0]!.cluster_id = "K-ZZ1";
+        },
+        "expressions.json: expressions[0].cluster_id: cluster has a family fit",
+      ],
+      [
+        "an unknown park reason",
+        (f) => {
+          f["expressions.json"].expressions[2]!.park_reason = "ZZ-WHIM";
+        },
+        "expressions.json: expressions[2].park_reason: unknown park reason",
+      ],
+      [
+        "an expressed entry with a park reason",
+        (f) => {
+          f["expressions.json"].expressions[0]!.park_reason = "duplicate";
+        },
+        "expressions.json: expressions[0].park_reason",
+      ],
+      [
+        "an expressed entry without a pre-registration",
+        (f) => {
+          delete f["expressions.json"].expressions[0]!.preregistration;
+        },
+        "expressions.json: expressions[0].preregistration",
+      ],
+      [
+        "a parked entry that carries a rule",
+        (f) => {
+          f["expressions.json"].expressions[2]!.rule = { schema_version: 2 };
+        },
+        "expressions.json: expressions[2].rule",
+      ],
+      [
+        "a reason that is too long",
+        (f) => {
+          f["expressions.json"].expressions[3]!.reason = "ZZ-LONG-REASON".repeat(30);
+        },
+        "expressions.json: expressions[3].reason",
+      ],
+      [
+        "the same cluster and version twice",
+        (f) => {
+          f["expressions.json"].expressions[1]!.cluster_id = "K-ZZ2";
+        },
+        "expressions.json: expressions[1]: duplicate cluster_id and version",
+      ],
+      [
+        "format-2 files in a format-1 seed",
+        (f) => {
+          f["manifest.json"].format = "praxis-expert-seed/1";
+        },
+        "expressions.json: $: file needs format praxis-expert-seed/2",
+      ],
+      [
+        "a wrong licence-check format word",
+        (f) => {
+          f["licence-check.json"].format = "praxis-licence-check/9";
+        },
+        "licence-check.json: format",
+      ],
+    ];
+    for (const [name, mod, where] of cases) {
+      it(name, async () => {
+        const db = await freshDb("main");
+        const r = await go([seed2(mod)], db);
+        expect(r.code).toBe(1);
+        expect(r.text).toContain("rejected");
+        expect(r.text).toContain(where);
+        expect(r.text).not.toMatch(/ZZ-SECRET|ZZ-LONG|ZZ-WHIM|owner-accepted-risk/);
+        expect(await totals(db)).toEqual(Object.fromEntries(TABLES.map((t) => [t, 0])));
+      });
+    }
   });
 });

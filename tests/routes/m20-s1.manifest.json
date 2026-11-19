@@ -1,0 +1,7 @@
+{
+  "routes": {
+    "action src/app/(app)/settings/region/actions.ts#switchMarketAction": {
+      "tests": ["tests/settings/marketSwitch.test.tsx", "tests/data/controls.switch.test.ts"]
+    }
+  }
+}

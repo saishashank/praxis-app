@@ -1,5 +1,6 @@
 // System Health data (PLT-017, PLT-061, UX-090/092/117). Owner-only fields are ABSENT (not null)
 // for other roles: error summaries, per-secret results and details (SEC-101, ROL-102a).
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { latestPerJob, type RunStatus } from "@/lib/runs/runRecord";
@@ -17,8 +18,9 @@ import { unverifiedMoneyConstants } from "@/lib/golive/moneyConstants";
 import { uncoveredByApproval } from "@/lib/golive/moneyApprovalRead";
 import { calendarYearSummary } from "@/lib/data/calendarAdmin";
 import { loadControlsView, type ControlsView } from "@/lib/data/controls";
-import { pickAlertsHealth } from "@/lib/alerts/pick/poll";
+import { pickAlertsHealth, quoteBudgetLines } from "@/lib/alerts/pick/poll";
 import { intradayScanHealth } from "@/lib/intraday/run";
+import { dataFeedLines } from "./dataLines";
 import { isStale, JOBS } from "./jobs";
 import { workerRouteLines } from "./routePosts";
 import { getQualitySummary, type QualitySummary } from "./quality";
@@ -66,6 +68,7 @@ export type HealthSummary = {
   openIncidents?: IncidentRow[] | null; // Owner only; null = could not be read
   heartbeatIncidents?: OpenS2[] | null; // Owner only; open S2 incidents (PLT-074)
   intradayLines?: string[] | null; // Owner only; pick-alert poll and intraday scan lines (V2-S3)
+  dataLines?: string[] | null; // Owner only; news waiting and company-list fetch lines (DAT-251 b, DAT-252)
   routeLines?: string[] | null; // Owner only; failed Worker route posts today per slot (V2-I4, D-773)
   moneyUnverified?: string[]; // Owner only; [VERIFY] money constants not yet approved (D-710)
   secrets?: { lastVerifiedAt: string | null; results: SecretResult[] }; // Owner only (Vercel)
@@ -111,10 +114,10 @@ async function getQuota(
 // AU trading calendar status for the current Sydney year and the next one (only years with rows).
 async function getCalendar(mainDb: Client, now: Date): Promise<CalendarSummary[] | null> {
   try {
-    const year = Number(marketDate(now, "Australia/Sydney").slice(0, 4));
+    const year = Number(marketDate(now, HOME_TZ).slice(0, 4));
     const out: CalendarSummary[] = [];
     for (const y of [year, year + 1]) {
-      const s = await calendarYearSummary(mainDb, "AU", y);
+      const s = await calendarYearSummary(mainDb, HOME_MARKET, y);
       if (s.total > 0) out.push(s);
     }
     return out;
@@ -210,11 +213,17 @@ export async function getHealthSummary(
     try {
       const lines = [
         ...(await pickAlertsHealth(mainDb, now)),
+        ...(await quoteBudgetLines(mainDb, now)),
         ...(await intradayScanHealth(mainDb, now)),
       ];
       summary.intradayLines = lines;
     } catch {
       summary.intradayLines = null; // intraday trouble never hides job status
+    }
+    try {
+      summary.dataLines = await dataFeedLines(mainDb, now);
+    } catch {
+      summary.dataLines = null; // feed-line trouble never hides job status
     }
     try {
       summary.routeLines = await workerRouteLines(mainDb, now);

@@ -2,6 +2,7 @@
 import { TursoNonceStore } from "@/lib/security/replay";
 import { mainDb } from "@/lib/db/client";
 import { recordSelfCheckRun } from "@/lib/health/recordSelfCheck";
+import { getConfigCached } from "@/lib/config/runtime";
 import { createSelfCheckHandler } from "@/lib/selfcheck/handler";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +15,7 @@ export async function POST(req: Request): Promise<Response> {
     fetchImpl: fetch,
     store: new TursoNonceStore(env.TURSO_MAIN_URL, env.TURSO_MAIN_TOKEN),
     nowSec: () => Math.floor(Date.now() / 1000),
+    readPublicDomain: async () => String(await getConfigCached("app_public_domain")),
     recordRun: (report) => recordSelfCheckRun(mainDb(), report),
   })(req);
 }

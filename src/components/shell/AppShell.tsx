@@ -26,7 +26,12 @@ export function AppShell({ banners, children, ...header }: AppShellProps) {
         <AppHeader {...header} />
         <Banners banners={banners} />
         <Crumbs />
-        <div id={CONTENT_ID} tabIndex={-1} className="flex-1 outline-none">
+        <div
+          id={CONTENT_ID}
+          tabIndex={-1}
+          data-market={header.market?.code}
+          className="flex-1 outline-none"
+        >
           {children}
         </div>
         <Footer />

@@ -194,3 +194,110 @@ export function MergeInto({
     </form>
   );
 }
+
+/** The typed call form (KB-084): the person writes what the summary does not say; saving confirms the call. */
+export function TypedCall({
+  action,
+  claimId,
+  known,
+}: {
+  action: Act;
+  claimId: string;
+  known: {
+    code: string | null;
+    direction: string | null;
+    date: string | null;
+    horizon: number | null;
+    basis: string;
+  };
+}) {
+  const [open, setOpen] = useState(false);
+  const [state, run] = useActionState<Result | null, FormData>((_p, fd) => action(fd), null);
+  if (!open)
+    return (
+      <Button
+        variant="secondary"
+        aria-label={`Type the call for claim ${claimId}`}
+        onClick={() => setOpen(true)}
+      >
+        Type the call
+      </Button>
+    );
+  return (
+    <form action={run} className="flex min-w-0 flex-col gap-2">
+      <input type="hidden" name="claim" value={claimId} />
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">Stock code</span>
+        <input
+          name="code"
+          required
+          maxLength={32}
+          defaultValue={known.code ?? ""}
+          className={`${FIELD} sm:w-40`}
+        />
+      </label>
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">Direction</span>
+        <select
+          name="direction"
+          required
+          defaultValue={known.direction ?? ""}
+          className={`${FIELD} sm:w-56`}
+        >
+          <option value="" disabled>
+            Choose
+          </option>
+          <option value="long">Expects a rise</option>
+          <option value="short">Expects a fall</option>
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">Date of the call</span>
+        <input
+          name="date"
+          type="date"
+          required
+          defaultValue={known.date ?? ""}
+          className={`${FIELD} sm:w-56`}
+        />
+      </label>
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">How long to follow it, in trading days</span>
+        <input
+          name="horizon"
+          type="number"
+          required
+          min={1}
+          max={1000}
+          step={1}
+          defaultValue={known.horizon ?? ""}
+          className={`${FIELD} sm:w-40`}
+        />
+      </label>
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">Price used</span>
+        <select name="basis" defaultValue={known.basis} className={`${FIELD} sm:w-56`}>
+          <option value="close">Closing price</option>
+          <option value="open">Opening price</option>
+        </select>
+      </label>
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">Target price (optional)</span>
+        <input name="target" inputMode="decimal" maxLength={16} className={`${FIELD} sm:w-40`} />
+      </label>
+      <label className="flex min-w-0 flex-col gap-1 text-sm">
+        <span className="font-medium">Stop price (optional)</span>
+        <input name="stop" inputMode="decimal" maxLength={16} className={`${FIELD} sm:w-40`} />
+      </label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" aria-label={`Save and follow the call of claim ${claimId}`}>
+          Save and follow this call
+        </Button>
+        <Button variant="ghost" onClick={() => setOpen(false)}>
+          Cancel
+        </Button>
+        <Outcome state={state} />
+      </div>
+    </form>
+  );
+}

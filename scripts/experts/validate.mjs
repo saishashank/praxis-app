@@ -6,6 +6,11 @@
 // `src/lib/experts/fit.ts` at run time (D-514); here only the SHAPE of `family_fit` is checked.
 
 export const FORMAT = "praxis-expert-seed/1";
+/** Format 2 (M22 E4, KB-085) adds three optional files: licence-check.json, call-proposals.json, expressions.json. */
+export const FORMAT_V2 = "praxis-expert-seed/2";
+export const FORMATS = [FORMAT, FORMAT_V2];
+export const LICENCE_FORMAT = "praxis-licence-check/1";
+export const PROPOSALS_FORMAT = "praxis-call-proposals/1";
 
 /** Length caps (characters), equal to the CHECKs of db/migrations/main/0022_experts.sql. */
 export const CAPS = {
@@ -124,7 +129,7 @@ export function validateManifest(m) {
   const f = "manifest.json";
   if (e.check(f, "$", isObj(m), "object required")) {
     noUnknownKeys(e, f, "$", m, ["format", "market", "created_at"]);
-    e.check(f, "format", m.format === FORMAT, `must be ${FORMAT}`);
+    e.check(f, "format", FORMATS.includes(m.format), `must be ${FORMATS.join(" or ")}`);
     strCap(e, f, "market", m.market, CAPS.market);
     e.check(
       f,
@@ -576,6 +581,214 @@ export function validateCalls(j) {
   return e.list;
 }
 
+// ---- format 2 files (M22 E4) -----------------------------------------------------------------------------
+
+export const LICENCE_ROBOTS = ["allows", "disallows", "absent", "unreachable"];
+export const LICENCE_SUMMARISATION = ["yes", "no", "unknown"];
+/** The importer never writes `owner-accepted-risk`: only the Owner's own action does (D-1471). */
+export const LICENCE_IMPORT_STATUS = ["unchecked", "enabled", "no"];
+export const PARK_REASONS = [
+  "blocked_data",
+  "needs_intraday",
+  "discretionary",
+  "overlay_only",
+  "duplicate",
+  "not_testable",
+];
+export const EXPRESSION_CAPS = { reason: 200, rule: 4000, exit: 2000, prereg: 4000 };
+const isIsoTime = (v) =>
+  isStr(v) && v.length <= 40 && /^\d{4}-\d{2}-\d{2}T/.test(v) && !Number.isNaN(Date.parse(v));
+
+const LICENCE_KEYS = [
+  "expert_id",
+  "source_key",
+  "checked_at",
+  "terms_url",
+  "robots",
+  "summarisation",
+  "status",
+  "note",
+];
+
+/** licence-check.json written by scripts/experts/licence-check.mjs (E1). */
+export function validateLicenceCheck(j) {
+  const e = collector();
+  const f = "licence-check.json";
+  if (
+    !e.check(
+      f,
+      "$",
+      isObj(j) && Array.isArray(j.results),
+      "{ format, checked_at, results: [] } required",
+    )
+  )
+    return e.list;
+  noUnknownKeys(e, f, "$", j, ["format", "checked_at", "results"]);
+  e.check(f, "format", j.format === LICENCE_FORMAT, `must be ${LICENCE_FORMAT}`);
+  e.check(f, "checked_at", isIsoTime(j.checked_at), "ISO date-time required");
+  e.check(f, "results", j.results.length <= 5000, "more than 5000 entries");
+  const seen = new Set();
+  j.results.forEach((x, i) => {
+    const p = `results[${i}]`;
+    if (!e.check(f, p, isObj(x), "object required")) return;
+    noUnknownKeys(e, f, p, x, LICENCE_KEYS);
+    strCap(e, f, `${p}.expert_id`, x.expert_id, CAPS.id);
+    strCap(e, f, `${p}.source_key`, x.source_key, 64);
+    e.check(f, `${p}.checked_at`, isIsoTime(x.checked_at), "ISO date-time required");
+    e.check(
+      f,
+      `${p}.terms_url`,
+      x.terms_url === null ||
+        x.terms_url === undefined ||
+        (isUrl(x.terms_url) && x.terms_url.length <= 500),
+      "http(s) URL up to 500 characters or null required",
+    );
+    e.check(f, `${p}.robots`, LICENCE_ROBOTS.includes(x.robots), "unknown robots word");
+    e.check(
+      f,
+      `${p}.summarisation`,
+      LICENCE_SUMMARISATION.includes(x.summarisation),
+      "unknown summarisation word",
+    );
+    e.check(
+      f,
+      `${p}.status`,
+      LICENCE_IMPORT_STATUS.includes(x.status),
+      "status must be unchecked, enabled or no",
+    );
+    strCap(e, f, `${p}.note`, x.note, 200, { optional: true });
+    const key = `${x.expert_id}\u0000${x.source_key}\u0000${x.checked_at}`;
+    e.check(f, p, !seen.has(key), "duplicate expert, source and time");
+    seen.add(key);
+  });
+  return e.list;
+}
+
+const PROPOSAL_KEYS = [
+  "claim_id",
+  "state",
+  "code",
+  "direction",
+  "call_d",
+  "horizon_sessions",
+  "price_basis",
+  "target_micro",
+  "stop_micro",
+  "missing",
+  "reason",
+];
+
+/** call-proposals.json written by scripts/experts/call-proposals.mjs (E3); shape only, nothing of it is stored. */
+export function validateCallProposals(j) {
+  const e = collector();
+  const f = "call-proposals.json";
+  if (
+    !e.check(f, "$", isObj(j) && Array.isArray(j.proposals), "{ format, proposals: [] } required")
+  )
+    return e.list;
+  noUnknownKeys(e, f, "$", j, ["format", "market", "created_at", "proposals"]);
+  e.check(f, "format", j.format === PROPOSALS_FORMAT, `must be ${PROPOSALS_FORMAT}`);
+  const seen = new Set();
+  j.proposals.forEach((x, i) => {
+    const p = `proposals[${i}]`;
+    if (!e.check(f, p, isObj(x), "object required")) return;
+    noUnknownKeys(e, f, p, x, PROPOSAL_KEYS);
+    if (strCap(e, f, `${p}.claim_id`, x.claim_id, CAPS.id)) {
+      e.check(f, `${p}.claim_id`, !seen.has(x.claim_id), "duplicate claim_id");
+      seen.add(x.claim_id);
+    }
+    e.check(
+      f,
+      `${p}.state`,
+      ["complete", "incomplete", "not_trackable"].includes(x.state),
+      "unknown state",
+    );
+    e.check(
+      f,
+      `${p}.price_basis`,
+      ["open", "close", "unspecified"].includes(x.price_basis),
+      "unknown price basis",
+    );
+    // a complete proposal has an empty reason
+    e.check(
+      f,
+      `${p}.reason`,
+      typeof x.reason === "string" && x.reason.length <= 200,
+      "string up to 200 characters required",
+    );
+  });
+  return e.list;
+}
+
+const EXPRESSION_KEYS = [
+  "cluster_id",
+  "version",
+  "outcome",
+  "rule",
+  "exit",
+  "preregistration",
+  "park_reason",
+  "reason",
+];
+
+/** expressions.json (D-1437): one entry per parked cluster: expressed with rule, exit and pre-registration, or parked with a reason. */
+export function validateExpressions(j) {
+  const e = collector();
+  const f = "expressions.json";
+  if (!e.check(f, "$", isObj(j) && Array.isArray(j.expressions), "{ expressions: [] } required"))
+    return e.list;
+  noUnknownKeys(e, f, "$", j, ["expressions"]);
+  e.check(f, "expressions", j.expressions.length <= 200, "more than 200 entries");
+  const seen = new Set();
+  j.expressions.forEach((x, i) => {
+    const p = `expressions[${i}]`;
+    if (!e.check(f, p, isObj(x), "object required")) return;
+    noUnknownKeys(e, f, p, x, EXPRESSION_KEYS);
+    const ok = strCap(e, f, `${p}.cluster_id`, x.cluster_id, CAPS.id);
+    const version = x.version === undefined ? 1 : x.version;
+    e.check(f, `${p}.version`, isInt(version) && version >= 1, "integer >= 1 required");
+    if (ok) {
+      const key = `${x.cluster_id}\u0000${version}`;
+      e.check(f, p, !seen.has(key), "duplicate cluster_id and version");
+      seen.add(key);
+    }
+    strCap(e, f, `${p}.reason`, x.reason, EXPRESSION_CAPS.reason);
+    if (x.outcome === "expressed") {
+      e.check(
+        f,
+        `${p}.park_reason`,
+        x.park_reason === undefined,
+        "an expressed cluster has no park_reason",
+      );
+      if (e.check(f, `${p}.rule`, isObj(x.rule), "object required"))
+        e.check(
+          f,
+          `${p}.rule`,
+          JSON.stringify(x.rule).length <= EXPRESSION_CAPS.rule,
+          `longer than ${EXPRESSION_CAPS.rule} characters as JSON`,
+        );
+      if (e.check(f, `${p}.exit`, isObj(x.exit), "object required"))
+        e.check(
+          f,
+          `${p}.exit`,
+          JSON.stringify(x.exit).length <= EXPRESSION_CAPS.exit,
+          `longer than ${EXPRESSION_CAPS.exit} characters as JSON`,
+        );
+      strCap(e, f, `${p}.preregistration`, x.preregistration, EXPRESSION_CAPS.prereg);
+    } else if (x.outcome === "parked") {
+      for (const k of ["rule", "exit", "preregistration"])
+        e.check(
+          f,
+          `${p}.${k}`,
+          x[k] === undefined,
+          "a parked cluster has no rule, exit or preregistration",
+        );
+      e.check(f, `${p}.park_reason`, PARK_REASONS.includes(x.park_reason), "unknown park reason");
+    } else e.at(f, `${p}.outcome`, "expressed or parked required");
+  });
+  return e.list;
+}
+
 /**
  * Validates a whole seed: every file, then the references between them. `files` maps a file name to its
  * parsed JSON; `calls.json` is optional. Returns the list of errors (empty = valid).
@@ -588,7 +801,21 @@ export function validateSeed(files) {
     ...validateClaims(files["claims.json"]),
     ...validateClusters(files["clusters.json"]),
     ...(files["calls.json"] === undefined ? [] : validateCalls(files["calls.json"])),
+    ...(files["licence-check.json"] === undefined
+      ? []
+      : validateLicenceCheck(files["licence-check.json"])),
+    ...(files["call-proposals.json"] === undefined
+      ? []
+      : validateCallProposals(files["call-proposals.json"])),
+    ...(files["expressions.json"] === undefined
+      ? []
+      : validateExpressions(files["expressions.json"])),
   ];
+  if (files["manifest.json"]?.format === FORMAT) {
+    for (const name of ["licence-check.json", "call-proposals.json", "expressions.json"]) {
+      if (files[name] !== undefined) errs.push(`${name}: $: file needs format ${FORMAT_V2}`);
+    }
+  }
   if (errs.length > 0) return errs;
   const e = collector();
   const experts = new Set(files["experts.json"].experts.map((x) => x.id));
@@ -627,6 +854,34 @@ export function validateSeed(files) {
         e.check("clusters.json", `clusters[${i}].${role}[${n}]`, claims.has(c), "unknown claim"),
       );
     }
+  });
+  (files["licence-check.json"]?.results ?? []).forEach((x, i) =>
+    e.check(
+      "licence-check.json",
+      `results[${i}].expert_id`,
+      experts.has(x.expert_id),
+      "unknown expert",
+    ),
+  );
+  (files["call-proposals.json"]?.proposals ?? []).forEach((x, i) => {
+    const c = claims.get(x.claim_id);
+    const w = `proposals[${i}].claim_id`;
+    e.check("call-proposals.json", w, c !== undefined, "unknown claim");
+    if (c !== undefined)
+      e.check("call-proposals.json", w, c.type === "call", "claim is not of type call");
+  });
+  const clusterRows = new Map(files["clusters.json"].clusters.map((x) => [x.id, x]));
+  (files["expressions.json"]?.expressions ?? []).forEach((x, i) => {
+    const k = clusterRows.get(x.cluster_id);
+    const w = `expressions[${i}].cluster_id`;
+    e.check("expressions.json", w, k !== undefined, "unknown cluster");
+    if (k !== undefined)
+      e.check(
+        "expressions.json",
+        w,
+        !k.family_fit,
+        "cluster has a family fit; it is screened as a fit",
+      );
   });
   (files["calls.json"]?.calls ?? []).forEach((x, i) => {
     const c = claims.get(x.claim_id);

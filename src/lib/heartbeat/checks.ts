@@ -25,11 +25,19 @@
 // V1-S3 / D-711 (replaces "a weekday with no row counts as a trading day"): a weekday the calendar
 // has no row for is NOT a trading day (fail safe) and raises a `calendar_missing` incident; a
 // calendar that ends within 60 days raises `calendar_horizon` (DAT-160: next year is drafted early).
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { getConfig } from "@/lib/config/store";
 import { localToUtc, marketDate } from "@/lib/data/calendar";
 import { dayStatus, horizonAlarm } from "@/lib/data/calendarCore.mjs";
+import { enabledCalendarMarkets } from "@/lib/data/calendarAdmin";
+import {
+  calendarEscalation,
+  KIND_CALENDAR_UNCONFIRMED,
+  KIND_CALENDAR_UNCONFIRMED_IN_USE,
+  readDraftedYears,
+} from "@/lib/data/calendarEscalation";
 import { ASX_ENABLED_KEY, ASX_SOURCE_ID, DISPATCH_ENABLED_KEY, parseOn } from "@/lib/data/controls";
 import {
   KIND_CALENDAR_HORIZON,
@@ -43,8 +51,8 @@ import {
   type HeartbeatKind,
 } from "./state";
 
-export const MARKET = "AU";
-export const TZ = "Australia/Sydney";
+export const MARKET = HOME_MARKET;
+export const TZ = HOME_TZ;
 export const POLL_START = "07:00";
 export const POLL_END = "19:30";
 
@@ -106,6 +114,22 @@ export async function runChecks(kind: HeartbeatKind, db: Client, now: Date): Pro
       kind: KIND_CALENDAR_HORIZON,
       text: "The trading calendar ends within 60 days; next year's rows are not drafted yet.",
       detail: { check: kind, date, lastDate: maxD },
+    });
+  }
+  // OPS-103 (D-961): a drafted next-year calendar the Owner has not confirmed. From 1 December an S2
+  // incident; from 1 January the provisional rows are in use and the incident names that.
+  for (const f of calendarEscalation(
+    date,
+    await readDraftedYears(db, await enabledCalendarMarkets(db), date),
+  )) {
+    if (f.kind === "draft_ready") continue; // an Owner item on System Health, not an incident
+    problems.push({
+      kind:
+        f.kind === "unconfirmed_next"
+          ? KIND_CALENDAR_UNCONFIRMED
+          : KIND_CALENDAR_UNCONFIRMED_IN_USE,
+      text: f.text,
+      detail: { check: kind, date, market: f.market, year: f.year },
     });
   }
   if (!tradingDay) notes.push("not a trading day: poll and marker checks skipped");

@@ -220,5 +220,7 @@ export function envOf(w: World, who: Who, now: Date = NOW): LoaderEnv {
     user: { id: w.ids[who], role },
     mask: maskContext({ id: w.ids[who], role }, who === "granted"),
     now,
+    market: "AU",
+    currency: "AUD",
   };
 }

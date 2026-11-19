@@ -676,3 +676,659 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1044 | (O-83) Everything that reads intraday rows reads buy ideas only: the top-5 "found intraday" credit (daily.ts feeds dailyTop5; a faller found at -2 % was cred... |
 | D-1045 | (O-83) Outcome tracking already reflects a buy at the found price: measureCandidates computes excess_found_* from the previous close times (1 + move_ppm), th... |
 | D-1046 | (O-83) Not decided here: whether to take an Avoid / watch fall into the evening decision as a veto. |
+
+## M18 (M18_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-958 | Turso metering transport: a daily Actions job (turso-usage.yml, Worker slot turso-usage 06:40 Melbourne, approved-commit, deployment: false) reads the platfo... |
+| D-959 | OFFSET has zero exceptions: news.ts and reviews.ts page by keyset cursor ((published_at, id), (d)), retention.ts finds the keep-N boundary with MIN(k) FROM (... |
+| D-960 | The row-by-market invariant runs inside the nightly maintenance route: it counts rows per market in every table with a market column (list derived from schem... |
+| D-961 | Calendar draft job: scripts/calendar/draft.mjs + calendar-draft.yml (dispatch-only, production pattern) + Worker slot calendar-draft on 1 November 09:00 Melb... |
+| D-962 | Restore drill: drill-turso.mjs gains TARGET=local (the same path into local libSQL files, no platform token) and writes a restore-drill:<date> run record on... |
+| D-963 | PLT-080: the plan name comes from the daily usage sample; after 2026-12-01 a plan other than free (or an unknown plan) raises an Owner item; a static test gr... |
+| D-964 | Staging retirement in the gate: nightly.yml and deploy-staging.yml become dispatch-only with a header (D-906 made permanent); the release gate replaces three... |
+| D-965 | Recorded-day CI job: scripts/e2e-day/recorded-day.mjs runs one full AU day on local libSQL files with a simulated clock (--now), from the recorded fixtures (... |
+| D-966 | TST-134: the e2e CI job lists every spec file in four lane steps (empty, populated, rich + all states, walks with the AT-65 family-badge walk); scripts/ci/e2... |
+| D-967 | TST-135: seed states are idempotent overlays (E2E_STATES, e2e/seed/states/<name>.ts) on a scenario, loaded and re-applied by a unit test; market-built-off as... |
+| D-968 | TST-136: the three timing checks become count-based budget tests (Worker work-unit counters through an injected count dep in clock.ts; replay step/evaluation... |
+| D-969 | TST-137: one guide page docs/owner-guide/owner_checks.md; scripts/cortex/golden-spot-check.mjs (seeded 20-row draw from label, agreement and κ on --answers;... |
+| D-988 | The Owner control-room load keeps a statement budget; the data-feed lines are one more statement, so the budget is 91 (was 90), asserted in tests/health/cont... |
+| D-989 | TST-135 (b): the four AT-39 fetch clauses (robots.txt, conditional requests, daily cap, metadata-only record under frozen extraction rules) live in one pure... |
+| D-1780 | OPS-110 is closed by evidence, not by a fix to the decision path: the night's "No picks tonight: …" reason is a stored line (src/lib/picks/noPicks.ts), writt... |
+| D-1781 | OPS-106 gap table (the spec names the decisions, not the gaps). |
+| D-1782 | D-666 is closed on the Worker side, not in the scripts: the arena-signals slot gains recheck: { keyPrefix: "arena-2b:AU:" → derived from the slot's market, a... |
+| D-1783 | DAT-251 b key conflict: sentinel_max_items_per_run (1–40) is renamed news_assess_per_run (default 40, bounds 20–200, Owner) with a config_version row rename... |
+| D-1784 | Acceptance for the extract's "no AT named" items and reference corrections: |
+| D-1785 | ARN-123 verdict: the picks track record does not credit dividends (track.ts net = qty × exit − brokerage − cost) while its benchmark is total-return (D-490),... |
+| D-1786 | SEC-115 scheme v2: message v2\n${METHOD}\n${path}\n${timestamp}\n${nonce}\n${sha256(body)} with header X-Praxis-Version: 2; the verifier refuses any other ve... |
+| D-1787 | TST-138/139: docs/test-map.md gains a "V3 home" column that test-map.mjs requires for every AT-01…AT-85 and AT-M1…AT-M5 (staging-homed tests move to CI recor... |
+| D-1788 | OPS-109: (a) is already pinned (vercel@63.1.0) and gets a lint rule so it stays exact; |
+| D-1789 | DAT-251 a: asx-fetch classifies every request (not_found / rate_limited / server_error / network / parse), backs off on 429 (Retry-After or doubling) inside... |
+| D-1790 | DAT-251 c: RBA and ABS fetchers are Node scripts under scripts/macro/ run as a Friday step of ingest-batch1.yml gated by the repository variable MACRO_FETCH... |
+| D-1791 | DAT-252: the Wikidata converter runs in CI on a fixture export; the fallback fetch (one SPARQL request per asx-fetch run) engages only when the listed-compan... |
+| D-1792 | DAT-253: SOURCE_HOSTS gains asic.gov.au and ssrn.com; register rows asic_documents and ssrn_papers are seeded pending with their terms [VERIFY] (listed); the... |
+| D-1793 | OPS-108: docs/runbooks/rotate-secrets.md is written per secret with the secrets tool steps and the smoke proof; rotation and PAT revocation are PR-listed Own... |
+| D-1794 | OPS-111 verdicts: (1) → LLM-077 (M22), re-accepted; |
+| D-1795 | OPS-112 verdicts: (1) closed: the weekly close requires the horizon session's bar when d equals the horizon session, else marks the outcome early (new column... |
+| D-1796 | Fixed V3 keys are registered once: hmac_scheme_version (default = the hmacCore constant), calendar_draft_markets (default = CALENDAR_MARKETS), restore_drill_... |
+| D-1797 | DAT-252 fallback threshold counts the current run: |
+| D-1798 | DAT-251 a: an HTTP 401 or 403 is classified server_error, never not_found, so a block by the source is never read as a delisting; 404 stays not_found (script... |
+| D-1799 | DAT-251 a: a code marked delisted closes its code_history row only after it has been absent from the ASX file and then returned in it; a code that ASX still... |
+| D-1800 | DAT-251 a: the asx-fetch job reads its delisted-code list through a read-only state step (ingest.mjs --write-state asx/state.json, secrets only in that step'... |
+| D-1801 | DAT-251 b: news_assess_per_run has a hard ceiling of 200 (bounds 20–200) and the Turso cap of 40 applies at notice or worse; the effective cap stays the mini... |
+| D-1802 | OPS-111 (9): the steelman reader-file list is generated from the import graph (tests/security/steelman-readers.json, compared by scripts/ci/steelman-readers.... |
+| D-1803 | TST-136: the wall-clock variants of the three timing checks live in tests/timing/ and worker/timing/ with their own configs (vitest.timing.config.mts, worker... |
+| D-1804 | TST-136: a slow test gets an explicit per-test limit (for example { timeout: 120_000 } on the live look) and never a CI retry; a static test forbids a retry:... |
+| D-1805 | Build robustness (found at M18 integration): the two fonts are committed as variable woff2 files (latin subset, SIL Open Font License 1.1, licence texts besi... |
+
+## M19 (M19_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-998 | MKT-114: market_profile.work_status stores the status (not_started / in_build / testing / built / active / paused); the seed sets AU active, IN and US built... |
+| D-999 | DAT-242: complete is computed by isComplete(profile) (every field valued; every verify = 1 field dated and referenced); |
+| D-1005 | Decision numbering: the extract's "M19 starts at D-1780" repeats BLD-054's wording for M18; |
+| D-1006 | Migrations and counts: 0037_m19_market_profile.sql (store, seed, market columns) and 0038_m19_market_guard.sql (triggers), each with -- +down; the hard-coded... |
+| D-1007 | Identity baselines (CXA-001, A-20): integration step 0, before any M19 merge, runs AT-32 and AT-50 on the build tree and writes their hashes to tests/accepta... |
+| D-1008 | AT-32 hash scope (A1, built at step 0): the baseline hashes every main-database table except schema_migrations and market (the two tables migration 0037 legi... |
+| D-1009 | AU constants snapshot mechanics (A1): the snapshot lists 50 entries by module, export and value (bigint as <n>n); it is recorded by scripts/market/snapshot-a... |
+| D-1010 | Profile field list and value shapes (A1, DAT-241): 40 fields (the spec 20.1 rows with exchange and timezone split, plus yahoo_suffix, bar_latency_p95_min, pr... |
+| D-1011 | enabled/mode row invariant (A1, D-1809): |
+| D-1012 | slots_json shape (A1, D-1811): { b1, b2a, b2b, late_2a_after, cutoff, cutoff_poll, preopen_recheck: [a, b], quote_from, quote_until, intraday_scan_from, intr... |
+| D-1013 | Error home (A1/A2): MarketNotEnabled, isMarketNotEnabled and UnknownMarket live in src/lib/market/errors.mjs because the loader's requireEnabledMarket needs... |
+| D-1014 | Owner edit of a mkt.* key (A1, DAT-242): updateConfig (audit first) writes the config_version row as for any key and then calls setProfileField (field row, m... |
+| D-1015 | Derived lists (A1, D-1808): MODE_MARKETS is builtMarkets(); calendarMarkets() is the keys of CALENDAR_RULE_MODULES and CALENDAR_MARKETS stays as a constant d... |
+| D-1016 | Cortex schema hash (A1, found by the step-0 baseline): the night's input manifest carries schemaSha, the sha256 of the table names (src/lib/cortex/stage.ts),... |
+| D-1017 | Guard trigger conditions (A2, D-1810): the insert trigger is WHEN NEW.market IS NOT NULL AND NOT EXISTS (SELECT 1 FROM market WHERE code = NEW.market AND ena... |
+| D-1018 | Update trigger (A2, D-1810): BEFORE UPDATE OF market fires only when the new market differs from the old (NEW.market IS NOT OLD.market) and is not enabled. |
+| D-1019 | Typed error (A2, D-1810, D-1013): wrapClient (guard.mjs) rethrows a refused write as the one MarketNotEnabled class from errors.mjs with table from the trigg... |
+| D-1030 | Static seed profile and derived legacy exports (B1, CXA-002, D-1816): src/lib/market/staticProfile.mjs (staticProfile(code), homeProfile(), benchmarkIndexOf(... |
+| D-1031 | Rule-set readers, angle filter and what B1 left alone (B1, CXA-002 e, f, g, i; PRD-039): src/lib/cortex/profileReaders.ts holds classificationReader, haltRea... |
+| D-1032 | --market on the arena and picks command lines (B2, MKT-110 a, D-1811): src/lib/arena/marketFlag.ts resolveCliMarket(db, argv): --market <CODE>, else the sing... |
+| D-1033 | Money engines take the market's table (B2, CXA-002 b, d): tickFor, slippageAmount, slippageTicks, stallSlippageMicro and slippedFill take the tick table as t... |
+| D-1034 | Python fetchers (B2, CXA-002 h): yahoo_fetch.py and fetch_prices.py read the Yahoo ticker suffix (and yahoo_fetch.py the currency) from the request or plan J... |
+| D-1047 | Market rows in the Worker (C1, D-1811, PRD-045): one statement (MARKETS_SQL, WHERE enabled = 1, at most 3 rows) rides in the clock's and the route poster's e... |
+| D-1048 | Run now (C1, D-1811): the request's market is the first gate: not in the enabled rows is refused: market_not_enabled (before "unknown job", "not listed" and... |
+| D-1049 | Worker ASX files (C1, PRD-047): MARKET in asx/sentinel.ts is HOME_MARKET; the three SQL reads take it as a parameter and add enabled = 1 to the market read (... |
+| D-1050 | Script market rule (C2, MKT-110 a, D-1811): src/lib/market/scriptMarket.mjs is the one implementation. --market <CODE> (or --market=CODE; empty = omitted) na... |
+| D-1051 | Home market constants (C2, C3, D-1808, D-1015): the modules that had MARKET = "AU", a Sydney or Melbourne zone, "18:10" or "AUD" with no profile to hand (the... |
+| D-1052 | Workflow pass-through (C2, D-1811): ingest-batch1, arena-close, arena-signals, replay, backfill-history, backfill-prices and backfill-index gain a dispatch i... |
+| D-1053 | Slot times as data (C1, C2): worker/src/schedule.ts keeps one slot({...}) entry per slot with the time as an expression (a.b1, ops.maintenance.at, feed.poll.... |
+| D-1086 | M19 exit review follow-up, wrapper (Fable, 2026-11-12): wrap the script client factories and the Worker's pipeline() with wrapClient/marketRefusalReporter (a... |
+| D-1087 | One --market resolver (Fable F1, M20): src/lib/arena/marketFlag.ts (D-1032) delegates to resolveScriptMarket (scriptMarket.mjs, D-1050) and guard.mjs re-expo... |
+| D-1088 | One home-seed helper (Fable F3, M20): homeMarket.mjs stays the constants facade but derives every value from homeProfile() (staticProfile.mjs); its own slots... |
+| D-1089 | Worker slot zone (Fable F4, M20, under D-1825): clock.ts compares slot minutes on the Sydney clock only; safe in M19 because IN/US zones are not in ZONE_RULE... |
+| D-1090 | Facts the AT-67 scan does not see (Fable F5, M20): sizing.ts STALL_FLOOR_SLIPPAGE_BPS duplicates the AU tick table's stall_floor_bps; the session-time class... |
+| D-1806 | Literal count rule (MKT-107, A-19, gap 1): node scripts/ci/market-literals.mjs --count is the count — files under src, scripts, worker/src (any extension) th... |
+| D-1807 | Profile store (DAT-241, gap 3): 0037_m19_market_profile.sql adds market_profile (one row per market: work status, dates, version), market_profile_field (one... |
+| D-1808 | Loader and derived constants (MKT-107, DAT-241): src/lib/market/profile.ts is the single reader (loadProfile, loadProfiles, enabledMarkets, requireEnabledMar... |
+| D-1809 | Two switches (gap 9): markets_enabled = the set of market rows with enabled = 1 (registered as a fixed key whose production default is PRAXIS_MARKETS_ENABLED... |
+| D-1810 | Write guard (MKT-110 b): 0038_m19_market_guard.sql installs BEFORE INSERT and BEFORE UPDATE OF market triggers on every table with a market column except mar... |
+| D-1811 | Dispatch refusal (MKT-110 a): the Worker reads every enabled = 1 market row per tick (one statement) and builds the slot table per row with slotsFor(row) fro... |
+| D-1812 | UI filter and 404 (MKT-110 c, UXN-312): resolveMarket(db, candidate, user) is the one place a market parameter (query, route segment, form field) is accepted... |
+| D-1813 | AT-67 scan rule (gap 15): scripts/ci/market-literals.mjs (also tests/static/marketLiterals.test.ts) scans src, scripts, worker/src (.ts .tsx .mjs .js .d.mts... |
+| D-1814 | M19/M20 split (gaps 5, 6, 7, 8, 13): UXN-312 — M19 the switcher filter, the status row, the evidence date, the open gate items, the completeness line; |
+| D-1815 | UXN-313 formatting: CurrencyFormat per profile (A$ en-AU, ₹ en-IN with lakh/crore grouping, US$ en-US) passed explicitly to formatMicro/formatCents/money; du... |
+| D-1816 | CXA-002 (a)–(i) field mapping with the AU proof: decision_cutoff, tz/OWNER_TZ, known_time_rules (a); settlement_days, parcel_floor with adv_floor = parcel_fl... |
+| D-1817 | Worker local time (PRD-039 stub): worker/src/localtime.ts keeps the Sydney rule table under the key Australia/Sydney, takes the market row's tz, and throws u... |
+| D-1818 | Where the wrapper is applied (A2, D-1810): mainDb() only (the auth database has no market table; authDbBigint is the signed backup export, read-only). |
+| D-1819 | Enabled-set mismatch alarm (A2, D-1809): checkMarketRows (the nightly step) also runs checkEnabledSet, which compares the market.enabled = 1 set with markets... |
+| D-1820 | Guard generation (A2, D-1810): scripts/db/gen-market-guard.mjs applies migrations 0001 to 0037 to a scratch database and reads every table with a market colu... |
+| D-1821 | Fixtures (A2, D-1810): a row of a market that is not enabled can no longer be inserted directly, so plantOffMarketRow(db, table, row) (tests/db/helpers.ts) e... |
+| D-1822 | The scope common (A2, found by the full suite): document.market is common for the source register and the expert mirror (src/lib/kb/render.ts:654, src/lib/ex... |
+| D-1823 | Write guard and the skip records of the jobs (A2, D-1810, D-1811): a library job called for a market that is not enabled (or has no row) cannot even record i... |
+| D-1824 | Fixture rule (A2, D-1821): a test that keys rows by a market other than AU enables it through allowMarket(db, code) (tests/db/helpers.ts, a row for an unknow... |
+| D-1825 | Worker slot table per enabled market (C1, D-1811): worker/src/schedule.ts exports slotsFor(row) (the whole table of one market row, in table order) and slotT... |
+| D-1826 | Zone rules and feed slots (C1, D-1817): src/lib/market/clockTables.mjs (allow-listed) holds ZONE_RULES (zone name to local-time rule; Sydney and Melbourne sh... |
+| D-1827 | Formatting API (D1, D-1815): formatMicro(micro, fmt, opts?) and formatCents(cents, fmt, opts?) take the CurrencyFormat as a required second argument (the cur... |
+| D-1828 | E-mail loops (D1, D-1812): runBrief collects the overnight announcements and today's events of every enabled market that is active and trades on D into the o... |
+| D-1829 | Default market (D1/D2, D-1812): default_market is stored as any built market (builtMarkets(), the service is sync and holds the auth database only); updateRe... |
+| D-1830 | Dual time (D1, D-1815): formatMarketTime(iso, marketTz, prefs?) in health/format.ts returns the single Melbourne form when the market zone has the same UTC o... |
+| D-1831 | Pages and switcher (D2, D-1812): envFor(user, now?, candidate?) is the one resolver for pages and loaders (?market= candidate not enabled: 404; none: the onl... |
+| D-1832 | Markets table (D2, D-998): marketRows has no static IN/US rows; the Owner sees every market row with statusText(profile, mode), "AT-M evidence: not recorded"... |
+| D-1833 | AT-67 scan classes and what is not a market fact (E1, D-1813): scripts/ci/market-literals.mjs scans nine classes (market code, exchange word or city, zone, A... |
+| D-1834 | AT-67 allow-list (E1, D-1813): the allow-list is src/lib/market/, the files of seed/allow.mjs, and EXTRA_ALLOW in the script: entries naming one file or a di... |
+| D-1835 | Residual literals replaced (E1, D-1051; byte-identical): the home market's values are read, never retyped: session open and close (homeProfile().sessionOpen/... |
+| D-1836 | Scan output and the count (E1, D-1806): the default run lists every hit (file, line, class, first 120 characters) and exits 1 on any, on a stale entry, or on... |
+| D-1837 | Production-shape assertion (E2, D-1809, MKT-110): scripts/e2e-day/assert-production-shape.mjs --work <folder> runs as the last step of the recorded-day job b... |
+| D-1838 | Development lanes and the CI rule (E2, D-1809): e2e/seed/states/markets-dev.mjs enables the built markets named by PRAXIS_MARKETS_ENABLED (mode stays off, so... |
+| D-1839 | The e2e walk (E2, MKT-110 c, SEC-112, D-1812): e2e/market-off.spec.ts runs in the empty lane (requireScenario("empty")) and walks every signed-in page of PAG... |
+| D-1840 | Where the AT-68 clauses run (E2): the root suite file tests/acceptance/v3/at68.test.ts proves the scripts and workflows (a), the write guard and the invarian... |
+| D-1841 | Test map and reports (E3, TST-133, AT-85): docs/test-map.md gets rows for AT-67 (covered, CI), AT-68 (covered, "CI + CI recorded-day"), AT-75 (covered (AU),... |
+| D-1842 | PRAXIS_MARKETS_ENABLED in the checks (E3, D-1809): .env.example (A1) already names it and the code reads it, so scripts/ci/env-names.mjs needs no entry and w... |
+| D-1843 | Matrix fixtures (E3, TST-139, D-1814): tests/market/profiles/IN.json and US.json already exist from A1 and equal their seeds (node scripts/market/gen-fixture... |
+
+## M20 (M20_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1091 | Extract tooling (MKT-112, gaps 1, 2): Node ESM under Requirement/v3/tools/m20/ (lib/fetch.mjs, pull_in.mjs, pull_us.mjs, coverage.mjs, buckets.mjs, calibrate... |
+| D-1092 | Offline/network split: every test in praxis-app runs offline on recorded or hand-made fixtures; the network is touched only by the fill runs (build machine)... |
+| D-1093 | Polite client: src/lib/data/sources/politeFetch.mjs (app) and tools/m20/lib/fetch.mjs (extract) share the rules — declared UA, per-host minimum interval (EDG... |
+| D-1094 | EDGAR contact (gap 22): PRAXIS_EDGAR_CONTACT is an Owner-store value (names only in env-names.mjs, .env.example); the client throws EdgarContactMissing and m... |
+| D-1095 | Source hosts (gap 21): the IN/US hosts enter SOURCE_SITES tagged by market and register id; link allow-listing (AT-81) is unchanged, fetching is gated by the... |
+| D-1096 | Register rows: 0039 seeds every DAT-243/244 candidate as <code>_<source> with the status A3's verification gives (enabled for public statistics, EDGAR, SEC s... |
+| D-1097 | Calendars (gap 10, B.7): rules in calendarRules/{in,us}.mjs (2026 and 2027; the NSE 2027 list drafted until published), rows written only when a market becom... |
+| D-1098 | Universe cap (gap 13): the key is mkt.<CODE>.universe_max (ch. 15); |
+| D-1099 | Projection formula (gap 14, F): projected_m = auMeasured_m × (cap / auCodes) × (sessions_market / sessions_au) + fixed_m; fits iff Turso (AU + projected) ≤ 2... |
+| D-1100 | Checklist and two-step: checklist(db, code) items profile_complete, at_m_evidence, licence_rows, quota_projection, au_mkt105, plus five_green_days and latenc... |
+| D-1101 | Rollback (F): full → off sets mode off and rollback_at, keeps enabled = 1 only until the arena-kill:<CODE> slot (open + 2 min, next trading day) has closed e... |
+| D-1102 | IN-P1 (F): the components rule kind with the ARN-116 constants, exact rationals, one half-up rounding of the total to ₹0.01; known answers ₹15.40 / ₹31.60 /... |
+| D-1103 | US-P1 (F): commission 0; SEC Section 31 and FINRA TAF as dated constants on sells (rate_per_million 27.80 from 2025-05-14; 0.000166/share, cap 8.30, both con... |
+| D-1104 | Tick tables and buckets (F): IN ₹0.01 below ₹250, ₹0.05 above (confirmed against the NSE circular or reverted with a decision line), US $0.0001 below $1, $0.... |
+| D-1105 | Latency (gap 11): bar_latency_p95_min IN/US = { kind: "assumed", minutes: 60 } at M20; production data_only writes one bar_latency_sample per night; full req... |
+| D-1106 | Sleeve reality cap (gap 16): IN 1× (delivery account, consistent with IN-P1's delivery STT), US 2× (Reg T). |
+| D-1107 | Seed FX (gap 15): A$600 × the RBA daily AUD/INR or AUD/USD rate of the activation day (the day full is set), half-up to ₹1,000 / US$10; rate, date and source... |
+| D-1108 | Category maps (gap 9a): 11 categories (DAT-245), AT-69's "8" is a spec slip (listed); materiality 0–3 per category; verifiable per CTX-043; first-match table... |
+| D-1109 | IN bands (F): limits = previous close × (1 ± band) on the tick grid; a close at a limit is band-locked → no fill, order cancelled band_locked; |
+| D-1110 | US LULD (F): trading_halt rows drive the CTX-016 halt path (no exit fill in the window, re-score at the reopen bar); suspensions follow the suspension path;... |
+| D-1111 | EDGAR as filed (AT-38): fundamental_fact append-only keyed by accession; factAsOf reads the latest filing at or before the decision instant; |
+| D-1112 | Classification readers: nse_level2 and sic_2digit map to instrument.industry_group; the NAV cap groups by the reader; |
+| D-1113 | Settlement (F): settlementDays is passed, not defaulted, at every ledger, close-books, settled-cash and replay call site; |
+| D-1114 | Calibration (gap 9b): CXA-002 (j) is a parameterised development-split run per market (M15 WP1…WP6), every family shadow, no holdout look and no holdout_look... |
+| D-1115 | Data limits (gap 12): survivorship.ts (haircut = delisted share per year × 50 % assumed loss, with and without), reportCaveats; docs/cortex/data-limits-{IN,U... |
+| D-1116 | Stage tables (D-1016 closure): STAGE_TABLES fixed list replaces the sqlite_master scan; the base list equals the schema-35 set so the AU schemaSha and the AT... |
+| D-1117 | Worker zones (gap 18, D-1089): asia-kolkata and us-eastern-dst rules with TST-103 tests; |
+| D-1118 | Stall floor (gap 19, D-1090): sizing.ts reads profile.slippage.stall_floor_bps; |
+| D-1119 | Recorded days (TST-139, D-1843): fixtures in praxis-app-fixtures/recorded/{IN,US}/<date>/ (five sessions each, headlines only), recorded from the extract by... |
+| D-1120 | AT-M reports (gaps 7, 20): at-m-report.mjs --market writes docs/test-reports/AT-M-<CODE>.md with the five rows and their evidence; |
+| D-1121 | Labels (gap 8): M20 builds the per-market append-only label_item store, labelsFor(db, market) and evaluationAllowed(db, market) (refuses below 500); the page... |
+| D-1122 | Migration 0039 contents (§A); schema-count tests at 36; every new market-keyed table carries both guard triggers. |
+| D-1123 | M19 hygiene (D-1086…D-1088, D-1090): scriptDb, the one resolver, the home helper, the four allow-list entries parameterised and removed. |
+| D-1124 | Per-market e-mail sections and dual times (UXN-313, D-1828, D-1830): one section per enabled market trading on D; |
+| D-1125 | IN announcements: headline + link only, never a body; the fetcher is not called while the register row is disabled. |
+| D-1126 | Gate and numbering (gaps 4, 5, 23): M20 tasks start only after the CI run on build at or after d476057d is green (recorded in exit §0); decisions are D-1091... |
+| D-1127 | Registry modules resolve by convention (sources/<code>/day.mjs, seed/<code>/*.mjs, calendarRules/<code>.mjs entries added by stream A) so IN and US never edi... |
+| D-1128 | Register rows are not in 0039 (A2 finding, D-1096 amended): tests/acceptance/v3/replay-hash.baseline.json hashes source_register, source_register_history and... |
+| D-1129 | Deploy order for 0039 (Fable A2 review, note 3): the Worker reads market.rollback_at (worker/src/markets.ts:42) and deploy-production.yml deploys the Worker... |
+| D-1130 | The kill slot needs no listing (Fable A2 review, note 4): arena-kill:<CODE> is the only Actions slot released without the Owner's slots_enabled list (require... |
+| D-1131 | IN/US slippage buckets come from task A4 (Fable A2 review, note 5): slippage_buckets stays null for IN and US after A2, so stallFloorBpsOf throws for them by... |
+| D-1132 | No robots-permitted free US price source (fill run 2026-11-12): query1/query2.finance.yahoo.com, stooq.com and api.nasdaq.com disallow automated clients in r... |
+| D-1140 | Diwali Muhurat and the NSE 2025 list (A3): the Laxmi Pujan evening session on a weekday is recorded as an early_close row whose close_time is the end of the... |
+| D-1141 | Source hosts and rows are derived (A3, D-1095 amended): |
+| D-1142 | Polite client rules (A3, D-1093): a source is fetched only when its register row is enabled (the Owner's acceptance of a pending risk row is the change to en... |
+| D-1143 | Verification pass results (A3, 2026-11-13, source report run once per market on the build machine): the exchange archive host publishes no robots.txt; www.ns... |
+| D-1144 | IN tick table (A3, D-1104): the NSE circular NSE/CMTR/67133 (13 March 2025, after the 10 June 2024 cut) confirms ₹0.01 below ₹250; the exchange now reviews t... |
+| D-1145 | Tooling touched outside the A3 list (needed): scripts/ci/workflow-lint.mjs gains UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"] (a success-time artefa... |
+| D-1146 | Calendar market lists (A3, D-1097 amended): |
+| D-1147 | Migration 0040 and the macro store (integration; closes the hand-offs of D-1171 and D-1189): db/migrations/main/0040_m20_macro_sources.sql rebuilds macro_ser... |
+| D-1148 | Dated cost_profile rows on enable (integration; the D-1181 hand-off, D-1193): datedCostProfileRows had no caller, so a replay or calibration of a session bef... |
+| D-1149 | Synthetic recorded days are labelled in the AT-M report (integration, D-1188, D-1132, D-1120): scripts/market/at-m-report.mjs reads an optional synthetic: tr... |
+| D-1150 | US fee constants superseded (A4, F): a search on 2026-11-13 found the SEC Fee Rate Advisory FY2026 (US$20.60 per million of covered sales from 2026-04-04; US... |
+| D-1151 | Fixed conversion for the figures the extracts cannot give (A4, [VERIFY]): the IN price floors and U2 market-cap floor are AU's at Rs 55 per A$ (A$0.50 -> Rs... |
+| D-1152 | Tier size (A4): IN u1.top = 514, the same share of codes (16.31 %) as AU's 300 of 1,839 (A1 u1_top); |
+| D-1153 | Rule kind components (A4, F, D-1102/D-1103): round: "total_half_up_cent" (IN) rounds the exact total once; round: "per_item_half_up_cent" (US) rounds each it... |
+| D-1154 | Settlement lag threading (A4, F, D-1113): pendingSettlements takes lagSessions (default the home lag, so AU is unchanged); closeBooks.ts reads staticProfile(... |
+| D-1155 | seedForMarket(profile, fxRow) (A4, D-1107): src/lib/arena/seed.ts; fixed returns the amount at rate 1 and no FX row; fx_rounded returns round_half_up(from_am... |
+| D-1156 | Recorded-day reader per market, lower-case folders (IN1, S1 hand-off a, D-1119): readRecordedDay(dir, { date, market }) and recordedRootOf(market) read recor... |
+| D-1157 | ARN-119 first posting (IN1, S1 hand-off b, D-1107): ensureCohorts (the close-books night's cohort start stage) reads the FX close stored by the switch to ful... |
+| D-1158 | Band lock has no clock (IN1, Fable review, D-1109, D-1163, D-1169): an exit on a code stuck at its LOWER circuit waits indefinitely at the locked mark, becau... |
+| D-1159 | Integration evidence (integration, D-1126, D-1147, D-1148, D-1149, D-1196): docs/M20_exit_evidence.md is complete except the values that need a CI run on the... |
+| D-1160 | Filing instants in the as-filed reader (A5, D-1111): a company-facts entry carries only the filing DATE, so a date-only filed_at is stored as the END of that... |
+| D-1161 | Company-facts parsing (A5, DAT-226): one fundamental_fact row per (concept, period end, accession); where a filing lists one period end for several durations... |
+| D-1162 | US halt model (A5, D-1110 F): stepHalt takes an optional HaltModel (viewFor, notices, noticeKind); with none it is the M15 machine unchanged (AU hashes). |
+| D-1163 | Band lock in the fill model (A5, D-1109 F): fillOrder cancels an ENTRY with reason band_locked when FillOrderEnv.bandLocked is true (gate, then halted, then... |
+| D-1164 | A code on the ASM or GSM surveillance list takes no new entry, as promotion trigger 3 (A5, D-1109, CTX-044). |
+| D-1165 | Classification readers (A5, D-1112): classificationReader returns { scheme, groupOf }; the real column is instrument.industry (D-1112's industry_group was a... |
+| D-1166 | Category maps (A5, D-1108): rows match on type (case-insensitive substring of the source type), item (any of an 8-K's item numbers), form (case-insensitive e... |
+| D-1167 | Data limits (A5, D-1115, D-1132): the survivorship caveat text and its lapse rule live in src/lib/market/seed/dataLimits.mjs, keyed by market, so reportCavea... |
+| D-1168 | Labels (A5, DAT-247, D-1121): label_item is read as the newest row per (source, ann_id); the count that gates evaluation is distinct labelled items per marke... |
+| D-1169 | Band locks are symmetric (A5, Fable review, D-1109): the model refuses every fill on a session that closes at either limit. |
+| D-1170 | Shared A4 carry-over closed (IN1, F, D-1154 items 1-4; the commit "M20 IN1 shared"): one module, src/lib/arena/marketMoney.ts, gives a market's settlement la... |
+| D-1171 | India macro rows are parsed and counted, not stored (IN1, DAT-243): macro_series.source is CHECK-limited to ('rba','abs') (migration 0036) and 0039 did not w... |
+| D-1172 | FAM-005 cost-gate notional per market (IN1, follow-on of D-1154 item 3): roundTripCost and selectEntries (EntryGateContext.market) take the market's notional... |
+| D-1173 | AT-69 gate-only clause with the index not pulled (IN1, D-1132): the Nifty 50 and India VIX series are "not pulled" (Yahoo is refused by robots). |
+| D-1174 | The announcement classifier moved to plain ESM (IN1): classify and writeAnnouncementCategory are now src/lib/market/classifyCore.mjs (+ .d.mts), logic unchan... |
+| D-1175 | Band lock wired (IN1, D-1109, D-1163, D-1169, A5 note): |
+| D-1176 | India batch 1 (IN1, D-1127, D-1125): sources/in/day.mjs prepareDay and runDay (calendar by isWalkDay, instruments, the universe snapshot with the market's ti... |
+| D-1177 | Recorded fixtures (IN1, D-1119, D-1092): praxis-app-fixtures/recorded/in/<date>/ for the five consecutive sessions 2026-11-05, 06, 09, 11 and 12 (2026-11-10... |
+| D-1178 | AT-M report (IN1, D-1120): scripts/market/at-m-report.mjs --market IN/US --evidence <dir> writes docs/test-reports/AT-M-<CODE>.md from evidence files (source... |
+| D-1179 | Calibration IN not run (IN1, D-1114, D-1115, D-1132): the data repository's calibrate is a skeleton (the generalised M15 modules "come later"), and the extra... |
+| D-1180 | US sources and scripts (US1, D-1127, D-1092): the fetchers under src/lib/data/sources/us/ are plain ESM with .d.mts types (edgar, submissions, filings8k, for... |
+| D-1181 | US-P1 by date and the fee quantity (US1, F, D-1150, D-1154 item 5): src/lib/market/seed/us/costVersions.mjs holds four dated versions of US-P1 (2024-05-22: S... |
+| D-1182 | US classification, no migration (US1, D-1112, D-1165, A5 review note): submissions.mjs writeSicGroup writes the two-digit SIC group into instrument.industry... |
+| D-1183 | US filings as announcements (US1, D-1108, D-1166): one announcement row per accepted filing of the forms the category map has a row for (8-K, 10-Q, 10-K, For... |
+| D-1184 | US notices (US1, AGT-105): Form 4 yields a notice only from the open-market codes P and S, summed in micro-dollars, the larger side naming director_buy or di... |
+| D-1185 | US halts (US1, D-1110, D-1162): the Nasdaq halt feed maps LUDP, LUDS, T5 to luld, H10 to suspension, a market-wide breaker (MWC*) is skipped (no issue), ever... |
+| D-1186 | FINRA short data (US1, DAT-243): the daily short-sale volume file is stored in short_interest as short_ppm = round(short volume x 1,000,000 / total volume),... |
+| D-1187 | US universe and the cap (US1, D-1098, D-1132): symbols.mjs reads the two symbol directories and drops test issues, funds, warrants, rights, units, preferred... |
+| D-1188 | Synthetic US data (US1, D-1132, D-1094, D-1119): no robots-permitted free price source exists and the build machine has no EDGAR contact, so the US price bar... |
+| D-1189 | FRED (US1, D-1094): the client refuses without FRED_API_KEY (FredKeyMissing, no request) and checks the market first; it fetches and parses observations only. |
+| D-1190 | Next-year calendar watch reads the enabled markets (S1, D-1146 hand-off): enabledCalendarMarkets(db) in src/lib/data/calendarAdmin.ts is the enabled members... |
+| D-1191 | Checklist readers (S1, D-1100, MKT-105, MKT-111): src/lib/market/checklist.ts. licence_rows reads the stored register rows and, for a market that is still of... |
+| D-1192 | Seed from the activation day's FX close (S1, D-1107, ARN-119): src/lib/market/fxSeed.ts reads the newest macro_series row (source rba) on or before the day f... |
+| D-1193 | The switch writer (S1, D-1100, D-1101): switchMarket lives in src/lib/data/marketSwitch.ts (beside controls.ts, using its commit), is the only writer of mark... |
+| D-1194 | The rollback kill (S1, F, D-1101, CTX-028): src/lib/arena/kill.ts, called by closeBooksMain --kill market_off. |
+| D-1195 | Quota projection (S1, F, D-1099, MKT-113): src/lib/usage/projection.ts. projected = ceil(auMeasured x cap x sessionsMarket / (auCodes x sessionsAu)) + fixed... |
+| D-1196 | Markets page and Usage page (S1, UXN-312, D-1812): the Owner's "Switch on a market" card under the Markets table (MarketSwitch.tsx, loader loadMarketSwitch)... |
+| D-1197 | Per-market e-mail sections (S1, D-1124, D-1828, UXN-313, O-34): the Evening Review keeps the first enabled market as before and adds one section for every fu... |
+| D-1198 | The development-mode recorded days (S1, D-1119, TST-139, AT-85, AT-M4): job recorded-day-dev in ci.yml is a separate matrix job (IN, US) after app: the fixtu... |
+| D-1199 | Owner notes for the single V3 PR (S1): the deploy-order note of D-1129 (the Worker reads market.rollback_at before 0039 has run; expect at most one tick wind... |
+
+## M21 (M21_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1200 | Numbering and gate (BLD-054, BLD-049; requirements Gap 19): |
+| D-1201 | UXN-319 (Gap 1): the 35 items are classified as in §F by the spec's default rule ("accept if it is pure presentation on data the pages already load; reject i... |
+| D-1202 | UXN-320 (c) (Gap 2): the header theme toggle of D-171 was moved to Settings › Appearance by UXR-004/005; the clause is tested against that control. "Both siz... |
+| D-1203 | UXN-320 (a): the review frame becomes sandbox="allow-same-origin" without allow-scripts and is sized from its content on load, starting from a server estimat... |
+| D-1204 | UXN-320 (b): the strategy trades loader masks qty for masked roles (it showed share counts to every role; an O-54 correction, listed); a Size column renders... |
+| D-1205 | UXN-320 (d): "muted status bands" are the info, warn, stale banner tones and the neutral status strip; each gets a per-theme band token with text ≥ 4.5:1 on... |
+| D-1206 | UXN-321 (11): the "ASX codes" exception is implemented as "a word equal to the row's own code stays in capitals" (a code with a vowel, such as ANZ, would oth... |
+| D-1207 | UXN-322 (Gap 3): a muted alert can be unmuted by appending an armed row (latest cleared/muted, master toggle on, pick still listed); mute and unmute toasts o... |
+| D-1208 | UXN-323: a cut subject gets a zero-item pack with a domain-separated id (sha256("limit_cut/…")), which the reader maps to "Not written tonight: daily limit r... |
+| D-1209 | UXN-324 (a): roving tab index with arrow keys across nodes, a drawn focus ring per node, and each node's connections as focusable buttons in its panel (focus... |
+| D-1210 | UXN-324 (b) (Gap 18): one predicate hiddenFor decides in the proxy for page, RSC and API requests alike and is the same function the page guards call; signed... |
+| D-1211 | UXN-324 (c) (Gap 4): already automated by tests/blueprint/drawio.test.ts; |
+| D-1212 | Keys (Gap 5): ch. 15 "bool" keys are registered as "on"/"off" text (ON_OFF, the registry has no boolean kind and every Owner switch uses this form); all nine... |
+| D-1213 | committee_enabled (AT-76 M21 part): a key-specific refusal hook (switchRefusal) refuses "on" until the stored steelman health shows 10 qualifying nights at ≥... |
+| D-1214 | UX-131 (Gap 6): "Owner" is the pinned Owner (the Blueprint rule); the tools are visible only to the pinned Owner with owner_real_money_tools = "on", and answ... |
+| D-1215 | The proxy reads the switch through getConfigCached (60 s, per instance; an Owner edit clears the editing instance's cache, others follow within 60 s); a fail... |
+| D-1216 | UXN-314: Aggressive → Turbo, Balanced → Balanced, Conservative → Steady, labels only, on Owner-tool surfaces and the Owner's pick tiles while on. |
+| D-1217 | UXN-315 sizing (F): the night's sizing maths is extracted unchanged into sizeForAmount (pick rows and hashes identical) and reused with the Owner's capital (... |
+| D-1218 | UXN-317 (Gap 13): no broker template ships (the spec's "none hard-coded as supported"; checking brokers needs the internet); the Owner enters up to five temp... |
+| D-1219 | noBrokerLinks.test.ts keeps every pick surface clean; the one allowed external link on a pick tile is the Owner-tools BrokerLinks component passed in through... |
+| D-1220 | UXN-316: holdings are append-only uploads (manual or CSV: code, quantity, average cost; ≤ 200 rows, ≤ 64 KB); the page shows only thesis-breakers, the Owner'... |
+| D-1221 | ARN-121: owner_trade append-only with voids; matching pick = same market and code within the pick's alert window, newest; paper fill = pick_outcome.entry_mic... |
+| D-1222 | ARN-122 lot rules (Gap 17, F): specific lot = one trade row; |
+| D-1223 | ARN-122 placement: /reviews/tax, Owner only (403 for others), always available (§21.7 "on (Owner only)", not a §21.5 item); the trade-log variant appears onl... |
+| D-1224 | FAM-010 (Gap 10, F): a target CS rule (f<n>_target_r 1.0–5.0 or f<n>_target_pct 5–50, never both), triggered at the close and filled at the next open through... |
+| D-1225 | FAM-010 display: the D-885 indicative 2R target is retired everywhere; cards and the trades table show the real target or "No target", with "No target: this... |
+| D-1226 | EML-043 (Gap 11): the stop-hit e-mail reuses kind pick_cleared (variant stop_hit, its own key hash), so no email_message rebuild is needed and the cap, quiet... |
+| D-1227 | UXN-318 (Gap 8): the golden set is CTX-040's three labels (DAT-247, CXA-008), stored in a new append-only golden_label table with skip and unclear answers an... |
+| D-1228 | VAL-121 (Gaps 9, 14): selection, scoring and hypothesis as in §H, fixed before any computation (BLD-051); |
+| D-1229 | ARN-124 a–c (Gap M5): the three re-deferrals are a tested record with reasons and a refusal function; the "sources checked" are recorded offline from the kno... |
+| D-1230 | PLT-078 (Gap 16): app_public_domain is a confirmation the self-check compares with APP_BASE_URL, which stays the one origin that cookies, CSRF and Auth.js us... |
+| D-1231 | PLT-079 (Gap 15): web manifest; a static same-origin service worker that caches only the last / and /picks pages and the static assets, never an API, a write... |
+| D-1232 | The accepted set: UXN-008 shaped skeletons in SectionLoading; |
+| D-1233 | D-922 scan (Gap 7): a static scan of Owner-read sources plus a rendered-text check in the AT-82 walk, with an allow-list that needs a reason per entry. |
+| D-1234 | AT-82 matrix: the M21 surfaces × six themes × two widths × three roles in one spec; pages unchanged by M21 stay covered by their existing specs. |
+| D-1235 | AT-76/AT-77 clauses that need M22 (Gap 12): |
+| D-1236 | Renumbered at merge (orchestrator, 2026-11-16): |
+| D-1237 | AT-77 "switching on changes no book…": tests/acceptance/v3/at77Hash.test.ts runs the AT-32 golden world with owner_real_money_tools "on" and "off"; every tab... |
+| D-1238 | Generated files are not owned (constraints table): any task regenerates them; conflicts are resolved by re-running the generator. |
+| D-1239 | Owner notes for the single V3 PR: the switch is off and nothing of Phase R is visible until the Owner sets owner_real_money_tools to "on"; brokers are entere... |
+| D-1240 | A1 (config form): a new input kind "text_optional" (a text value that may be empty) is registered for app_public_domain only, and parseConfigInput returns an... |
+| D-1241 | A1 (switch guard): switchRefusal is called in updateConfig after the value is parsed and validated (the design said "right after configEditRefusal", before t... |
+| D-1242 | A1 (preferences): the three new fields live in Preferences with defaults off, 0 and []; stop_hit_emails is a pick field (stored only once chosen) read throug... |
+| D-1243 | A1 (seed states and the hash test): E2E_STATES=all keeps meaning the default-configuration states: owner-tools-on is opt-in (OPT_IN_STATES), so the rich lane... |
+| D-1244 | A1 (generated files): tests/test-map.baseline.json is not regenerated in A1 (its --update rewrites about 2,400 lines of earlier milestones; npm run test:map... |
+| D-1245 | A1 review fixes (Opus, 2026-11-16): the Owner-tool preferences are for the PINNED Owner (isPinnedOwner: role owner and the pinned e-mail), not any stored own... |
+| D-1246 | A2 (staged e2e lane): e2e/m21-owner-tools-on.spec.ts asserts the pinned Owner's 200 only for an Owner-tool page whose file exists, so the lane stayed green w... |
+| D-1247 | A2 (Opus review fixes, 63021255): every route handler and server action under the Owner tools calls its guard as the first await, because Next dispatches a s... |
+| D-1250 | E1 target keys (F, deviation from the design's "structural kind ratio"): f<n>_target_r and f<n>_target_pct are NOT entries of FAMILY_OPTIONAL_KEYS or CONFIG_... |
+| D-1251 | E1 target level and basis: the level is the smallest whole-micro close that triggers (R: entry + ceil(R x (entry - initial stop)); percent: ceil(entry x (1 +... |
+| D-1255 | C1 (index strip, masking): a masked user's index sparkline is drawn from the closes rebased to 100 at the first day, with "first day = 100" in its label, bec... |
+| D-1256 | C1 (skeletons, UXN-008): SectionLoading takes shape ("rows" default, "tiles", "chart") and draws static grey bars, hidden from assistive tech, with the label... |
+| D-1257 | C1 (frame, F): ReviewFrame shortens the frame to 320 px, reads documentElement.scrollHeight of the frame document on load and on window resize, and sets that... |
+| D-1258 | C1 (names, D-1206): displayName(name, { code }) keeps the word equal to the code in capitals; it is applied to the pick company (picks.ts), the review's new-... |
+| D-1259 | C1 (hand-off to C3): the signature C3 uses at pickAlerts.ts:239 is displayName(name, { code }), where code is the row's own instrument code; a missing or emp... |
+| D-1260 | B1 (picks isolation and the guard predicate): src/lib/ownerTools/ joins the allow-list of tests/picks/isolation.test.ts (it imports sizeForAmount and reads t... |
+| D-1261 | B1 (recommendations): the page groups tonight's picks by tier (Turbo, Balanced, Steady) and sizes each pick on its own against the whole of real_capital (lim... |
+| D-1262 | B1 (holdings): the current set is the upload with the greatest upload_id of the market (the id is the compact ISO instant plus a random suffix, so it sorts b... |
+| D-1263 | B1 (layout and menu): (owner-tools)/layout.tsx renders its children and nothing else, so a request a page guard turns away shows no text of the section; the... |
+| D-1264 | B1 (forms): the capital, broker-template and holdings forms post to server actions that call requireOwnerTools first; capital and templates are written throu... |
+| D-1265 | B3 (access): /reviews/tax and /api/reports/tax are not under the owner-tools prefix; both call requireUser("admin") (403 for others; the route uses withAuth,... |
+| D-1266 | B3 (log edge cases): a sale with no earlier buy in the log, or the uncovered part of one, is flagged with no cost and no gain; voided trades are left out in... |
+| D-1267 | B3 (paper-book edge cases): a cash merger, scrip merger or delisting (a zero-ratio ca_adjust) is a disposal on the ex-date in BOTH columns: proceeds are the... |
+| D-1268 | B3 (splits): splits, consolidations and bonus issues change shares, never cost. |
+| D-1269 | B3 (listing, CSV, wording): a strategy with no sale in the year is not listed; the log CSV is praxis-trade-log-gains-<market>-<fy>.csv. |
+| D-1270 | C3 (unmute service): the unmute legality lives in src/lib/alerts/pick/unmute.ts (unmuteAlert), not inside the action, so it is tested on a migrated database... |
+| D-1271 | C3 (stop-hit trigger and send): the poll collects a stop-hit item for each alert that stayed hit this tick (no transition) with a usable delayed price under... |
+| D-1272 | C3 (quiet hours and the cap for the stop-hit mail): during a user's quiet hours the stop-hit mail is neither sent nor claimed and is not held to a digest (pi... |
+| D-1273 | C3 (template, AU unchanged): the stop-hit text is a new stop_hit variant of renderPickCleared; the below_stop and above_chase_cap variants, the hit mail and... |
+| D-1274 | C3 (My alerts UI): a muted alert shows a "Muted" chip with "Unmute"; mute and unmute each show a toast with Undo that runs the opposite action (the toast is... |
+| D-1275 | B2 (matching and input): a buy is matched to the newest stored pick of the same market and code whose pick date is before the trade date and whose trade date... |
+| D-1276 | B2 (comparison maths, F): slippage = round_half_away((price - paper) x 1,000,000 / paper) ppm, shown as a signed percentage with two decimals by integer math... |
+| D-1277 | B2 (monthly table): one row per calendar month of the trade date, newest first: trades compared (those with a paper price), the mean of their slippage (round... |
+| D-1278 | B2 (writers, readers, access): src/lib/ownerTools/tradeLog/store.ts is the only module that inserts into owner_trade / owner_trade_void (typed and csv source... |
+| D-1279 | B2 (bounds and wording): the log is read keyset by id, 500 rows a page, at most 10 pages (5,000 trades; a banner says when the log is longer), the newest 100... |
+| D-1280 | P1 (service worker scope, supersedes the page cache in D-1231): the worker caches no page at all, including / and /picks, because a signed-in page carries us... |
+| D-1281 | P1 (domain check): appBaseUrl takes an optional run context { publicDomain }; with a domain set the host must equal it (case-insensitive; https, no path, por... |
+| D-1282 | P1 (offline badge and install row): OfflineBadge (root layout, client only, useSyncExternalStore on online/offline) reads "Offline: the figures shown may be... |
+| D-1283 | P1 (no push, tested): tests/security/noPush.test.ts scans src and public for push subscription, permission request and notification calls and checks the pwa_... |
+| D-1285 | C2 target source: the trades loader reads the execution's rule version params_json once (one row by primary key, rows-ok) and calls E1's targetOf per trade w... |
+| D-1286 | C2 delayed target flag: no intraday high is stored, so "the delayed high of the session reached the target" uses the delayed last price of a later day (the o... |
+| D-1287 | C2 Size column (UXN-320 b, D-1204): the loaders set qty: null for a masked viewer in both strategyViews and strategies (an O-54 correction); the trades table... |
+| D-1290 | CI (app job time limit): the app job's timeout-minutes goes from 30 to 45. |
+| D-1291 | CI e2e (run 43958715586): the PWA spec proved "no notification prompt" by reading Notification.permission, but headless Chromium answers "denied" before any... |
+| D-1295 | R1 switch (VAL-121, D-1228): the shadow short is OFF unless a config_version row with key short_shadow_enabled, scope the market, says "on" (src/lib/shortSha... |
+| D-1296 | R1 selection and scoring details fixed before any computation (BLD-051): |
+| D-1297 | R1 evaluation: evaluateShort runs inside the same batch 3 call and takes the ONE look only when at least 60 closed setups on at least 60 sessions exist (the... |
+| D-1300 | L1 (UXN-318, D-1227): /cortex/labels is a registry page for the admin action (Owner only; every other role gets the 403 page), not a hidden route: it needs n... |
+| D-1301 | L1 (queue and count): nextUnlabelled returns the newest announcement of the market with no golden_label row of any answer, so a skip or an unclear flag takes... |
+| D-1302 | L1 (independence): golden.ts, the loader and the page read none of text_label, label_validation or label_item (a test asserts every statement the page issues... |
+| D-1303 | L1 (keyboard): the three groups are native radios (Tab enters a group, arrows move inside it); 1 to 4 choose within the focused group, S skips, U flags as un... |
+| D-1305 | C7 (UXN-062, D-1201): the Leaderboard card is ControlsSummary, drawn from lb.data.strategies and lb.data.controls with no new query. |
+| D-1306 | C7 (UXN-154): ConcentrationChart is hand-drawn SVG (D-128): a donut for 12 items or fewer (DONUT_MAX), a treemap above (a balanced binary split along the lon... |
+| D-1307 | C7 (UXN-255): FamilyGroups is a server component with one native <details> per family, closed by default, listing that family's strategies as links to their... |
+| D-1308 | C7 (words): none of the three shows a family code, strategy code or internal id; family names come from the stored names table the page already loads. |
+| D-1309 | C7 (test lane): e2e/m21-crosscheck-accepted.spec.ts runs in the rich lane on the existing seed (six strategies, one held position, E03 and E04 finished round... |
+| D-1310 | C4 (cut pack): steelmanNight stores, after the written subjects, one zero-item steelman_pack per subject cut by steelman_daily_cards (items_json "[]", item_c... |
+| D-1311 | C4 (words and count): readSteelmanForCard returns not_written with reason daily_limit for a cut pack whatever the night row holds, and the card shows exactly... |
+| D-1312 | C4 (readers): no module outside src/lib/steelman gains a steelman import, so tests/security/steelman-readers.json is unchanged and steelman-readers stays green. |
+| D-1315 | C5 (bands): the four muted bands are solid per-theme tokens --band-info, --band-warn, --band-stale, --band-neutral in palette.tokens.json (each the theme's s... |
+| D-1316 | C5 (components): Banner gains the tone stale (text colour, --band-stale); info sits on --band-info, warning on --band-warn, danger keeps the plain surface; e... |
+| D-1317 | C5 (emulation spec): the Settings control is the Appearance radio group and Save; the comparison is the computed token set (colours, three hue fills, the fou... |
+| D-1318 | C5 (vibrancy): the e2e data is fresh, so Home shows no stale banner; the vibrancy test places one element in the Banner's markup (data-band="stale", the band... |
+| D-1320 | C6 (UXN-324 a, keys): the nodes have one tab stop (the node last focused, else the open one, else the first in reading order: columns left to right, rows top... |
+| D-1321 | C6 (edges): an edge is not a tab stop (a view has over a hundred, so each would add a stop and the Platform walk would be unusable); it is reached from the p... |
+| D-1322 | C6 (focus ring): the focused node draws a 3 px ring (--color-focus) 4 px outside its box, as an SVG rect inside the node group; the group's own browser outli... |
+| D-1323 | C6 (export links): the diagram shows "Export as draw.io" and "Export as SVG" beside the element count, as plain links to the existing route for the shown view. |
+| D-1324 | C6 (evidence and lane): docs/test-reports/AT-59.md (c) cites tests/blueprint/drawio.test.ts and export.test.ts as the automated proof (D-1211) and adds the k... |
+| D-1325 | Z (scan, D-1233): scripts/ci/internal-codes.mjs reads string literals (template literals by their static text, the code inside ${ } in turn) and, in .tsx, JS... |
+| D-1326 | Z (first run of the scan): 69 hits in 22 files, 48 left after the SQL rule. |
+| D-1327 | Z (AT-82 walk, D-1234): e2e/m21-at82.spec.ts runs in the owner-tools-on lane (E2E_STATES=all,owner-tools-on, scenario rich) because the Owner-tool pages exis... |
+| D-1328 | Z (rendered-text exceptions): the walk does not read the page text of /blueprint (a spec browser for the Owner whose purpose is to show requirement and decis... |
+| D-1329 | Z (the U0 test): scripts/ci/ui-crosscheck.test.mjs, named in the design's U0 row, had not been written by U0; |
+| D-1330 | CI fixes after run 43992252704: the alerts-muted seed uses a 64-hex alert id (the unmute action refuses any other shape as invalid, so the e2e never reached... |
+| D-1331 | CI fix after run 44002592203: the D-922 patterns and matchPatterns move to scripts/ci/internal-code-patterns.mjs (no file-system or import.meta use), re-expo... |
+| D-1332 | CI fixes after run 44008882224 (the AT-82 walk now loads and finds real faults): the two Owner-tool CSV file inputs (holdings, trades) carry an accessible na... |
+| D-1333 | CI fix after run 44017363748: every sideways-scrolling table box with nothing focusable inside (trades months, tax, card, nights check, usage, projection) ta... |
+
+## M22 (M22_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1400 | Numbering and gate: M22 decisions are D-1400…D-1499 in this file; tasks start on build at or after 8b65abc6 (M21 done); the M21 CI run on build recorded in B... |
+| D-1401 | One factory decides live routing (LLM-077, Gap 2 of LLM routes): src/lib/llm/factory.ts returns a live chain for a role only when the role (or words for the... |
+| D-1402 | Role names in the key and in words: llm_live_roles accepts R1, R2, R3, R5, R6, R7 and words (there is no R4 in code, budget.ts:7); the words phase is gated b... |
+| D-1403 | Bake-off reports and index: reports stay at docs/test-reports/ (the folder bakeoff-review.mjs already reads); a generated src/lib/llm/bakeoffIndex.generated.... |
+| D-1404 | Per-role verdict: a role passes for a model when every check of the role's categories and of the injection category passes and its trains-on-prompts value is... |
+| D-1405 | One run per candidate per golden version (BLD-051 spirit): the thresholds are the fixed THRESHOLDS (bakeoff.ts:45-54) plus D-1409, written into the report be... |
+| D-1406 | Live bake-offs in M22 (requirements Gap 1): the approved-commit rule of llm-bakeoff.yml (SEC-108 c) stays; the integration task dispatches it on release with... |
+| D-1407 | Roster refresh (LLM-070 [VERIFY roster]): |
+| D-1408 | Tiers (LLM-080): tier small (≤ 20B or "lite"/"instant"), medium (about 27–70B or "flash"), large (≥ 100B or "pro"); |
+| D-1409 | New golden categories (LLM-081, LLM-063): words ≥ 10 items (JSON valid ≥ 98 %, invented numbers 0, injection resistance 100 %, and zero hits of the D-922 pat... |
+| D-1410 | Budget buckets (requirements Gap 2): Role gains R7; |
+| D-1411 | Drop order with caps: expert_ingest and committee take their bucket caps, pick_reflection spends R6 and is reserved before the steelman for the picks settlin... |
+| D-1412 | Where LLM keys live (LLM-077): only GitHub production-environment secrets, referenced in the env: of the signals step of arena-signals.yml and of the experts... |
+| D-1413 | Workers AI through the REST API (requirements Gap 5): the router runs in GitHub Actions, so the adapter calls Cloudflare's Workers AI REST endpoint with a to... |
+| D-1414 | MiniLM model and runtime (LLM-079 [VERIFY size]): all-MiniLM-L6-v2 in ONNX form (Apache-2.0), its sha256 and size pinned in src/lib/llm/minilm/model.lock.jso... |
+| D-1415 | MiniLM head and training: a multinomial logistic head over the embeddings, trained by scripts/llm/minilm-train.mjs on the rule classifier's labels in the loc... |
+| D-1416 | MiniLM use in V3: shadow only; nothing reads minilm_shadow (reader test). |
+| D-1417 | Committee timing and forward-only (AGT-132): the Committee runs in the signals workflow after the steelman and the reflections, only for the current session,... |
+| D-1418 | Committee models (LLM-010): bull and bear from different providers or model families when the passing set has two, else the rating records same_family = 1; t... |
+| D-1419 | Call records (LLM-066): every Committee call stores its prompt hash, pack id, provider, model id, the model version string the provider returned, parameters,... |
+| D-1420 | Pre-registration (VAL-111): the first Committee night of a trial writes committee_prereg version 1 before any rating, with the frozen horizon, sessions, mini... |
+| D-1421 | Trial statistic and verdict (VAL-111): D = mean approve outcome minus mean reject outcome; the null from within-night label permutations (committee_permutati... |
+| D-1422 | Committee outcomes (ARN-105): the rated signal's forward ledger_row net at the family exit or committee_horizon_sessions, whichever is first; a signal withou... |
+| D-1423 | Trial page and hidden ratings (UXN-289, UXN-290): /strategies/experiments/committee for Owner and Editor, Viewer masked; ratings appear nowhere else (cards,... |
+| D-1424 | Reflections are written by R6 (requirements Gap 3): |
+| D-1425 | Reflection display: "Looking back (AI-written)" under a settled pick in the track record; the first Evening Review of each month carries "Unproven notes", at... |
+| D-1426 | AT-32 complement own-set (requirements Gap 10): tests/acceptance/v3/at32Opinions.test.ts reuses the at32Steelman proof with the own-set extended by exactly c... |
+| D-1427 | Opinion kinds measured (requirements Gap 7): lift meters for steelman and Committee from opinion_track; reflections are written after the outcome and get no... |
+| D-1428 | Promotion request (AGT-148, CTX-060): one opinion_promotion_request row per market and kind, ever, written when the settled count reaches opinion_min_n, the... |
+| D-1429 | Expert jobs ride on the nightly maintenance dispatch (requirements Gap 4): a new experts job in maintenance.yml runs the poll daily, the discovery on Sundays... |
+| D-1430 | Licence status rules (KB-083): robots disallows or terms forbid → no; robots allows and summarising is permitted → enabled; robots allows and summarising unk... |
+| D-1431 | First check and privacy (requirements Gap 8): the build machine runs the first check of every seed source into the private seed folder (licence-check.json),... |
+| D-1432 | Rules-only triage and extraction (LLM-067, LLM-068): with no live R1/R2 the triage answer is "unknown", items stay pending and are shown as waiting for a mod... |
+| D-1433 | Discovery (DAT-229 [VERIFY quotas]): co-mentions of authors in tracked experts' items only; platform search APIs stay blocked (no register row enabled); red-... |
+| D-1434 | Poll priority (DAT-230): daily for experts with an L1+ cluster or a positive confirmed call record, weekly for experts whose tested claims are all rejected a... |
+| D-1435 | Call proposals (KB-084, requirements Gap 9): a deterministic extractor gives the rules answer and the seed proposals; index and macro targets are not_trackab... |
+| D-1436 | Grammar v2 (KB-085): RULE_SCHEMA_VERSION 2 adds rel_sector, persist and ratio; family rule versions stay v1 and byte-equal, the loader refuses v2 for a famil... |
+| D-1437 | Cluster expressions (KB-085, requirements Gap 9): one expression per parked cluster lives in the private expressions.json (rule, exit from a fixed menu: the... |
+| D-1438 | Park reasons for the re-screen: blocked_data (needs data the system cannot get), needs_intraday, discretionary (needs judgement no rule can state), overlay_o... |
+| D-1439 | Alt inputs per market (DAT-248, requirements Gap 6): |
+| D-1440 | Alt-input pre-registration (DAT-248, BLD-051): hypothesis = on sessions where the alt reading is more cautious than the base, the next-20-session index retur... |
+| D-1441 | Display of both readings: with regime_altinputs_enabled = "on" the Cortex page shows the base and the shadow reading side by side in plain words; the key cha... |
+| D-1442 | DAT-249 and DAT-250 stubs: src/lib/deferred/sources.ts records each as rejected with its reason and the date checked; a test proves no fetcher, host or key e... |
+| D-1443 | Sweep conditions (AGT-147 [VERIFY batch endpoint]): the batch endpoint has its own pending register row; the sweep runs only with intraday_sweep_enabled = "o... |
+| D-1444 | Migration 0042 (one, first): thirteen tables as section A, eight of them market-keyed with generated guards; no earlier table changed; schema pins at 39. |
+| D-1445 | Switch guards as a registry: src/lib/config/guards/*.ts, one file per guarded key, each owned by one task; a failed read refuses (fails closed), as the M21 C... |
+| D-1446 | Health lines and plain words: each task delivers a pure line function; |
+| D-1447 | AT-73 shared part: tests/acceptance/v3/at73Shared.test.ts holds the 20-fixture proposal set for call proposals (valid, incomplete, duplicate, hostile text, o... |
+| D-1448 | Acceptance test files: M22 clauses go to split files (at76Trial, at76Reflections, at77WorkersAi, at77Sweep, at79Fetch, at79Calls, at79Clusters, at80Routes, a... |
+| D-1449 | Owner steps for the PR: dispatch the words and Committee-judge bake-offs after the merge and add any passing role to llm_live_roles; import the seed (format... |
+| D-1450 | Migration 0042 as built (A1): the thirteen tables of D-1444 exactly, each STRICT with a -- +down; beyond the design text only closed-shape checks (hex shas a... |
+| D-1451 | Register rows (A1, requirements Gap 8): polymarket_public, kalshi_public and yahoo_delayed_batch are defined in code (PENDING_SOURCE_ROWS in scripts/ci/licen... |
+| D-1452 | Seed states (A1): committee-trial switches the Committee on in the throwaway database, so it is opt-in like owner-tools-on (OPT_IN_STATES; a lane names it: E... |
+| D-1453 | AT-32 complement (A1): tests/acceptance/v3/at32Opinions.test.ts hashes every table except the steelman's own and exactly the eight of D-1426; the five other... |
+| D-1454 | Schema pins (A1): every pin moves from 38 to 39 (migration tests, backup, CLI, rollback runbook). |
+| D-1455 | Key shapes (task A2): llm_live_roles is stored as a JSON array of distinct names from R1, R2, R3, R5, R6, R7, words and edited as text (a new input kind word... |
+| D-1456 | Budget bucket rule (task A2, D-1410): budgetKey selects the cap, the usage sum and the llm_call.role value; the default is the request's role, except that R7... |
+| D-1457 | Reflection reservation (task A2, D-1411): reserveAfterLeft(stage, params, market, usage, reflectionReserve = 0) adds the reserve (limited to the R6 cap still... |
+| D-1458 | Guard registry (task A2, D-1445): GUARDS is a Partial<Record<ConfigKey, Guard>> (only guarded keys appear; a total record over all keys would be noise), Guar... |
+| D-1459 | Nightly seam (task A2, D-1401): src/lib/llm/nightlyLlm.ts exports nightlyLlm(ctx) giving routerFor(role), providers and store; it is rules-only and builds no... |
+| D-1460 | Factory is synchronous over a pre-read list (task L1, D-1401): routerFor(role, ctx), liveRoutes(ctx) and routesStatus(ctx) take ctx.liveRoles already read (r... |
+| D-1461 | Chain rules (task L1, D-1401, D-1408): a passing model joins a role's chain only when its roster row is not retired, trainsOnPrompts is exactly false (unknow... |
+| D-1462 | Role words and gates (task L1, D-1402): ROLE_WORDS (in roster.ts): |
+| D-1463 | Health line (task L1, D-1446): src/lib/health/llmRoutes.ts shows one line per switched-on job, or one calm line when none is; it is computed without a key ch... |
+| D-1464 | Index and guard details (task L1, D-1403, D-1404): per role the newest covering report wins by its Date, then its Run id (numeric-aware), then a FAIL over a... |
+| D-1465 | Committee budget check (task C1, D-1410, D-1411): the night checks the four calls of a signal against the Committee bucket, the daily total and the nightly c... |
+| D-1466 | Injected model side (task C1, D-1401, D-1417): committeeNight takes CommitteeLlm (routerFor(role, select) with select = only or avoid provider ids, null when... |
+| D-1467 | What is written and when (task C1, D-1417, D-1420): nothing when the switch is off, a replay flag (--replay, --recorded, --recorded-day) is set, the date is... |
+| D-1468 | Model choice (task C1, D-1418): "family" is the provider id. |
+| D-1469 | Call records (task C1, D-1419, LLM-066): the router hands back the validated answer, not the provider's text, so raw_response holds that answer's JSON (at mo... |
+| D-1470 | Licence engine (task E1, D-1430): the check logic is one plain module, src/lib/experts/licence/engine.mjs (+ .d.mts), because the build-machine script (scrip... |
+| D-1471 | Status decision as built (E1, D-1430): robots disallows or the terms forbid gives no; robots allows or has no file gives enabled (summarising unknown is titl... |
+| D-1472 | Accept the risk (E1): acceptRiskAction in [id]/actions.ts is gated by requireUser("admin") (Owner only; an Editor and a Viewer are a 403) and the service acc... |
+| D-1473 | Monthly mode (E1, D-1429): runMonthlyLicence(db, deps) in check.ts is the entry the experts job calls on every run; it does nothing (returns null) when an ex... |
+| D-1474 | Terms reader and first-check file (E1): readTerms is a conservative phrase reader over the text of the first terms page found (tags and scripts removed, cut... |
+| D-1475 | Neuron estimate and the day's spend (task L3, D-1413): the adapter charges ceil((prompt chars / 4 + max output tokens) x 250 / 1000) neurons per call before... |
+| D-1476 | Off by construction (task L3, D-1413): providerForRoster takes dailyNeurons (absent = 0), and the factory today passes none, so a Workers AI route is unavail... |
+| D-1477 | Host and AT-77 (task L3, D-1413): api.cloudflare.com joins LLM_PROVIDER_HOST_SUFFIXES (so the recorded-day guard names it); the M21 clause of AT-77 that forb... |
+| D-1478 | Fetch guard (E2, KB-082, D-1429): every request of the experts job goes through guardedFetch (src/lib/experts/poll/guard.ts) in front of pollFeeds. |
+| D-1479 | Poll job as built (E2, D-939, D-1430, D-1434): one run a day (a poll row per day, a second run does nothing). |
+| D-1480 | Discovery and the Sources page (E2, DAT-229, UXN-296, D-1433): |
+| D-1481 | Triage and extraction as built (E2, LLM-067…069, D-1432): only when BOTH R1 and R2 are live tonight (nightlyLlm(...).status) does anything run; otherwise not... |
+| D-1482 | The experts job (E2, D-1429, D-1412): experts in maintenance.yml, production only (staging is retired), on release, the same approved-commit steps as the pro... |
+| D-1483 | Boundary test (E2, PRD-035, D-525): src/lib/experts/poll is the one folder under src/lib/experts that may reach the web and a model, so tests/security/expert... |
+| D-1484 | Health line (E2, KB-082): loadExpertsHealth appends the polling line only once a poll run exists (so the line is unchanged before the job first runs): "Readi... |
+| D-1485 | Words and judge categories as built (task L2, D-1409): words (router role R3) is scored by JSON valid >= 98 %, invented numbers 0, hostile items resisted 100... |
+| D-1486 | Role verdicts and report format (task L2, D-1404): a run writes - Roster checked: <day> and a ## Role verdicts table (/ Role / Model / Result /, roles R1, R2... |
+| D-1487 | Refusal of a re-run (task L2, D-1405): a live run is refused (exit 2, nothing called) for a model that an earlier report of the reports folder (--reports, de... |
+| D-1488 | Review script (task L2, D-1404): bakeoff-review.mjs has KEY_AVAILABLE = true, lists the role verdicts of every report and prints one llm_live_roles: add <rol... |
+| D-1489 | Roster refresh of 2026-11-17 (task L2, D-1407): the provider pages were read with a fetch tool on that day (what was read is in docs/llm-roster.md). |
+| D-1490 | Reflection facts and answer (task C3, D-1424, AGT-134): one call per pick that settled in the session (pick_market.settled_d = the session, kind pick, no pic... |
+| D-1491 | What is written and when (task C3, D-1424): pick_reflection is the only table written (plus the call log through the router's store); one append-only row per... |
+| D-1492 | Forward only and the entry (task C3, D-1417 pattern): reflectMain(argv, env, deps) in src/lib/steelman/reflectCli.ts refuses a replay flag and any date but t... |
+| D-1493 | Reservation (task C3, D-1411, D-1457): reflectionReserve(db, market, d) = the picks settling in the session times reflectionCallReservation (the worst case o... |
+| D-1494 | Display (task C3, D-1425, UXN-288, O-54): the track record loader sets lookingBack on a settled pick's row from its written reflection; the row shows "Lookin... |
+| D-1495 | Trial steps, trial id and the look (task C2, D-1420, D-1421, BLD-051): the nightly run gains two small steps around the Committee night, trial prereg before... |
+| D-1496 | Statistic and null as built (task C2, D-1421): |
+| D-1497 | Verdict rules as built (task C2, D-1421): "sessions" are the nights with at least one committee_rating row (skipped nights count: the trial runs in calendar... |
+| D-1498 | Outcomes as built (task C2, D-1422, ARN-105): one statement joins the trial's real ratings to ledger_row by signal id (forward, closed rows only; the smalles... |
+| D-1499 | Trial page and health line as built (task C2, D-1423, UXN-289, UXN-290): /strategies/experiments/committee takes the read action (every signed-in role) and t... |
+| D-1500 | Pin, lock and what "the lock hash mismatches" means (task L5, D-1414): onnxruntime-node is pinned exactly at 1.31.1 (published 2026-10-26, more than two week... |
+| D-1501 | Head and trainer (task L5, D-1415): the classes are the rule classifier's own categories (classifyAnnouncement, AGT-011), so the head's labels are whatever t... |
+| D-1502 | What the shadow stores and compares (task L5, D-1416): one minilm_shadow row per announcement (primary key market, day, source, announcement id) with the rul... |
+| D-1503 | Nobody reads it (task L5, D-1416): tests/security/minilmReaders.test.ts keeps the table named only by the stage and the health line (and the trigger generato... |
+| D-1504 | Entry and health as built (task L5): minilmMain(argv, env, deps) in cli.ts (shadow, default, and embed; --model and --vocab are flags, so no new environment... |
+| D-1505 | Call engine (task E3, D-1435, D-543): the rules extractor is one plain module, src/lib/experts/callEngine.mjs (+ .d.mts), because the seed script and the imp... |
+| D-1506 | Model answer (E3, D-1435): CALL_ANSWER_SCHEMA (code, direction, date, horizon number and unit, price basis) and parseModelAnswer: an answer is accepted only... |
+| D-1507 | Stored proposals (E3, D-1435): proposalIdOf is the hash of the claim and every field, so the same proposal has one id and storeProposal is insert-or-ignore o... |
+| D-1508 | Confirmation (E3, D-1435, D-524, AT-79): confirmCall (one click on the proposal shown) and confirmTypedCall (the editable form: code, direction, date, horizo... |
+| D-1509 | Seed proposals and boundary (E3, D-1435, D-543): scripts/experts/call-proposals.mjs --seed <folder> [--dry-run] [--universe <file>] re-extracts a proposal fo... |
+| D-1510 | L5 merge (orchestrator): the onnxruntime-node pin and its lock-file regeneration are left out of the merge. |
+| D-1511 | Nightly order (task L4, D-1417, D-1460): after the picks, scripts/arena/signals.mjs runs, each in its own bundle and each soft (one degraded line, exit code... |
+| D-1512 | Workers AI stays unwired (task L4, D-1476, D-1413): the factory still passes no dailyNeurons, so a Workers AI route is no_key and neither reads a secret nor... |
+| D-1513 | Model keys and the stored copy (task L4, D-1412): the three model-key secret names are NOT in arena-signals.yml in this task. |
+| D-1514 | MiniLM step (task L5 hand-off, D-1504, D-1510): minilmMain(["shadow", "--model", <path>, "--vocab", <path>, "--date"?]) runs only when both models/minilm/mod... |
+| D-1515 | Reflection reservation and the selection (task L4, D-1493, D-1466): steelmanMain computes reflectionReserve(db, market, d) and passes it through steelmanNigh... |
+| D-1516 | Trial wiring (task C2 hand-off): trialMain(["prereg"]) before and trialMain(["result"]) after committeeMain, each forward-only and soft. |
+| D-1517 | Meters (task C4, D-1427, AGT-148, CTX-060): src/lib/opinions/meter.ts measures the two kinds that have a forward meter, per market. |
+| D-1518 | Judge versions and stability (task C4, D-1428): the judge-model versions seen are the Committee's judge_model and, for the steelman, the smallest author_mode... |
+| D-1519 | Promotion request (task C4, D-1428): src/lib/opinions/promotion.ts: requestPromotion is one insert-or-ignore on opinion_promotion_request (primary key market... |
+| D-1520 | Entry, page and health as built (task C4): opinionMetersMain(argv, env, deps) in src/lib/opinions/cli.ts (flag --date, replay flags refused, counts only, alw... |
+| D-1521 | Grammar v2 as built (task E4, D-1436): RULE_SCHEMA_VERSION stays 1, because that constant is what a family rule version and every stored rule_version row car... |
+| D-1522 | Evaluator and exit menu as built (E4, D-1437): src/lib/experts/ruleEval.ts is pure and reads a RuleDataSource (codes, a field value by code and date, sector,... |
+| D-1523 | Importer format 2 as built (E4, D-1437, D-1471, D-1509): the manifest accepts praxis-expert-seed/1 or /2; the three optional files (licence-check.json, call-... |
+| D-1524 | Screening as built (E4, D-1437, VAL-112): eligibleExpressed (src/lib/experts/expressed.ts) selects clusters that are confirmed by a person, end-of-day testab... |
+| D-1525 | express-check (E4, D-1437, D-1438): scripts/experts/express-check.mjs --seed <folder> loads the seed with the importer's own loader (shape errors first), run... |
+| D-1526 | Boundary and the holdout (E4, PRD-033, VAL-112): the new expert code reads nothing trading-side and writes nothing: ruleEval.ts and expressed.ts import only... |
+| D-1527 | Alt reading as built (task E5, D-1439, D-1440): src/lib/regime/alt/{inputs,rule,shadow,evaluate}.ts. |
+| D-1528 | Macro series carry context only (task E5, D-1440): the stored reading lists the newest macro values, but the rule uses prediction-market probabilities alone,... |
+| D-1529 | One call, display only, and the look (task E5, D-1440, D-1441, BLD-051): batch 3 calls altRegimeNight once per session, soft, after the status look; it reads... |
+| D-1530 | Prediction-market fetcher (task E5, D-1439): src/lib/data/sources/predictionMarkets.mjs parses two fixture payload shapes and fetches only the sources whose... |
+| D-1531 | Sweep as built (task E5, D-1443, D-1442): src/lib/intraday/sweep.ts plans U1 then U2 batches of 20 codes (assumed batch size, [VERIFY] with the endpoint at a... |
+| D-1532 | Trial steps in the night (orchestrator, after the C2 and L4 merge): signals.mjs passes the night's own arguments to both trial steps (["prereg", ...argv], ["... |
+| D-1533 | AT-22 after the L5 merge (orchestrator): the annotation-boundary check reads every source file under src/lib/llm recursively (it read the folder flat and fai... |
+| D-1534 | Live bake-off dispatch not run (task Z, D-1406): the live bake-off of the Groq candidates is not dispatched during the build. |
+| D-1535 | Health lines wired (task Z1, D-1446): loadHealth carries m22 (a state and plain-word lines) built from loadLlmRoutesHealth (Owner only: the AI-jobs lines nam... |
+| D-1536 | Opinion meters in the night (task Z1, D-1520): signals.mjs runs opinionMetersMain last, soft like every stage after the picks. |
+| D-1537 | Expert calls and expressed clusters in the jobs (task Z1, D-1435, D-1506, D-1522): the experts job runs a propose step after the extraction (phases all and e... |
+| D-1538 | Number-literal scan (task Z1): the nine literals the merged tree left in bakeoff.ts, minilm/* and the example rule in ruleSchema.ts are not rule values (a he... |
+| D-1539 | AT-76 pointers (task Z1, D-1448): the two it.todo lines of at76.test.ts are replaced by one test that checks the split files exist (at76Trial, at76Reflection... |
+| D-1540 | Left for the Owner or a later task (task Z1; listed): the model keys in the signals step of the production job and its stored copy (D-1513), the Workers AI t... |
+| D-1541 | Two guard tests after the M22 merge (orchestrator, D-181, DAT-235): the full gate on the merged build failed two source scans. |
+| D-1542 | Two CI findings on the first M22 push (orchestrator): |
+| D-1543 | CI e2e finding on the M22 push (orchestrator): axe reported target-size (serious) on the expert-name links in the table of the sources page (/reviews/experts... |
+
+## M23 (M23_design.md)
+
+| Id | Decision |
+| --- | --- |
+| D-1600 | Numbering and gate: M23 decisions are D-1600…D-1699 in this file; tasks start on build at or after bc247714 (M22 done); the M22 CI run on build recorded in B... |
+| D-1601 | Time-box (K14): 10 build days, a build day being a Melbourne calendar day on which an M23 task ran; day 1 is the day A1 starts; a calendar backstop of 21 day... |
+| D-1602 | One vocabulary (K8): the registry stores PASS, NULL or INCONCLUSIVE, enforced by a new insert trigger on holdout_look; rows written before 0043 are never rew... |
+| D-1603 | Hash first: a look needs a research_prereg row with the same lineage, market and sha (trigger); preregister refuses a second, different text for the same lin... |
+| D-1604 | One writer: takeLook in src/lib/research/registry.ts is the only code that inserts into holdout_look (static test); a second attempt writes a holdout_look_re... |
+| D-1605 | INCONCLUSIVE and the look (K12): an item whose n floor is not met is INCONCLUSIVE without a look; n is counted on entries (setups, sessions, blocks) before a... |
+| D-1606 | Offline looks (history on the build machine): the committed docs/research/registry.json is the registry of record for offline items, append-only by seq, chec... |
+| D-1607 | Production sync: steps/lookSync.ts imports offline entries into research_prereg, holdout_look and research_result through the same gate each night (AU only w... |
+| D-1608 | Intraday cells (K7): each VAL-118 cell (v1, then one per quarter after a failed look, D-670) is its own registry lineage (intraday_stream_<cell>), with the e... |
+| D-1609 | F1.v2-mom (O-79): recorded as ledger entry 1 (lineage f1_v2_mom, AU, verdict NULL, note "stays in shadow under the gap cap"); its gap definition is never swi... |
+| D-1610 | Pre-registration files and reports: each item's hypothesis is transcribed from this document into docs/research/prereg/CXA-0xx.json (canonical JSON, fixed ke... |
+| D-1611 | Migration 0043 as designed in §A: eight market-keyed tables, two triggers on holdout_look, no earlier table rebuilt; |
+| D-1612 | Keys: the five §15.11.4 keys are registered fixed (no Owner edit); label_golden_min and survivorship_loss_assumed_pct replace the two constants by reading th... |
+| D-1613 | Night seam: one runResearchNight call after the Cortex night's movers step, skipped on replay, fail-soft, per enabled market, steps in a fixed order (lookSyn... |
+| D-1614 | Monitors in general: quarterly (first night after the quarter's last session), one row per monitor and market, value in value_json, alarm 0/1, plain-words Ow... |
+| D-1615 | Monitor 1 (K2): hit = a promotion-flagged U2/U3 code whose 20-session market-adjusted return after the flag is below 0; hit rate per quarter; and the mean ne... |
+| D-1616 | Monitor 2: once per market at calibration, 2,000 seeded simulated families under a null edge and under a planted edge equal to the family's minimum detectabl... |
+| D-1617 | Monitor 3 (K1): the slope's 90 % upper bound per family per quarter; alarm "Confidence figures are over-stated for <family>" when it is below 0.7. |
+| D-1618 | Monitor 4: count of positions whose stop came from the two-basis rule in the quarter, and how many of them closed on that stop; alarm when the count is above... |
+| D-1619 | Monitor 5: per family the share of the quarter's setups by regime; the label "one regime only" when one regime holds 90 % or more of them [PROPOSED]; no alar... |
+| D-1620 | Monitor 6: one record row (the chosen option: G10 abstains when disagreement exceeds cortex_disagreement_max; the reason in words) plus the quarter's G10 abs... |
+| D-1621 | Monitor 7: realised stall rate per family from the quarter's live and shadow outcomes against the expected rate recorded at calibration; where calibration re... |
+| D-1622 | Monitor 8: share of gate-passing setups that the fill model leaves unfilled per family (the outcome status named at M2 start [VERIFY]); alarm when it rises 5... |
+| D-1623 | Meters: one research_meter row per lineage and market per night (n, target, projected date by the trading calendar at the trailing 60-session rate, status);... |
+| D-1624 | CXA-005 meter: per family, the latest quarterly look's n_eff_live against 150 (live-tested) and the trade floor (cortex_min_neff_trade), projected from nEffL... |
+| D-1625 | CXA-014 pre-registration [PROPOSED] (no n or hypothesis exists in M15): one-sided 90 % block-bootstrap lower bound beyond 0 in the stated direction, block =... |
+| D-1626 | Survivorship in CXA-003 (K17): the AU extract holds survivors only, so the AU haircut is assumed, as M15 did (1 percentage point per 60 sessions held, D-893)... |
+| D-1627 | CXA-003 list (pre-registered). Common: market AU; universe U1 by the tier rule as of each session; entry at the next open after the signal session, exit at t... |
+| D-1628 | CXA-003 split and PASS rule (K15): the M15 split version (development before the M15 boundary, holdout after it, as in D-894 [VERIFY the date at R2 start]);... |
+| D-1629 | Runner and privacy: scripts/research/run-lineage.mjs takes the extract by --history, uses no network, writes rows only to an --out outside the repo, and comm... |
+| D-1630 | Who runs the looks: the R2 and R3 builders run them on the build machine in their task, after Opus has checked that the pre-registration commit precedes the... |
+| D-1631 | Lineages without history (K9): cxa003_earnings_drift (no announcement history, no AU statement parser), cxa003_index_incl (no historical index-change list; D... |
+| D-1632 | Sector series weighting (K4): equal-weight only; sector_index_weighting stays equal; value-weight rows are not written because no free shares-on-issue source... |
+| D-1633 | Backfill (K5): production stores the series forward from the first night after the merge; the backfilled history is computed on the build machine by the same... |
+| D-1634 | CXA-009 pre-registration (K6): monthly panel on the first session of each month; signal = the group's equal-weight return over the 126 sessions ending 21 ses... |
+| D-1635 | CXA-004 pre-registration (K3, K18): the counter is the number of distinct sessions with at least one timed archive item (pre-open, intraday, post-close) per... |
+| D-1636 | CXA-008 rules (K11): harness thresholds stability ≥ 0.90 on neutral paraphrases and flip ≥ 0.80 on tone-flipped ones [PROPOSED]; agreement threshold = the CT... |
+| D-1637 | CXA-007 job: role R2 (claim extraction) via nightlyLlm, budgetKey "R2", first session of each month, at most llm_proposals_per_month; envelope {kind: angle /... |
+| D-1638 | CXA-011 pre-registration: for every Cortex would-have hold (shadow and live arm) of families F1…F6 that sees a SHOCK session, the comparator raises the stop... |
+| D-1639 | CXA-012 records: the key replaces the constant; |
+| D-1640 | CXA-013 records: the AU source check reads the terms of each free candidate the register knows for AU company fundamentals at R4 start [VERIFY] and records t... |
+| D-1641 | Turso estimate: per AU night about 25 sector_index rows, 20 research_meter rows, under 5 shock_stop_outcome rows; 8 monitor rows a quarter; at most 3 proposa... |
+| D-1642 | LLM budget: the proposal run (about 15,000 tokens, first session of the month) and the live paraphrase run (about 20,000 tokens, the session on or after the... |
+| D-1643 | Page: four sections on the Cortex page in plain words (§D, task M4); proposal counts Owner-only; no rating, proposal or research figure on cards, picks or e-... |
+| D-1644 | Cut list (BLD-049), applied from the top when fewer than 2 build days remain and the remaining tasks will not finish: |
+| D-1645 | AT-32 own-set (tests/acceptance/v3/at32Research.test.ts): the eight 0043 tables plus trial_ledger (proposal charges) and app_log; every other table hashes eq... |
+| D-1646 | Roles and review: Opus reviews every pre-registration file against this document before its runner runs (R2, R3, T2, T4, M3, T1), every F task, and the exit;... |
+| D-1647 | Exit and the PR: Z writes the forward reports from the registry and meters on the exit day, the AT reports and docs/M23_exit_evidence.md; after M23, the V3 P... |
+| D-1650 | Registry triggers and the three legacy writers (A1): holdout_look_prereg_ins and holdout_look_verdict_ins exempt exactly the three lineages short_shadow, reg... |
+| D-1655 | Engine conventions (R1): a setup's net is in parts per million of its entry value (whole shares = floor(parcel / entry price), at least 1; one fee on each si... |
+| D-1656 | Sector IC conventions (R1): a month counts toward the floor when at least minGroupsPerMonth groups have at least minMembers members, from member counts alone... |
+| D-1657 | Report writer (R1): renderReport accepts a verdict only from PASS, NULL, INCONCLUSIVE, a 64-hex sha, and refuses any text that looks like a private path (dri... |
+| D-1660 | Golden floor read (T1): goldenMin(db) in src/lib/labels/store.ts reads label_golden_min through the config store and returns the constant 500 when the key is... |
+| D-1661 | Agreement (T1, D-1636): per label kind and market, over the distinct items with at least one labelled golden answer, the Owner's answer is the item's newest... |
+| D-1662 | Harness (T1, D-1636): per fixture item three calls (original, neutral paraphrase, tone-flipped paraphrase) through the R2 router; stability = items whose gui... |
+| D-1663 | Production shadow (T1, D-1636, D-1642): textLabelsEnabled(env, {r2Live}) is true in staging as before, or in any environment when the factory's status lists... |
+| D-1664 | Fixture (T1): tests/fixtures/labels/paraphrase-zz.json holds 30 synthetic ZZ items (five invented events, each in both directions), with the expected guidanc... |
+| D-1665 | Registry gate (A2): preregister(db, {lineage, market, item, frozen, now}) freezes one plan per lineage and market (a plan is a JSON object stored with sorted... |
+| D-1666 | The three first writers on the gate (A2): short shadow, outside-signal state and the Committee trial freeze their plan ({hypothesis} for the first two, the s... |
+| D-1667 | Offline ledger (A2): docs/research/registry.json is {format: 1, entries: [...]}, each entry {seq, item, lineage, market, sha, preregPath, lookedAt?, verdict?... |
+| D-1668 | Ledger import (A2): steps/lookSync.ts reads only the committed ledger and the files it names (a path with .. or an absolute path is not read), for the night'... |
+| D-1669 | Names and the page list (A2): names.ts holds a plain name and a kind (live or offline) per lineage (no market, no code); a test fails on a ledger or writer l... |
+| D-1670 | Series arithmetic (S1, D-1632): a member's return is round((close - previous close) x 1,000,000 / previous close), half away from zero, in whole ppm; a membe... |
+| D-1671 | Minimum members (S1, D-1634): the series keeps every group that has at least one counted member and stores n_members; the floor of 3 members is applied by th... |
+| D-1672 | Step reads (S1, D-1641): per night and enabled market, one probe for a row on the session or later (forward only and idempotent: a repeat or an earlier night... |
+| D-1673 | Panel hand-off for R3 (S1, D-1633, D-1634): sectorSeries(days) (oldest first, each day {d, close, members} with that day's code-to-group map, so a code that... |
+| D-1674 | Fixture (S1): tests/research/sectorFixture.ts holds a 3-group, 6-code, 5-session synthetic ZZ fixture with the hand-computed returns and levels (a 61 % move... |
+| D-1675 | Monitor runner and periods (M1, D-1614): src/lib/cortex/monitors/store.ts holds the one writer (INSERT OR IGNORE into residual_monitor, then one app_log warn... |
+| D-1676 | Monitor 1 data (M1, D-1615): flags are cortex_state rows of kind promotion in state flagged; a flag belongs to the quarter in which its 20th later session fa... |
+| D-1677 | Monitor 2 and 3 data (M1, D-1616, D-1617): the calibration period is cal-<date of the newest fitted map> (the map version), so a refit makes one new row. |
+| D-1678 | Monitor 4 data (M1, D-1618): no table records which stop a live position used, so the count is read from two stored facts: a window is a cortex_state corpora... |
+| D-1679 | Boundary and tests (M1, D-1614, AT-74): the monitors import no arena, agent, pick, order, e-mail, alert or status-writing module and write only residual_moni... |
+| D-1685 | Split boundary (R2, D-1628) [VERIFY resolved]: the M15 design freeze records development up to 2021-12-31 and validation from 2022-01-01; |
+| D-1686 | CXA-003 detectors (R2, D-1627), frozen in docs/research/prereg/CXA-003.json: all on the split-adjusted daily bars, the signal being known at the close of the... |
+| D-1687 | CXA-003 conventions (R2, D-1605, D-1628, D-1655): the tier of a session is assignTiers over the bars up to and including that session (60-session window, raw... |
+| D-1688 | CXA-003 ledger and report (R2, D-1606, D-1628, D-1631): the first commit freezes nine plans (six lineages and the three _p5000 variants) in docs/research/reg... |
+| D-1689 | Ledger merge of R2 and T2 (orchestrator, D-1606): both tasks appended to the same ledger from the same base, T2 as seq 2 to 24 and R2 as seq 2 to 16. |
+| D-1690 | CXA-004 set and lineages (T2, D-1635): the set is derived, not listed: an angle belongs when its registry needsData names the announcement archive and it rea... |
+| D-1691 | CXA-004 counter and meter (T2, D-1623, D-1641): the counter is the number of distinct session_d with at least one archive item of a timing class, per market. |
+| D-1692 | CXA-004 look path (T2, D-1605, D-1635): below 252 nothing is read but dates (the pure engine returns before its reader is called; a test proves it with 251). |
+| D-1693 | CXA-004 labels (T2, D-1635, D-1636): the three labels are evaluated as one family, and only on the night the angle looks are taken: if at least 70 % of the h... |
+| D-1694 | CXA-004 boundary, tests and a finding (T2, D-1645, D-1646): the step reads the archive, the calendar and its own tables and writes only research_prereg, rese... |
+| D-1700 | Monitor 5 floor (M2, D-1619, AT-74): the "one regime only" label needs at least GATE_DEFAULTS.regimeMinSetups (30) setups of the family in the quarter, and t... |
+| D-1701 | Monitor 6 record and revisit (M2, D-1620): the quarterly row records the option (abstain when disagreement exceeds cortex_disagreement_max, value read from t... |
+| D-1702 | Monitor 7 data (M2, D-1621; [VERIFY] answered): checked at M2 start, calibration stores no expected stall rate (no column, no cortex_map or family_status fie... |
+| D-1703 | Monitor 8 data (M2, D-1622; [VERIFY] answered): the exclusion status is the outcome fill_status = 'unfilled' (an entry the fill model did not fill: gap cap,... |
+| D-1710 | CXA-009 panel and window (R3, D-1634): the panel is the first session of each calendar month on the series' own session list (the dates that carry rows of S1... |
+| D-1711 | CXA-009 members and classification (R3, D-1633, D-1672): the backfill feeds sectorSeries with every session of the extract calendar; the members of a session... |
+| D-1712 | CXA-009 frozen parameters (R3, D-1634, D-1656): minMembers 3, minGroupsPerMonth 4 (the R1 suggestion, so a rank correlation is never taken on fewer than 4 po... |
+| D-1713 | CXA-009 look and verdict (R3, D-1605, D-1634): one lineage, sector_ic, one look over the full window with the engine's sectorIcLook; |
+| D-1714 | CXA-009 runner mode (R3, D-1629, D-1630): scripts/research/run-lineage.mjs --lineage sector_ic selects the sector mode; it reuses the argument parser, the ou... |
+| D-1715 | CXA-009 consequence and caveats (R3, D-1634): a PASS keeps F7 in shadow and records the result for the CTX-053 path; it changes no weight or status. |
+| D-1716 | CXA-009 result (R3, D-1634): the one look, taken 2026-11-17 from a clean tree at runner commit e9263f2b05d8 over the full window (2000-01-04 to 2026-10-22),... |
+| D-1717 | Ledger merge of M3 after R3 (orchestrator, D-1606, as D-1689): |
+| D-1720 | Meters in general (M3, D-1623, D-1613): the meters step writes, per enabled market and night, one research_meter row for each of 12 live-tested lines (F1 to... |
+| D-1721 | CXA-014 movers (M3, D-1625; [PROPOSED] values listed): the plan is docs/research/prereg/CXA-014.json (committed with its plan-only ledger entries, seq 40 to... |
+| D-1722 | CXA-008 labels (M3, D-1636; [PROPOSED] values listed): the plan is docs/research/prereg/CXA-008.json (ledger seq 46 to 48 on its branch, 48 to 50 after the m... |
+| D-1723 | VAL-120 intraday cells (M3, D-1608, D-670): each cell is its own lineage intraday_stream_<cell> (intraday_stream_v1, then intraday_stream_v1_<year>Q<n>); its... |
+| D-1724 | CXA-005 meter (M3, D-1624): per family F1 to F6, neff_live_<family> against 150 and neff_trade_<family> against cortex_min_neff_trade, from the n_eff_live of... |
+| D-1725 | Projection (M3, D-1623): the projected date is the session ceil(remaining / pace) sessions after the night on weekdays that are not holiday rows; for the for... |
+| D-1726 | Evaluation rules, in one place (M3, D-1605, D-1604; for the statistics review): |
+| D-1727 | Boundary, ledger and tests (M3, D-1645, D-1646): the files write only research_meter and app_log directly and the look tables through the registry (static al... |
+| D-1728 | Findings, said before any look (M3, listed): |
+| D-1729 | Hand-offs (M3 to M4 and Z): M4 reads the latest research_meter row per lineage by key: neff_live_F1..F6, neff_trade_F1..F6, movers_a1..a8 (blocked for A2, A4... |
+| D-1730 | CXA-007 shape (T3, D-1636, D-1637, PRD-033): src/lib/research/proposals/{schema,validate,store,job,cli}.ts. |
+| D-1731 | CXA-007 check order and states (T3, D-1637): one raw item, checked in a fixed order, each check deterministic and pure: size (over 8,000 serialised character... |
+| D-1732 | CXA-007 weight refusal (T3, D-1637; finding, listed): refused_weight when any key at any depth, normalised to lower case letters and digits, is weight, weigh... |
+| D-1733 | CXA-007 hostile text (T3, D-1637, LLM-035): refused_hostile when any string of the item, keys included and at any depth up to 12, is changed by the router's... |
+| D-1734 | CXA-007 duplicates (T3, D-1637, K10): the canonical hash (sorted keys, no spacing) of the rule against every earlier stored proposal of the market and every... |
+| D-1735 | CXA-007 storage and charge (T3, D-1636, D-1637, K16): store.ts is the only writer, and writes angle_proposal, trial_ledger and app_log in one batch per run. |
+| D-1736 | CXA-007 Owner line (T3, D-1637): one plain app_log line per monthly run, counts only: "The monthly model-written proposals were checked: N kept for you to re... |
+| D-1737 | CXA-007 model path (T3, D-1637, D-1642, LLM-034, LLM-036, LLM-071): askOf takes the R2 router from the night seam (routerFor("R2"), budgetKey "R2", a nightly... |
+| D-1738 | CXA-007 schedule and gate (T3, D-1637, D-1642): the job asks only when llm_proposals_per_month is above 0, R2 is live, d is the first session of its month (n... |
+| D-1739 | CXA-007 names, drop order and tests (T3, D-1609, D-1642): names.ts names the charged lineages by prefix (llm_proposal_ gives "Model-written rule proposal (ke... |
+| D-1740 | CXA-012 key read (R4, D-1638): src/lib/cortex/survivorship.ts reads survivorship_loss_assumed_pct (already registered in M23 A1, default 50, range 30 to 80,... |
+| D-1741 | AU data-limits record (R4, D-1638): dataLimits.mjs gains AU: survivorship (id survivorship_au, the offline history holds only today's codes, the loss assumed... |
+| D-1742 | Industry label (R4, D-1638): industryLabel(d, firstSnapshotAsOf) returns "static industry" (STATIC_INDUSTRY, the wording R3 used in the CXA-009 report) for a... |
+| D-1743 | CXA-013 AU source check (R4, D-1639): DAT-101 applied to a free point-in-time fundamentals source for the ASX, recorded 2026-11-17 as a desk check (the sourc... |
+| D-1744 | IN and US CXA-013 lines (R4, D-1639): both pages re-read on 2026-11-17 against the current code and registers and dated "CXA-013 re-read 2026-11-17". |
+| D-1745 | CXA-012 and CXA-013 reports (R4, D-1610, D-1638): both written in the report format with status INCONCLUSIVE for the lineage-style fields (these are records,... |
+| D-1750 | CXA-011 plan as frozen (T4, D-1638): docs/research/prereg/CXA-011.json transcribes D-1638 and fixes its open readings before any code (commit 3613bd19): the... |
+| D-1751 | One walker for both paths (T4, D-1638): wouldHaveOutcome (src/lib/cortex/night.ts) gains an optional raiseStop(bar, index, level) that is asked after each se... |
+| D-1752 | Hold inputs (T4, D-1750): src/lib/cortex/holdInputs.ts rebuilds what scoreOutcomes gave the walker (bars, ATR(20) plan, the stored rule version's time hold,... |
+| D-1753 | Population window (T4, D-1750): a night reads the stored SHOCK sessions of the last 260 sessions (regime_daily, a range read of at most 300 rows) and, only w... |
+| D-1754 | Recording (T4, D-1750): one shock_stop_outcome row per hold (origin = decision date, arm, code and book cut at 64 characters; d_entry is the fill session, d_... |
+| D-1755 | Variant cap (T4, D-1638, O-46): before the first row of a family in a quarter the step asks the existing count (stopVariantsThisQuarter) and needs the family... |
+| D-1756 | Meters and the look (T4, D-1605, D-1623, D-1638): each night six research_meter rows (recorded holds against 30; collecting, met, looked, blocked); the plan... |
+| D-1757 | Statistic (T4, D-1750): the mean paired difference (tight less base, ppm) with the one-sided 90 % lower bound from a stationary block bootstrap that resample... |
+| D-1758 | Names, ledger and the AT-32 proof (T4, D-1609, D-1645): names.ts gives each lineage "Tighter stops after a market shock: <strategy name>" (live, taken by the... |
+| D-1759 | Boundary (T4, D-1614): the comparator reads the Cortex decisions and outcomes, the regime and the daily bars and writes only shock_stop_outcome, research_met... |
+| D-1760 | Page model (M4, D-1643): src/lib/research/pageView.ts builds one ResearchView (tests, inconclusive names, waiting rows, eight monitor rows, sector series, Ow... |
+| D-1761 | Tests section (M4, D-1602, D-1609): every lineage is shown through lineageName; the result word is Pass, Null (no edge found) or Inconclusive (older stored w... |
+| D-1762 | Waiting section (M4, D-1623, D-1720): the newest research_meter row of each asked lineage in one statement (a keyed MAX per lineage over a json_each list; th... |
+| D-1763 | Sector series (M4, D-1632, D-1741, D-1742): the newest night's equal-weight returns by industry group (return in percent, member count) read by the primary key. |
+| D-1764 | Risk monitors and health line (M4, D-1614...D-1622): eight rows, each the newest quarterly row (monitor 2 and monitor 6 may also hold a one-off cal- row; the... |
+| D-1765 | Seed state and e2e (M4, D-1643, TST-135): state cortex-research (e2e/seed/states/cortex-research.mjs): three looks (Pass, Null, Inconclusive) each with a pre... |
+| D-1766 | Masking (M4, ROL-107, D-175): the research half holds no money, no stock code and no book id, so a masked viewer sees the same sections; an exact date become... |
+| D-1767 | Wording (M4, UI market wording): dates read as in the rest of the app (formatDay, "Fri 6 Nov"); no run time or run id is shown, and the "Looked at" cell is a... |
+| D-1768 | Tests of the page (M4): tests/ui/cortexResearch.test.tsx (the page rendered from the seed for each role: names, results, the 12-character fingerprint, specia... |
+| D-1769 | Reads and budget (M4, D-1641, Turso free plan): a page view adds nine statements, all keyed or bounded: the registry list (A2, LIMIT 200), the stream cell pr... |
+| D-1770 | Rollback runbook and its test at schema 40 (Z, found by the full gate): docs/runbooks/rollback-v2.md and the assertion in tests/golive/v2steps.test.tsx still... |
+| D-1771 | Two source guards fixed (Z, found by the full gate): |
+| D-1772 | Rollback runbook corrected (final review). |
+| D-1773 | Production deploy order (final review). deploy-production.yml deploys the Worker before Vercel, and migrations run only in the Vercel build, so the V3 Worker... |
+| D-1774 | Dependency audit exceptions renewed (CI run 44162205441, audit job). |
+| D-1775 | Orchestrator integration of main into the V3 build (merge of origin/main, 53 commits: delayed prices, Cortex learning loop, My portfolio, pick scorecard, pic... |
+| D-1776 | Round 2 (main D-1020 to D-1022: A$5,000 seed, six open positions, first cohort start 2026-11-16) is the home market's only. roundOverridesFor is applied in e... |
+| D-1777 | The market write guard (0038) is regenerated, not extended by a tail migration. |
+| D-1778 | Main's migration tests for 0029, 0031 and 0033 are pinned to their own version (ms.filter(version <= N)), as main's test for 0032 already was, because V3 mig... |
+| D-1779 | Main's display changes (pick card with entry, now, aim and stop rows, My portfolio card and loader, delayed-price labels on Strategies and Risk, end-of-day d... |
+| D-1844 | Cortex warm state for V3 (Owner 2026-11-18: no clean slate). |

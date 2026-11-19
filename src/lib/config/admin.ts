@@ -15,14 +15,18 @@ import {
   CONFIG_KEYS,
   CONFIG_META,
   isConfigKey,
+  parseMktKey,
   type ConfigArea,
   type ConfigInput,
   type ConfigKey,
 } from "./keys";
 import { invalidateConfigCache } from "./runtime";
+import { switchRefusal } from "@/lib/config/switchGuards";
 import { configEditRefusal, ruleVersionsSeeded } from "@/lib/learning/bKeyLock";
 import { isCortexRefitKey, recordCortexKeyEdit } from "@/lib/cortex/store/keyEdit";
 import { getConfig, setConfig } from "./store";
+import { HOME_MARKET, valueFromKey } from "@/lib/market/profileCore.mjs";
+import { setProfileField } from "@/lib/market/profileWrite";
 
 export type ConfigRow = {
   key: ConfigKey;
@@ -156,6 +160,12 @@ export function parseConfigInput(
 ): { value: unknown } | { error: string } {
   if (typeof raw !== "string") return { error: "is missing" };
   const text = raw.trim();
+  // M21 (D-1240): "text_optional" is a text value that may be empty (app_public_domain is empty until the domain is bought);
+  // the key's own validator still decides. Every plain "text" key keeps refusing an empty value.
+  if (input === "text_optional" && text === "") return { value: "" };
+  // M22 (D-1455): "word_list" is a list of words (llm_live_roles); empty text is the empty list, the key's validator decides
+  // which names are allowed.
+  if (input === "word_list" && text === "") return { value: [] };
   // Object values (the strategy-name table, D-129) are longer than a scalar; every other kind keeps 500.
   const max = input === "object" ? OBJECT_INPUT_MAX : 500; // threshold-ok: form input guard
   if (text === "" || text.length > max) return { error: "is missing or too long" };
@@ -165,7 +175,12 @@ export function parseConfigInput(
   if (input === "number") {
     return NUM_RE.test(text) ? { value: Number(text) } : { error: "must be a number" };
   }
-  if (input === "text") return { value: text };
+  if (input === "text" || input === "text_optional") return { value: text };
+  if (input === "bool") {
+    return text === "true" || text === "false"
+      ? { value: text === "true" }
+      : { error: "must be true or false" };
+  }
   if (input === "list") {
     const parts: unknown = text.startsWith("[") ? safeJson(text) : text.split(/[\s,]+/);
     const nums = Array.isArray(parts)
@@ -176,6 +191,13 @@ export function parseConfigInput(
     return nums.length > 0 && nums.every((n) => Number.isInteger(n))
       ? { value: nums }
       : { error: "must be a list of whole numbers such as 14, 7, 2" };
+  }
+  if (input === "word_list") {
+    const parts: unknown =
+      text.startsWith("[") || text.startsWith("{") ? safeJson(text) : text.split(/[\s,]+/);
+    return Array.isArray(parts) && parts.every((p) => typeof p === "string")
+      ? { value: parts.filter((p) => p !== "") }
+      : { error: 'must be a list of names such as R1, words or ["R1", "words"]' };
   }
   const obj = safeJson(text);
   return typeof obj === "object" && obj !== null && !Array.isArray(obj)
@@ -191,6 +213,7 @@ function scalar(v: unknown): string {
 
 // Plain-English display of a value with its unit, e.g. "30 days", "14, 7, 2 days".
 export function formatConfigValue(v: unknown, unit: string): string {
+  if (Array.isArray(v) && v.length === 0) return "none";
   if (Array.isArray(v)) return `${v.map(scalar).join(", ")} ${unit}`;
   if (typeof v === "object" && v !== null) {
     return Object.entries(v)
@@ -249,6 +272,10 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
     return fail("unavailable");
   }
 
+  // M21 (D-1213): a key-specific refusal of the value (the Committee switch needs ten qualifying nights).
+  const switchBlocked = await switchRefusal(p.mainDb, key, parsed.value);
+  if (switchBlocked !== null) return fail("invalid", switchBlocked);
+
   const base = { at: now, actorUserId: p.actorId, targetType: "config", targetId: key };
   try {
     await audit(p.authDb, p.env, meta, {
@@ -270,12 +297,41 @@ export async function updateConfig(p: UpdateInput): Promise<UpdateResult> {
       now,
     });
     invalidateConfigCache();
+    const mk = parseMktKey(key);
+    if (mk !== null) {
+      // D-999, DAT-242: an Owner edit of a market-profile key is a profile change (field row, change ledger,
+      // version, projection) and, for a cost, parcel or settlement field, a counted trial. The config row above
+      // keeps the Configuration page and the loader overlay in step; a failed profile write is audited.
+      try {
+        const fv = valueFromKey(mk.field, parsed.value, null);
+        if (fv !== undefined) {
+          await setProfileField(p.mainDb, {
+            code: mk.code,
+            field: mk.field,
+            value: fv,
+            actor: String(p.actorId),
+            reason,
+            now,
+          });
+        }
+      } catch {
+        try {
+          await audit(p.authDb, p.env, meta, {
+            ...base,
+            action: "config.profile_write_failed",
+            detail: { key, scope },
+          });
+        } catch {
+          // best effort
+        }
+      }
+    }
     if (isCortexRefitKey(key)) {
       // D-309, CTX-072: an Owner edit of a Cortex key is a charged trial that marks the maps for a
       // refit. The edit itself is done, so a failed charge is audited, not reported as a failed edit.
       try {
         await recordCortexKeyEdit(p.mainDb, {
-          market: "AU",
+          market: HOME_MARKET,
           key,
           before,
           after: parsed.value,

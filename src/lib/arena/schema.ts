@@ -248,6 +248,7 @@ export const KNOWN_REJECT_REASONS = [
   "cash",
   "gate",
   "halted",
+  "band_locked",
   "gap",
   "corporate_action",
 ] as const;

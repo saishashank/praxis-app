@@ -79,15 +79,19 @@ export default async function WhyThisPickPage({ params }: { params: Promise<{ id
           <li>
             <strong>Buy zone:</strong> tonight&apos;s closing price plus a small allowance for price
             slip. Buy up to{" "}
-            {masked || !pick.buyUpTo ? <Masked /> : <Money micro={pick.buyUpTo.micro} />}, valid
-            until {masked ? pick.validUntil : formatDay(pick.validUntil)}.
+            {masked || !pick.buyUpTo ? (
+              <Masked />
+            ) : (
+              <Money micro={pick.buyUpTo.micro} currency={pick.buyUpTo.currency} />
+            )}
+            , valid until {masked ? pick.validUntil : formatDay(pick.validUntil)}.
           </li>
           <li>
             <strong>Stop-loss:</strong> the strategy&apos;s own rule
             {pick.stopPpm !== null ? `, ${pct(pick.stopPpm)} from the reference price` : ""}
             {masked || !pick.stop ? null : (
               <>
-                , at <Money micro={pick.stop.micro} />
+                , at <Money micro={pick.stop.micro} currency={pick.stop.currency} />
               </>
             )}
             . {STOP_GAP_HOVER}
@@ -115,8 +119,10 @@ export default async function WhyThisPickPage({ params }: { params: Promise<{ id
               <Masked />
             ) : (
               <>
-                Up to <Money micro={pick.size.micro} />; if the stop-loss is hit you would lose
-                about <Money micro={pick.riskAtStop.micro} /> plus fees.
+                Up to <Money micro={pick.size.micro} currency={pick.size.currency} />; if the
+                stop-loss is hit you would lose about{" "}
+                <Money micro={pick.riskAtStop.micro} currency={pick.riskAtStop.currency} /> plus
+                fees.
               </>
             )}
           </li>
@@ -140,7 +146,7 @@ export default async function WhyThisPickPage({ params }: { params: Promise<{ id
             {o.entry ? (
               <>
                 {" at "}
-                <Money micro={o.entry.micro} />
+                <Money micro={o.entry.micro} currency={o.entry.currency} />
               </>
             ) : null}
             {o.exitReason ? `; ${exitWords(o.exitReason)}` : ""}

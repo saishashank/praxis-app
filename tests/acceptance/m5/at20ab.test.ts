@@ -16,6 +16,7 @@ import { runReminder } from "@/lib/email/reminder";
 import { setConfig } from "@/lib/config/store";
 import { KEY } from "../../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../../db/helpers";
+import { seedRestoreDrill } from "../../health/restoreFixture";
 import { mainWorld } from "../../review/helpers";
 
 afterEach(cleanupTempDbs);
@@ -93,6 +94,7 @@ describe("AT-20b Attention reminder", () => {
   async function world() {
     const db = await freshDb("main");
     await mode(db, "full");
+    await seedRestoreDrill(db);
     const mock = createMockProvider();
     const remind = (d: string) =>
       runReminder({ db, env: ENV, provider: mock, now: () => eight(d), sleep: async () => {} });

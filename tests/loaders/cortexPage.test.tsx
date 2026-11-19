@@ -186,7 +186,8 @@ describe("Cortex page, seeded world", () => {
     expect(section("sector").textContent).toContain("B1: Materials, -1 points");
     expect(section("opinion").textContent).toContain("steelman: 2 recorded, 1 settled");
     expect(q("[data-cold-start]").textContent).toMatch(/1 nights recorded since Fri 16 Oct./);
-    expect(document.querySelector("[data-cortex-unmeasured]")).toBeNull();
+    // only the four research parts (M23 M4) are still unmeasured in this world
+    expect(q("[data-cortex-unmeasured]").querySelectorAll("li")).toHaveLength(4);
     expect(screen.getByText(/Latest run:/)).toBeInTheDocument();
   });
 

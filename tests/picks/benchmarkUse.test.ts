@@ -34,12 +34,19 @@ const NON_COMPARISON_READERS = new Set([
   "lib/data/backfill/snapshotCore.mjs",
   "lib/data/backfill/snapshotLoad.mjs",
   "lib/data/index/indexBars.mjs",
+  "lib/data/sources/us/index.mjs", // M20 US1 (D-1188): the US manual index CSV writer, ingest plumbing like indexBars.mjs, not a comparison
   "lib/replay/snapshotWorld.ts",
+  "lib/data/sources/in/index.mjs", // M20 IN1: parses the manual index CSV into index_bar rows; a writer, not a comparison
+  "lib/data/sources/in/day.mjs", // M20 IN1: the India batch 1 inserts those rows; a writer, not a comparison
+  "lib/cortex/stageTables.mjs", // D-1116: names index_bar in the pinned schema-hash list; reads nothing
   "lib/cortex/stage.ts", // M15: index levels into the Cortex as-of world (regime, US index known-time), not a comparison
   "lib/ui/loaders/company.ts",
   "lib/ui/loaders/home.ts", // D-907: the ASX 200 line on Home, a level and its change (as the company page), not a comparison
   "lib/arena/diagnose.ts", // read-only signals diagnosis (#58): counts index rows to check regime coverage, not a comparison
+  "lib/regime/alt/evaluate.ts", // D-1541 (M22 E5): the shadow market-state check reads the index close 20 sessions on to score the state it named; a check of a reading, not a comparison of a strategy with the market
   "lib/learning/dailyLoad.ts", // D-921: the day's AXJO level move, one of the mover causes ("the market moved"); a description of a day, not a comparison of a strategy with the market
+  "lib/cortex/monitors/promotion.ts", // M23 M1 (D-1615): the market-adjusted 20-session return of flagged codes, on the Cortex's own price-index basis (as its outcomes); a monitor reading, not a comparison of a strategy with the market
+  "lib/research/meters/common.ts", // M23 M3 (D-1720): the movers meters' market-adjusted returns on the Cortex price-index basis; a count and a gross excess for a shadow meter, not a comparison
 ]);
 
 describe("DAT-235: market comparisons use the total-return series", () => {

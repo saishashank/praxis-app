@@ -10,6 +10,7 @@
 // about 190,000 rows. The bars stop at D, so nothing after the decision is read.
 import type { Client } from "@libsql/client";
 import { addDays } from "@/lib/data/calendar";
+import { benchmarkIndexOf } from "@/lib/market/staticProfile.mjs";
 import { industryUnknown } from "@/lib/data/referenceData";
 import type { LBar, LShare } from "./dailyFeatures";
 import type { News } from "./dailyMovers";
@@ -20,7 +21,6 @@ const WINDOW_DAYS = 480; // threshold-ok: calendar days of bars: 200-session ave
 const ANN_DAYS = 70; // threshold-ok: calendar days of announcements covering 40 sessions
 const CHUNK = 200; // threshold-ok: codes per batched read
 const LIQUID = ["U1", "U2"];
-const INDEX_CODE = "AXJO";
 const PPM = 1_000_000; // threshold-ok: parts per million
 export const MOVERS_PER_SIDE = 20; // threshold-ok: D-921 the 20 biggest gainers and the 20 biggest losers
 
@@ -131,7 +131,7 @@ export async function loadWorld(
 
   const ix = await db.execute({
     sql: "SELECT d, c_micro FROM index_bar WHERE market = ? AND index_code = ? AND d IN (?, ?)",
-    args: [o.market, INDEX_CODE, o.d, o.prev],
+    args: [o.market, benchmarkIndexOf(o.market), o.d, o.prev],
   });
   const ic = new Map(ix.rows.map((r) => [str(r.d), num(r.c_micro)]));
   const [i1, i0] = [ic.get(o.d), ic.get(o.prev)];

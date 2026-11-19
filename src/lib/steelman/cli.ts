@@ -10,16 +10,19 @@
 // Production has no model wired (D-480): the default routers are rules-only, so every subject reads
 // "not written tonight (no model available)" until the Owner enables a live router after the R6
 // bake-off (`deps.llm`). env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. Output: statuses and counts only.
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { CONFIG_KEYS } from "@/lib/config/keys";
 import { marketDate, type CalendarKind, type CalendarRow } from "@/lib/data/calendar";
-import { createRouter } from "@/lib/llm/router";
-import { DbStore } from "@/lib/llm/store";
+import { HOME_MARKET, HOME_TZ } from "@/lib/market/homeMarket.mjs";
+import { readLiveRoles } from "@/lib/llm/factory";
+import { nightlyLlm } from "@/lib/llm/nightlyLlm";
+import { reflectionReserve } from "./reflect";
 import { steelmanNight, type NightResult, type SteelmanKeys, type SteelmanLlm } from "./night";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
+const MARKET: string = HOME_MARKET;
+const MARKET_TZ: string = HOME_TZ;
 const PHASES = ["all", "3", "picks", "steelman"];
 // The key the batch-3 review run is recorded under (src/lib/agents/batch3.ts reviewKey). Written out
 // here because this folder must not import the agents or arena modules (PRD-033).
@@ -30,7 +33,12 @@ export type SteelmanCliDeps = {
   readonly nowMs?: () => number;
   readonly out?: (line: string) => void;
   /** The model side. Default: rules-only routers over the call log (nothing is called, D-480). */
-  readonly llm?: (ctx: { db: Client; params: AgentParams; kbVersion: string }) => SteelmanLlm;
+  readonly llm?: (ctx: {
+    db: Client;
+    params: AgentParams;
+    kbVersion: string;
+    liveRoles?: readonly string[] | null;
+  }) => SteelmanLlm;
 };
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
@@ -40,21 +48,20 @@ function flag(args: readonly string[], name: string): string | null {
   return i >= 0 && has(args[i + 1]) ? args[i + 1] : null;
 }
 
-/** Rules-only routers: D-177, no role has a live model before its bake-off passes. */
+/** The seam's routers: rules-only unless `llm_live_roles` lists the role and the factory's conditions hold (D-177, D-1460). */
 export function rulesOnlySteelmanLlm(ctx: {
   db: Client;
   params: AgentParams;
   kbVersion: string;
+  liveRoles?: readonly string[] | null;
 }): SteelmanLlm {
-  const store = new DbStore(ctx.db);
-  const router = createRouter({
-    mode: "rules-only",
-    params: ctx.params.llm,
-    kbVersion: ctx.kbVersion,
-    store,
-    providers: [],
-  });
-  return { authorRouter: router, criticRouterFor: () => null, providers: [], store };
+  const night = nightlyLlm(ctx);
+  return {
+    authorRouter: night.routerFor("R6"),
+    criticRouterFor: () => null,
+    providers: night.providers,
+    store: night.store,
+  };
 }
 
 /** The three steelman keys from the config store (global scope), registry default when unset or invalid. */
@@ -129,7 +136,7 @@ export async function steelmanMain(
   }
   let db: Client;
   try {
-    const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+    const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
     db = open(url, has(env.TURSO_MAIN_TOKEN) ? env.TURSO_MAIN_TOKEN : undefined);
   } catch {
     out("arena-steelman: degraded (cannot open database)");
@@ -152,13 +159,23 @@ export async function steelmanMain(
     }
     const params = await loadAgentParams(db);
     const kbVersion = params.llm.injectionPhrasesVersion;
-    const llm = (deps.llm ?? rulesOnlySteelmanLlm)({ db, params, kbVersion });
+    // D-1460: a failed read is null, which keeps every role rules-only.
+    const liveRoles = await readLiveRoles(db);
+    const llm = (deps.llm ?? rulesOnlySteelmanLlm)({ db, params, kbVersion, liveRoles });
+    // D-1493: what the pick reflections of tonight still need from the writer role; the steelman leaves it.
+    let reserve = 0;
+    try {
+      reserve = await reflectionReserve(db, MARKET, d);
+    } catch {
+      reserve = 0;
+    }
     const r = await steelmanNight(db, {
       market: MARKET,
       d,
       llmParams: params.llm,
       keys: await readKeys(db, params),
       llm,
+      reflectionReserve: reserve,
       calendar: await readCalendar(db, MARKET),
       now: new Date(nowMs()).toISOString(),
     });

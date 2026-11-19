@@ -4,79 +4,79 @@
     {
       "package": "picomatch",
       "advisory": "GHSA-FC5Q-39XC-VJPF",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
-      "added": "2026-11-18",
-      "expires": "2026-12-18"
-    },
-    {
-      "package": "micromatch",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
-      "added": "2026-11-18",
-      "expires": "2026-12-18"
-    },
-    {
-      "package": "fast-glob",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (the glob matcher under vite, vitest, eslint and typescript-eslint; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "fdir",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "tinyglobby",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
+      "added": "2026-11-18",
+      "expires": "2026-12-18"
+    },
+    {
+      "package": "micromatch",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
+      "added": "2026-11-18",
+      "expires": "2026-12-18"
+    },
+    {
+      "package": "fast-glob",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "vite",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "vitest",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "@vitest/coverage-v8",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "@vitejs/plugin-react",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "@typescript-eslint/typescript-estree",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "eslint-import-resolver-typescript",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "@next/eslint-plugin-next",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     },
     {
       "package": "eslint-config-next",
-      "reason": "Development tree only (vite, vitest, coverage, eslint and their file-matching helpers: test and lint tools; nothing ships). Every package here reaches picomatch, whose advisory GHSA-FC5Q-39XC-VJPF (a slow-pattern denial of service on repeated extglobs, all versions up to 4.0.7) has no fixed release. The production tree has no high or critical finding. Owner approved in chat on 2026-11-18 (\"Fix them in next Pr\"); renews the 2026-10-21 eslint-config-next entries, which expire 2026-11-20.",
+      "reason": "Development tree only (it depends on picomatch; test and lint tools, nothing ships). GHSA-FC5Q-39XC-VJPF is a ReDoS on single-branch repeated extglobs in picomatch <= 4.0.7, and no fixed picomatch release exists (4.0.7 is the newest). The patterns come from the repo's own config, not from users. Added by the build agent in the V3 build (D-1774) so CI can pass; it replaces the braces-era entries that expired on 2026-11-20. — Owner approved in chat on 2026-11-18 (30 days, development tree only); it expires in 30 days.",
       "added": "2026-11-18",
       "expires": "2026-12-18"
     }

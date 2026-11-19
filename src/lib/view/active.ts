@@ -4,11 +4,12 @@
 // Melbourne date, plus whatever codes the
 // caller's own records add. Collected first, masked afterwards, so a letter does not depend on which
 // page the user opened.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { Client } from "@libsql/client";
 import { normCode } from "./mask";
 
 const melbourne = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",

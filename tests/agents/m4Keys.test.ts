@@ -14,6 +14,9 @@ import {
   M14_KEY_NAMES,
   M15_KEY_NAMES,
   M17_KEY_NAMES,
+  M21_KEY_NAMES,
+  M22_KEY_NAMES,
+  M23_KEY_NAMES,
   M11L_KEY_NAMES,
   M13L_KEY_NAMES,
   MOVERS_KEY_NAMES,
@@ -276,6 +279,15 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...M11L_KEY_NAMES, // the M11-lite keys have their own table in tests/config/m11lKeys.test.ts
       ...M13L_KEY_NAMES, // the M13-lite keys have their own table in tests/config/m13lKeys.test.ts
       ...MOVERS_KEY_NAMES, // the movers gap keys have their own table in tests/config/moversKeys.test.ts
+      ...M21_KEY_NAMES, // the M21 keys have their own table in tests/config/m21Keys.test.ts (D-1212)
+      ...M22_KEY_NAMES, // the M22 keys have their own table in tests/config/m22Keys.test.ts (D-1455)
+      ...M23_KEY_NAMES, // the M23 keys have their own table in tests/config/m23Keys.test.ts (D-1612)
+      // the M18 keys have their own table in tests/config/m18Keys.test.ts (news_assess_per_run is in M5_KEY_NAMES)
+      "turso_notice_pct",
+      "turso_free_ceiling_pct",
+      "hmac_scheme_version",
+      "calendar_draft_markets",
+      "restore_drill_reminder",
       ...LEARN_KEY_NAMES, // the learning Cortex keys have their own table in tests/config/learnKeys.test.ts
     ]);
     const listed = new Set<string>([
@@ -283,7 +295,10 @@ describe("M4 keys: defaults and bounds equal ch.15", () => {
       ...FIXED.map((r) => r[0]),
       ...OBJECT_KEYS,
     ]);
-    const all = Object.keys(CONFIG_KEYS);
+    // the M19 keys (`mkt.<CODE>.<field>`, `markets_enabled`) have their own table in tests/config/m19Keys.test.ts
+    const all = Object.keys(CONFIG_KEYS).filter(
+      (k) => !k.startsWith("mkt.") && k !== "markets_enabled",
+    );
     expect(all.filter((k) => !m3.has(k) && !listed.has(k))).toEqual([]);
     expect(all.length).toBe(m3.size + listed.size);
   });
@@ -353,11 +368,12 @@ describe("M4 object keys", () => {
     expect(await check("insider_score_weights", { director_net: 0.5 })).toMatch(/needs/);
   });
 
-  it("llm_market_share: AU only, each share 0 to 1", async () => {
+  it("llm_market_share: built markets only (M19, D-1808), each share 0 to 1", async () => {
     expect(CONFIG_KEYS.llm_market_share.default).toEqual({ AU: 1 });
     expect(await check("llm_market_share", { AU: 0.5 })).toBeNull();
     expect(await check("llm_market_share", { AU: 1.5 })).toMatch(/0 to 1/);
-    expect(await check("llm_market_share", { US: 1 })).toBe("unknown market");
+    expect(await check("llm_market_share", { ZZ: 1 })).toBe("unknown market");
+    expect(await check("llm_market_share", { US: 1 })).toBeNull(); // a built market (D-1808)
     expect(await check("llm_market_share", {})).toMatch(/list a share/);
   });
 

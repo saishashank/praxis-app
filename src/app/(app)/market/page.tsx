@@ -41,7 +41,7 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function MarketPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/market");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") params.set(k, v);
   const q = parseMarketQuery(params);
@@ -80,7 +80,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
         <h2 id="index-h" className="m-0 text-lg font-semibold">
           Main index
         </h2>
-        <Suspense fallback={<SectionLoading label="Loading the main index" />}>
+        <Suspense fallback={<SectionLoading label="Loading the main index" shape="chart" />}>
           <IndexSection index={index} masked={masked} />
         </Suspense>
       </section>
@@ -96,7 +96,7 @@ export default async function MarketPage({ searchParams }: { searchParams: Promi
       </MarketSectionFrame>
 
       <MarketSectionFrame id="sectors" title="Sectors" q={q}>
-        <Suspense fallback={<SectionLoading label="Loading the sectors" />}>
+        <Suspense fallback={<SectionLoading label="Loading the sectors" shape="tiles" />}>
           <SectorsSection model={model} q={q} />
         </Suspense>
       </MarketSectionFrame>

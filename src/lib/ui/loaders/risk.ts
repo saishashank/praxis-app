@@ -357,7 +357,7 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
           stop === undefined || close <= 0 ? null : Math.round(((close - stop) * PPM) / close),
         held: num(r.haircut) === 1,
         live: lq !== null,
-        value: masked ? null : money(value),
+        value: masked ? null : money(value, v.currency),
       };
     });
     const bust = bustOf(c.paramsJson);
@@ -365,10 +365,10 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
       execution: c.execution,
       name: names[c.family]?.name ?? c.family,
       d: nav.d,
-      nav: money(nav.nav),
+      nav: money(nav.nav, v.currency),
       liveLabel: liveAtOf.has(c.id) ? `Delayed, ${quoteTimeMelbourne(liveAtOf.get(c.id)!)}` : null,
-      bust: bust === null ? null : money(bust),
-      seed: money(c.seed),
+      bust: bust === null ? null : money(bust, v.currency),
+      seed: money(c.seed, v.currency),
       nearBust:
         bust !== null && nav.nav > bust && (nav.nav - bust) * 100 <= nearPct * (c.seed - bust), // threshold-ok: percent of the way from bust to seed
       // an at-or-below-bust value is its own state, shown by the bar as "Busted"
@@ -428,7 +428,7 @@ export async function loadRisk(deps: LoaderDeps): Promise<Loaded<RiskView>> {
   }
   const shocks = SHOCK_PCTS.filter((p) => pnl.has(p)).map((p) => ({
     pct: p,
-    pnl: money(pnl.get(p)!),
+    pnl: money(pnl.get(p)!, v.currency),
   }));
   // Flag (UXN-152): the value after the move against each round's own loss limit; the worst round decides.
   const cohortById = new Map(cohorts.map((c) => [c.id, c]));

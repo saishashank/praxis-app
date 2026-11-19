@@ -9,6 +9,7 @@ import { BreakerStatus } from "@/components/ui/Badges";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { DataTable, type Column } from "@/components/ui/DataTable";
+import { ConcentrationChart } from "@/components/charts/ConcentrationChart";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { Masked, Money, SimulatedLabel } from "@/components/ui/Values";
@@ -21,7 +22,7 @@ import {
   type RiskSwitch,
   type StressRow,
 } from "@/lib/ui/loaders/risk";
-import { formatMicro, formatPpm } from "@/lib/view/format";
+import { currencyFormatFor, formatMicro, formatPpm } from "@/lib/view/format";
 import { dayText } from "../plain";
 import { StrategyTabs } from "../StrategyTabs";
 import { LossLimitBar } from "./LossLimitBar";
@@ -52,7 +53,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
         <div>
           <dt className="text-text-muted">Value now</dt>
           <dd className="m-0">
-            <Money micro={s.nav.micro} />
+            <Money micro={s.nav.micro} currency={s.nav.currency} />
             {s.liveLabel ? (
               <span className="block text-xs text-text-muted" data-testid="risk-live">
                 {s.liveLabel}
@@ -74,6 +75,7 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
             seed={s.seed.micro / MICRO}
             bust={s.bust.micro / MICRO}
             nearPct={nearPct}
+            currency={s.nav.currency}
           />
         </div>
       )}
@@ -97,7 +99,11 @@ function StrategyCard({ s, nearPct }: { s: RiskStrategy; nearPct: number }) {
                   : `${formatPpm(p.stopDistancePpm)} above its stop`}
               </span>
               <BreakerStatus status={p.breaker} />
-              {p.value === null ? <Masked /> : <Money micro={p.value.micro} />}
+              {p.value === null ? (
+                <Masked />
+              ) : (
+                <Money micro={p.value.micro} currency={p.value.currency} />
+              )}
             </li>
           ))}
         </ul>
@@ -192,7 +198,7 @@ export default async function RiskPage() {
       align: "right",
       cell: (x) => (
         <span data-money="" className="font-mono">
-          {formatMicro(x.pnl.micro, { sign: "always" })}
+          {formatMicro(x.pnl.micro, currencyFormatFor(x.pnl.currency), { sign: "always" })}
         </span>
       ),
     },
@@ -336,7 +342,14 @@ export default async function RiskPage() {
           />
         ) : (
           <Card>
-            <ul className="m-0 flex list-none flex-col gap-2 p-0 text-sm">
+            <ConcentrationChart
+              items={d.concentration.map((c) => ({
+                label: c.stock,
+                weightPpm: c.weightPpm,
+                strategies: c.strategies,
+              }))}
+            />
+            <ul className="m-0 mt-3 flex list-none flex-col gap-2 p-0 text-sm">
               {d.concentration.map((c) => (
                 <li key={c.stock} className="min-w-0 break-words">
                   <span className="font-semibold">{c.stock}</span>:{" "}

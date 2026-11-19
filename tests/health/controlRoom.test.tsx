@@ -69,7 +69,13 @@ function model(
       components,
       strip: [],
       details: true,
-      steelman: { state: "ok", nights: 0, qualifying: 0, text: "Steelman: pending production." },
+      steelman: {
+        state: "ok",
+        nights: 0,
+        qualifying: 0,
+        notWrittenLimit: 0,
+        text: "Steelman: pending production.",
+      },
       experts: {
         state: "ok",
         claimsToCheck: 0,
@@ -78,6 +84,7 @@ function model(
         warnings: [],
         text: "Experts: 0 claims to check; last screening none yet; 0 clusters parked.",
       },
+      m22: { state: "ok", lines: ["Small reader: off"] },
     },
     checkedAt: "2026-10-20T03:00:00.000Z",
     gauges: null,
@@ -409,7 +416,13 @@ describe("loader: role split, masking, bounded reads per refresh (decision 24)",
       // rows a month) at 8 open hours a day for 30 days. Decision 24 estimated ~300; see the T10 report.
       expect(stats.rows).toBeLessThanOrEqual(600);
       expect(stats.rows * 8 * 30 * 60).toBeLessThan(0.02 * 500_000_000);
-      expect(stats.calls).toBeLessThanOrEqual(80);
+      // M18 (D-958, D-961, D-962, D-963): the usage sample, the two Turso level keys, the drafted-calendar read,
+      // the restore-drill read and the plan name add six short statements (a few rows each): 80 became 90.
+      // M18 E2/E3 (DAT-251 b, DAT-252): the Owner's data-feed lines are one more statement: 90 became 91.
+      // M22 Z (D-1446, D-1535): the five new lines (AI jobs, Committee, bull and bear notes, small reader,
+      // outside-signals reading) are nine short single-row reads (switch settings and newest-row reads), so 91 became 100.
+      // M23 M4 (D-1764): the Owner's research line is one statement with two counts, so 100 became 101.
+      expect(stats.calls).toBeLessThanOrEqual(101);
     }
   });
 

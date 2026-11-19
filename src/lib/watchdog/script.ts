@@ -3,7 +3,8 @@
 // direct "minimal review" uses the app's own renderer and send core (one renderer, one email key
 // `review:<d>`, one idempotency key). Nothing here reads a secret except through `env`; nothing
 // prints. Tests inject the database and the mock provider.
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { emailKeys, melbourneDate } from "@/lib/email/keys";
 import {
   guardRecipient,
@@ -18,6 +19,7 @@ import { notifyIncident } from "@/lib/incidents/notify";
 import { readEmailSwitch } from "@/lib/email/switch";
 import { renderIncident } from "@/lib/email/templates/notices";
 import type { ReviewFacts } from "@/lib/email/templates/review";
+import { HOME_CURRENCY } from "@/lib/market/homeMarket.mjs";
 import { familyNames } from "@/lib/review/names";
 import {
   HEARTBEAT_EVENING_JOB,
@@ -40,7 +42,7 @@ export interface Problem {
 }
 
 export function openDb(env: EmailEnvVars): Client {
-  return createClient({ url: env.TURSO_MAIN_URL ?? "", authToken: env.TURSO_MAIN_TOKEN });
+  return scriptDb({ url: env.TURSO_MAIN_URL ?? "", token: env.TURSO_MAIN_TOKEN }); // D-1123
 }
 
 /** True when the database answers a trivial query. */
@@ -98,7 +100,7 @@ export async function minimalReviewFacts(
         label: String(x.id),
         name: names[String(x.family)] ?? undefined,
         variant: String(x.variant) === "L" ? ("L" as const) : ("U" as const),
-        currency: "AUD",
+        currency: HOME_CURRENCY,
         navCents: Math.round(nav / MICRO_PER_CENT),
         dayPlCents: Math.round((nav - base) / MICRO_PER_CENT),
         progressPct: 0,

@@ -1,10 +1,21 @@
 // Display formatting for the UI view models (M7 T2; docs/M7_design.md 2.7, 4.1; UXN-001, UX-102).
 // Pure, deterministic, no locale APIs and no clock reads, so the same value renders the same way on
 // the server, in a test and in a screenshot. A missing or non-finite value is shown as "n/a", never
-// as 0 or a blank (honest numbers, UX-041). Money is stored as integer cents or micro-AUD (`*_micro`)
-// and ratios as ppm; this module is the only place those units become text.
+// as 0 or a blank (honest numbers, UX-041). Money is stored as integer cents or micro units of the
+// market currency (`*_micro`) and ratios as ppm; this module is the only place those units become text.
+// The symbol and the digit grouping come from the market's `CurrencyFormat` (UXN-313, D-1815): a call
+// site always passes one (from `currencyFormatOf(profile.currency)`); there is no default.
+import { CURRENCY_FORMATS, OWNER_TZ, type CurrencyFormat } from "@/lib/market/profileCore.mjs";
 
 export const MISSING = "n/a";
+
+/**
+ * The format of a stored currency code (a review fact, a MoneyView): a registered currency uses its market
+ * format; any other code prints as "CODE 1,234.56" with standard grouping. Never throws.
+ */
+export function currencyFormatFor(code: string): CurrencyFormat {
+  return CURRENCY_FORMATS[code] ?? { code, symbol: `${code} `, locale: "und" };
+}
 
 const MICRO_PER_CENT = 10_000n; // threshold-ok: micro-AUD to cents
 const CENTS_PER_UNIT = 100; // threshold-ok: unit conversion
@@ -13,7 +24,13 @@ const DIGITS_GROUP = 3; // threshold-ok: thousands grouping
 
 const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-function group(digits: string): string {
+/** Digit grouping; `en-IN` groups the last three digits and then pairs (lakh and crore: 1,00,000). */
+export function group(digits: string, locale?: string): string {
+  if (locale === "en-IN" && digits.length > DIGITS_GROUP) {
+    const head = digits.slice(0, -DIGITS_GROUP);
+    const tail = digits.slice(-DIGITS_GROUP);
+    return `${head.replace(/\B(?=(\d{2})+(?!\d))/g, ",")},${tail}`;
+  }
   let out = "";
   for (let i = 0; i < digits.length; i += 1) {
     if (i > 0 && (digits.length - i) % DIGITS_GROUP === 0) out += ",";
@@ -30,20 +47,22 @@ function withSign(negative: boolean, zero: boolean, body: string, style: SignSty
   return style === "always" ? `+${body}` : body;
 }
 
-/** Integer cents -> "A$1,234.56". The sign is part of the text (UXN-001); "-0.00" never appears. */
+/** Integer cents -> "<symbol>1,234.56". The sign is part of the text (UXN-001); "-0.00" never appears. */
 export function formatCents(
   cents: number | null | undefined,
-  o: { currency?: string; sign?: SignStyle } = {},
+  fmt: CurrencyFormat,
+  o: { sign?: SignStyle } = {},
 ): string {
   if (!isFiniteNumber(cents)) return MISSING;
   const abs = Math.abs(Math.round(cents));
-  const body = `${o.currency ?? "A$"}${group(String(Math.floor(abs / CENTS_PER_UNIT)))}.${String(abs % CENTS_PER_UNIT).padStart(2, "0")}`;
+  const body = `${fmt.symbol}${group(String(Math.floor(abs / CENTS_PER_UNIT)), fmt.locale)}.${String(abs % CENTS_PER_UNIT).padStart(2, "0")}`;
   return withSign(cents < 0, abs === 0, body, o.sign ?? "minus");
 }
 
-/** Micro-AUD (a decimal string, bigint or integer number) -> "A$1,234.56", rounded half away from zero. */
+/** Micro units (a decimal string, bigint or integer number) -> "<symbol>1,234.56", rounded half away from zero. */
 export function formatMicro(
   micro: string | bigint | number | null | undefined,
+  fmt: CurrencyFormat,
   o: { sign?: SignStyle } = {},
 ): string {
   if (micro === null || micro === undefined) return MISSING;
@@ -66,7 +85,7 @@ export function formatMicro(
   const cents = (abs + MICRO_PER_CENT / 2n) / MICRO_PER_CENT;
   const whole = cents / BigInt(CENTS_PER_UNIT);
   const frac = cents % BigInt(CENTS_PER_UNIT);
-  const body = `A$${group(whole.toString())}.${frac.toString().padStart(2, "0")}`;
+  const body = `${fmt.symbol}${group(whole.toString(), fmt.locale)}.${frac.toString().padStart(2, "0")}`;
   return withSign(neg, cents === 0n, body, o.sign ?? "minus");
 }
 
@@ -174,7 +193,7 @@ export function formatInstant(iso: string | null | undefined, now: Date = new Da
   if (Number.isNaN(t.getTime())) return MISSING;
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-AU", {
-      timeZone: "Australia/Melbourne",
+      timeZone: OWNER_TZ,
       year: "numeric",
       month: "2-digit",
       day: "2-digit",
@@ -190,6 +209,7 @@ export function formatInstant(iso: string | null | undefined, now: Date = new Da
 }
 
 const KEEP_UPPER = new Set([
+  "NIB",
   "NL",
   "PLC",
   "ETF",
@@ -217,17 +237,23 @@ const SMALL_WORDS = new Set(["and", "of", "the", "for", "in", "on", "at", "to", 
  * "SERVICE STREAM LIMITED" -> "Service Stream Limited"; "BHP GROUP LIMITED" -> "BHP Group Limited".
  * Only an all-capitals name is changed (a name in mixed case is kept as stored). Short all-letter
  * words of up to 3 letters without a vowel, words with digits or dots, and known abbreviations stay
- * in capitals ("BHP", "G8", "SCX.AI", "NL").
+ * in capitals ("BHP", "G8", "SCX.AI", "NL"). A word equal to the row's own `code` also stays in capitals
+ * (codes of up to 3 characters only, so a longer IN/US ticker never forces a word; "ANZ GROUP HOLDINGS" with code ANZ -> "ANZ Group Holdings"; the "ASX codes" exception, D-1206).
  */
-export function displayName(name: string | null | undefined): string {
+export function displayName(
+  name: string | null | undefined,
+  opts: { code?: string | null } = {},
+): string {
   if (typeof name !== "string" || name.trim() === "") return MISSING;
   if (name !== name.toUpperCase()) return name;
+  const code = typeof opts.code === "string" ? opts.code.trim().toUpperCase() : "";
   return name
     .split(/(\s+)/)
     .map((w, i) => {
       if (/^\s+$/.test(w) || w === "") return w;
       const bare = w.replace(/[.,]$/, "");
       if (KEEP_UPPER.has(bare) || /\d/.test(bare) || /\.\w/.test(bare)) return w;
+      if (code !== "" && code.length <= 3 && bare === code) return w;
       const suffix = SUFFIXES[bare];
       if (suffix !== undefined) return suffix + w.slice(bare.length);
       if (bare.length <= 3 && !/[AEIOU]/.test(bare)) return w;

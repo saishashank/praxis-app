@@ -43,6 +43,9 @@ export const BLUEPRINT_TRACE_INCLUDES = {
     "./docs/config-reference.md",
   ],
   "/api/blueprint/model": ["./docs/architecture/architecture.json"],
+  // M20 S1: the switch-on checklist (src/lib/market/checklist.ts) reads the test map to see that a market's AT-M report
+  // is listed; without the file in the bundle that item would stay open for ever in production.
+  "/settings/region": ["./docs/test-map.md"],
 };
 
 const nextConfig: NextConfig = {

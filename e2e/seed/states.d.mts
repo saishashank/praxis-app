@@ -1,0 +1,27 @@
+import type { Client } from "@libsql/client";
+
+export type SeedState = { apply(client: Client, nowIso: string): Promise<void> };
+export const STATES: Record<
+  | "picks-two-sections"
+  | "experts-queue"
+  | "steelman-cards"
+  | "alerts-muted"
+  | "market-built-off"
+  | "blueprint-full"
+  | "owner-tools-on"
+  | "review-stored"
+  | "labels-queue"
+  | "committee-trial"
+  | "experts-sources",
+  SeedState
+>;
+export const STATE_NAMES: string[];
+export const OPT_IN_STATES: string[];
+export const ALL_STATE_NAMES: string[];
+export function parseStates(value: string | undefined): string[];
+export function applyStates(
+  client: Client,
+  names: string[],
+  nowIso?: string,
+  ctx?: { viewerId?: string },
+): Promise<string[]>;

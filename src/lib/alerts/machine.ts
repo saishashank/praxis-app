@@ -50,6 +50,8 @@ export function signed(purpose: string, deps: MachineDeps, run: Run) {
         secret,
         headers: req.headers,
         rawBody,
+        method: req.method,
+        path: new URL(req.url).pathname,
         nowSec,
         store: deps.store,
       });

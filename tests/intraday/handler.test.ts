@@ -10,6 +10,8 @@ import type { NonceStore } from "@/lib/security/replay";
 import { createIntradayScanHandler } from "@/lib/intraday/handler";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/intraday-scan" };
+
 afterEach(cleanupTempDbs);
 
 const SECRET = "7".repeat(64);
@@ -50,7 +52,7 @@ const req = (b: object, signed = true) => {
   return new Request("https://praxis-host.vercel.app/api/internal/intraday-scan", {
     method: "POST",
     body: raw,
-    headers: signed ? (sign(SECRET, raw, NOW, nonce()) as Record<string, string>) : {},
+    headers: signed ? (sign(SECRET, raw, NOW, nonce(), SIGN_TARGET) as Record<string, string>) : {},
   });
 };
 const body = (over: Record<string, unknown> = {}) => ({

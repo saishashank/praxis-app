@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 // Segmented control (UXR-040, UXR-002). Equal segments, full width on phones. The selected segment has
 // three cues: filled surface, check icon, and aria-selected (buttons) or aria-current plus a hidden
 // "Selected" (links). Two modes: buttons (controlled, `onChange`) and links (state in the URL, items
@@ -64,7 +64,7 @@ export function Segmented({
         className={
           pills
             ? cn(
-                "ui-scroll-x -mx-1 flex w-full gap-2 overflow-x-auto px-1 py-1 sm:mx-0 sm:flex-wrap sm:px-0",
+                "ui-scroll-x relative -mx-1 flex w-full gap-2 overflow-x-auto px-1 py-1 sm:mx-0 sm:flex-wrap sm:px-0",
                 className,
               )
             : wrap

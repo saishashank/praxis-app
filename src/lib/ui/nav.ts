@@ -75,6 +75,10 @@ export const ROUTES: readonly RouteNode[] = [
   { pattern: "/picks/track-record", label: "Track record", parent: "/picks", tab: "picks" },
   { pattern: "/picks/[id]", label: "Why this pick", parent: "/picks", tab: "picks" },
   { pattern: "/alerts", label: "My alerts", parent: "/picks", tab: "picks" },
+  // M21 (D-1214, D-1236): the Owner tools. Labels only; the pages answer as a missing route unless the Owner switch is on.
+  { pattern: "/recommendations", label: "Recommendations", parent: "/picks", tab: "picks" },
+  { pattern: "/holdings", label: "Holdings", parent: "/picks", tab: "picks" },
+  { pattern: "/trades", label: "Trades", parent: "/picks", tab: "picks" },
   { pattern: "/market", label: "Market", tab: "market" },
   { pattern: "/market/[code]", label: "Company", parent: "/market", tab: "market" },
   { pattern: "/strategies", label: "Strategies", tab: "strategies" },
@@ -112,6 +116,19 @@ export const ROUTES: readonly RouteNode[] = [
   },
   { pattern: "/what-if", label: "What-if", parent: "/strategies", tab: "strategies" },
   { pattern: "/cortex", label: "Cortex", parent: "/strategies", tab: "strategies" },
+  // M22 (D-1423, D-1444): the Committee trial page, under Strategies. A label only; the page arrives with its task.
+  {
+    pattern: "/strategies/experiments/committee",
+    label: "Committee trial",
+    parent: "/strategies",
+    tab: "strategies",
+  },
+  {
+    pattern: "/cortex/labels",
+    label: "Label announcements",
+    parent: "/cortex",
+    tab: "strategies",
+  },
   { pattern: "/news", label: "News", tab: "news" },
   { pattern: "/reviews", label: "Reviews", tab: "reviews" },
   { pattern: "/reviews/[date]", label: "Evening review", parent: "/reviews", tab: "reviews" },
@@ -158,8 +175,16 @@ export const ROUTES: readonly RouteNode[] = [
     parent: "/reviews/experts",
     tab: "reviews",
   },
+  // M22 (D-1430, D-1444): the licence results of the expert sources, under Experts. A label only.
+  {
+    pattern: "/reviews/experts/sources",
+    label: "Expert sources",
+    parent: "/reviews/experts",
+    tab: "reviews",
+  },
   { pattern: "/reviews/techniques", label: "Techniques", parent: "/reviews", tab: "reviews" },
   { pattern: "/reviews/glossary", label: "Glossary", parent: "/reviews", tab: "reviews" },
+  { pattern: "/reviews/tax", label: "Tax report", parent: "/reviews", tab: "reviews" },
   {
     pattern: "/reviews/alerts",
     label: "Monthly alerts report",
@@ -266,12 +291,13 @@ const MODE_LABEL: Record<string, string> = {
   data_only: "Data only",
   full: "Active",
 };
-const EXCHANGE: Record<string, string> = { AU: "ASX" };
 
 /** "AU · ASX · Data only" (UXN-282). */
-export function regionLabel(market: { code: string; mode: string } | null): string {
+export function regionLabel(
+  market: { code: string; mode: string; exchange?: string | null } | null,
+): string {
   if (!market) return "Region";
-  return [market.code, EXCHANGE[market.code], MODE_LABEL[market.mode] ?? market.mode]
+  return [market.code, market.exchange, MODE_LABEL[market.mode] ?? market.mode]
     .filter(Boolean)
     .join(" · ");
 }
@@ -316,9 +342,9 @@ export function nextTheme(theme: Theme): Theme {
 // ---- region chip (UXR-005) ------------------------------------------------------------------------------
 
 /** The visible chip text, "AU · ASX" (the mode is a dot, not words: UXR-005). */
-export function regionChip(market: { code: string } | null): string {
+export function regionChip(market: { code: string; exchange?: string | null } | null): string {
   if (!market) return "Region";
-  return [market.code, EXCHANGE[market.code]].filter(Boolean).join(" · ");
+  return [market.code, market.exchange].filter(Boolean).join(" · ");
 }
 
 /** The dot of the chip: green only for an active market, grey in data-only and off mode. */

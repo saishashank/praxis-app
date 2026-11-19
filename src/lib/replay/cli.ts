@@ -11,9 +11,12 @@
 // Output: statuses, counts and minutes only (SEC-110). Never a row, a code, a URL, a token or a driver
 // error. Exit codes: 0 success, expected skip or a clean `paused_budget` stop (recorded), 1 failed,
 // 2 usage. The run is idempotent: a run id that already exists is a no-op.
-import { createClient, type Client, type InStatement } from "@libsql/client";
+import type { Client, InStatement } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { defaultAgentParams, loadAgentParams, type AgentParams } from "@/lib/agents/params";
 import { marketDate } from "@/lib/data/calendar";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { splitFromRow, type LineageSplitRecord, type TrialLedgerRow } from "@/lib/stats/splits";
 import { parseSessions, runPickScorecard } from "@/lib/scorecard/pickScorecardRun";
 import { loadCalendar } from "@/lib/arena/closeBooks";
@@ -41,7 +44,8 @@ import {
   type RunMode,
 } from "./runner";
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET; // replay is AU-only in M19 (D-1814 j)
+const MARKET_TZ: string = homeProfile().tz!;
 
 /** D-1083: the skip-reason breakdown of a warm start, counts only. */
 function warmDiagText(skips: SkipReasons, t: CortexTally): string {
@@ -54,7 +58,6 @@ function warmDiagText(skips: SkipReasons, t: CortexTally): string {
 export const SCORECARD_MODE = "pick-scorecard";
 /** D-1078: the learning Cortex's warm start: scorecard rows for past sessions; no replay_run row. */
 export const WARM_START_MODE = "cortex-warm-start";
-const MARKET_TZ = "Australia/Sydney";
 const BATCH = 400; // threshold-ok: statements per DB batch
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
@@ -361,7 +364,7 @@ export async function replayMain(
     out("replay: failed (database not configured)");
     return 1;
   }
-  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
   let db = open(url, has(token) ? token : undefined);
   let stage = "setup";
   try {
@@ -503,7 +506,7 @@ async function pickScorecardMain(
     out("replay: failed (database not configured)");
     return 1;
   }
-  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
   let db = open(url, has(token) ? token : undefined);
   let stage = "setup";
   try {
@@ -585,7 +588,7 @@ async function warmStartMain(
     out("replay: failed (database not configured)");
     return 1;
   }
-  const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+  const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
   let db = open(url, has(token) ? token : undefined);
   let stage = "setup";
   try {

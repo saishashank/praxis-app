@@ -50,7 +50,8 @@ export interface PickHitFacts {
   timeFrame: string | null;
 }
 
-export type ClearVariant = "below_stop" | "above_chase_cap";
+/** `stop_hit` (M21 C3, EML-043, D-1226): the opt-in mail for a pick already alerted on whose price is under its stop. */
+export type ClearVariant = "below_stop" | "above_chase_cap" | "stop_hit";
 
 export interface PickClearedFacts {
   alertId: string;
@@ -157,8 +158,48 @@ export function renderPickHit(input: PickInput<PickHitFacts>): SizedEmailOut {
   return fitLadder(() => renderEmail(subject, doc), 0, SMALL_MAX_BYTES);
 }
 
+/** EML-043: information only. The Owner manages their own broker stop (O-74); Praxis places no order. */
+function renderStopHit(input: PickInput<PickClearedFacts>): SizedEmailOut {
+  const f = input.facts;
+  const subject = withEnvPrefix(input.env, `[Praxis] ${f.code} traded under its stop (delayed)`);
+  const rows: [string, string][] = [
+    ["Pick", `${f.code} ${truncate(f.name, 80)}`],
+    ["Buy limit", f.limit],
+    ["Stop", f.stop],
+    f.last === null
+      ? ["Quote time", `${f.quoteTime} (delayed)`]
+      : ["Delayed price", `${f.last} at ${f.quoteTime} (delayed)`],
+  ];
+  const doc = {
+    title: subject,
+    preheader: `${f.code}: a delayed price is under the stop of a pick you were alerted on.`,
+    blocks: [
+      { t: "h" as const, text: "Traded under its stop (delayed)", level: 1 as const },
+      {
+        t: "p" as const,
+        text: "A pick you were alerted on has a delayed price under its stop.",
+        tone: "warn" as const,
+        bold: true,
+      },
+      { t: "kv" as const, rows },
+      {
+        t: "p" as const,
+        text: "This is information only. You manage your own stop with your broker; Praxis places no order and does not move your stop.",
+      },
+      {
+        t: "link" as const,
+        label: "Open the alert in Praxis",
+        href: joinUrl(input.appUrl, "/alerts"),
+      },
+    ],
+    footer: footerFor(input.env, input.appUrl, input.latency),
+  };
+  return fitLadder(() => renderEmail(subject, doc), 0, SMALL_MAX_BYTES);
+}
+
 export function renderPickCleared(input: PickInput<PickClearedFacts>): SizedEmailOut {
   const f = input.facts;
+  if (f.variant === "stop_hit") return renderStopHit(input);
   const below = f.variant === "below_stop";
   const subject = withEnvPrefix(
     input.env,

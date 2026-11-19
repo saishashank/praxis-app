@@ -290,7 +290,11 @@ describe("the full-mode interlock (decision 33)", () => {
     const cfg = await main.execute(
       "SELECT value_json FROM config_version WHERE key = 'market_mode'",
     );
-    expect(JSON.parse(String(cfg.rows[0]!.value_json))).toEqual({ AU: "full" });
+    expect(JSON.parse(String(cfg.rows[0]!.value_json))).toEqual({
+      AU: "full",
+      IN: "off",
+      US: "off",
+    });
     // leaving full is always allowed
     expect(
       await setMarketMode({ ...base({ env: PROD }), market: "AU", mode: "data_only" } as never),
@@ -301,6 +305,7 @@ describe("the full-mode interlock (decision 33)", () => {
   });
 
   it("a sign-off for another market does not count", async () => {
+    await main.execute("UPDATE market SET enabled = 1 WHERE code = 'US'"); // M19 0038: the guard needs the market enabled to store its row
     await main.execute(
       "INSERT INTO go_live_signoff (market, signed_by, signed_at, release_commit, items_json, note, audit_ref) VALUES ('US', 1, 't', 'abcdef1', '[]', '', 'a')",
     );

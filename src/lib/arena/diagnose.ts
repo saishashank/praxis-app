@@ -5,6 +5,7 @@
 // apart. Bundled and run by scripts/arena/diagnose.mjs (.github/workflows/diagnose-signals.yml).
 //
 //   diagnose --dates YYYY-MM-DD[,YYYY-MM-DD...]
+//   diagnose --scenario splitFrequency [--window N]   (DAT-252 (3), D-1791: split-day frequency, AT-45)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. The client is wrapped so that any statement other than a
 // plain SELECT throws before it reaches the database: this module never writes a row.
@@ -13,7 +14,9 @@ import { createClient, type Client, type InStatement } from "@libsql/client";
 import { loadCalendar } from "./closeBooks";
 import { loadExecutions } from "./cohortWriter";
 import { loadConfirmedActions } from "./corpActionWriter";
-import { INDEX_CODE, loadDayInputs } from "@/lib/agents/candidates";
+import { loadDayInputs } from "@/lib/agents/candidates";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { benchmarkIndexOf, homeProfile } from "@/lib/market/staticProfile.mjs";
 import { runFamilies, type FamilyOutput } from "@/lib/agents/families";
 import { defaultAgentParams, loadAgentParams } from "@/lib/agents/params";
 import { regimeWarmupCloses } from "@/lib/agents/regime";
@@ -21,8 +24,9 @@ import { liveParams, loadVersionSet, runVersions } from "@/lib/agents/versionRun
 import { computeTiers } from "@/lib/data/pipeline/batch1-core.mjs";
 import { addDays, previousTradingDay } from "@/lib/data/pipeline/rules.mjs";
 import { TIER_RULES } from "@/lib/data/universe/tiers.mjs";
+import { measure as measureSplits } from "@/lib/data/splitFrequency";
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET; // an AU diagnostic (the batch CLIs take --market); see D-1031
 const READ = /^\s*(SELECT|WITH)\b/i; // money-float-ok: a regular expression, not money
 const WRITE = /\b(INSERT|UPDATE|DELETE|REPLACE|UPSERT|CREATE|DROP|ALTER|ATTACH|PRAGMA|VACUUM)\b/i; // money-float-ok: a regular expression, not money
 
@@ -235,7 +239,7 @@ export async function diagnoseDay(
   const ix = await db.execute({
     sql: `SELECT COUNT(*) AS n, SUM(CASE WHEN published_at < ? THEN 1 ELSE 0 END) AS visible,
             MIN(d) AS first FROM index_bar WHERE market = ? AND index_code = ? AND d <= ?`,
-    args: [day.cutoff, MARKET, INDEX_CODE, d],
+    args: [day.cutoff, MARKET, benchmarkIndexOf(MARKET), d],
   });
   const stored = await db.execute({
     sql: `SELECT d, raw_state, state FROM regime_daily WHERE market = ? AND d <= ?
@@ -362,7 +366,7 @@ export async function tradesReadout(
     const net = Number(r.net); // money-float-ok: a display percentage, never stored
     out(
       `  ${String(r.family)} ${String(r.exit_type)}: trades=${n} wins=${Number(r.wins)} ` +
-        `net=${cost > 0 ? ((net / cost) * 100).toFixed(2) : "0.00"}% of cost (A$${(net / 1e6).toFixed(2)})`,
+        `net=${cost > 0 ? ((net / cost) * 100).toFixed(2) : "0.00"}% of cost (${homeProfile().currencyFormat!.symbol}${(net / 1e6).toFixed(2)})`,
     );
   }
   const open = await db.execute({
@@ -387,11 +391,52 @@ export async function tradesReadout(
   }
 }
 
+/** Named read-only scenarios that are not a batch-2b night. Counts and shares only. */
+export const SCENARIOS = ["splitFrequency"] as const;
+
+async function scenarioMain(
+  argv: readonly string[],
+  name: string,
+  env: Readonly<Record<string, string | undefined>>,
+  out: (line: string) => void,
+): Promise<number> {
+  if (!(SCENARIOS as readonly string[]).includes(name)) {
+    out(`diagnose: unknown scenario (${SCENARIOS.join(", ")})`);
+    return 2;
+  }
+  const w = argv.indexOf("--window");
+  const window = w >= 0 ? Number(argv[w + 1]) : 20; // money-float-ok: a session-count CLI flag, not money
+  if (!Number.isInteger(window) || window < 2) {
+    out("diagnose: usage --scenario splitFrequency [--window N>=2]");
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  if (url === undefined || url.trim() === "") {
+    out("diagnose: failed (database not configured)");
+    return 1;
+  }
+  const db = readOnly(createClient({ url, authToken: env.TURSO_MAIN_TOKEN }));
+  try {
+    const s = await measureSplits(db, window);
+    out(`diagnose splitFrequency: ${JSON.stringify(s)}`);
+    return 0;
+  } catch (error) {
+    out(
+      `diagnose splitFrequency: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,
+    );
+    return 1;
+  } finally {
+    db.close();
+  }
+}
+
 export async function diagnoseMain(
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
   out: (line: string) => void = (line) => console.log(line),
 ): Promise<number> {
+  const sc = argv.indexOf("--scenario");
+  if (sc >= 0) return scenarioMain(argv, argv[sc + 1] ?? "", env, out);
   const i = argv.indexOf("--dates");
   const dates = (i >= 0 ? (argv[i + 1] ?? "") : "").split(",").filter((x) => DATE.test(x));
   if (dates.length === 0) {

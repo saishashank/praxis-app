@@ -26,7 +26,7 @@
 // Logs carry fixed words and numbers only: never a URL, a header, a secret or file content.
 import { dbConfigured, pipeline } from "../db";
 import { isWeekend, sydneyLocal, type Local } from "../localtime";
-import { randomHex, signHeaders } from "../selfcheck";
+import { pathOf, randomHex, signHeaders } from "../selfcheck";
 import {
   ASX_ENABLED_KEY,
   classifyResponse,
@@ -35,6 +35,7 @@ import {
   type Outcome,
 } from "./policy";
 import { buildListedCompaniesRequest } from "./request";
+import { MARKET } from "./sentinel";
 import type { AsxDeps, AsxEnv } from "./slots";
 import { acquire, recordOutcome } from "./token";
 
@@ -121,10 +122,11 @@ export async function runUniverse(
         env,
         [
           { sql: "SELECT value_json FROM worker_state WHERE key = ?", args: [ASX_ENABLED_KEY] },
-          { sql: "SELECT mode FROM market WHERE code = 'AU'" },
+          // an enabled market only (MKT-110 a): a market that is not enabled reads as "off"
+          { sql: "SELECT mode FROM market WHERE code = ? AND enabled = 1", args: [MARKET] },
           {
-            sql: "SELECT kind FROM trading_calendar WHERE market = 'AU' AND d = ?",
-            args: [local.date],
+            sql: "SELECT kind FROM trading_calendar WHERE market = ? AND d = ?",
+            args: [MARKET, local.date],
           },
           {
             sql: "SELECT source, status FROM source_register WHERE source IN (?, ?)",
@@ -209,12 +211,13 @@ export async function runUniverse(
         d: local.date,
         csv,
       });
-      const headers = await signHeaders(
-        secret,
+      const headers = await signHeaders(secret, {
+        method: "POST",
+        path: pathOf(url),
         body,
-        Math.floor(deps.nowMs() / 1000),
-        randomHex(16),
-      );
+        nowSec: Math.floor(deps.nowMs() / 1000),
+        nonce: randomHex(16),
+      });
       const res = await deps.fetch(url, {
         method: "POST",
         headers: { ...headers, "Content-Type": "application/json" },

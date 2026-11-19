@@ -56,6 +56,7 @@ const m = (micro: number) => ({ micro, currency: "AUD" as const, simulated: true
 const ISO = /[0-9]{4}-[0-9]{2}-[0-9]{2}/;
 
 const tile = (over: Partial<StrategyTile> = {}): StrategyTile => ({
+  currency: "AUD",
   execution: "E01",
   family: "F1",
   variant: "U",
@@ -139,7 +140,8 @@ const trade = (over: Record<string, unknown> = {}) => ({
   entryPrice: m(10_000_000),
   exitPrice: null,
   stop: m(9_000_000),
-  target: m(12_000_000),
+  target: m(13_000_000),
+  targetReached: false,
   lastPrice: m(10_500_000),
   lastPriceAt: "11:35",
   cardHref: "/cards/c1",

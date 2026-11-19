@@ -1,6 +1,6 @@
 // Blueprint (M16 WP5). Pinned Owner only: everyone else gets the app's 404 (SEC-111). Not linked from
 // any nav, sitemap or help text (SEC-112). The diagram fetches the model from the pinned-Owner API; the
-// URL is passed down from here so no client chunk carries it (D-372). Live status is read here, on the
+// URLs are passed down from here so no client chunk carries it (D-372). Live status is read here, on the
 // server, and handed to the client as plain data (ARC-002).
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -37,7 +37,11 @@ export default async function BlueprintPage({ searchParams }: { searchParams: Se
   return (
     <main data-testid="blueprint-shell" className="min-w-0">
       <h1>Blueprint</h1>
-      <BlueprintDiagram modelUrl="/api/blueprint/model" status={status} />
+      <BlueprintDiagram
+        modelUrl="/api/blueprint/model"
+        exportUrl="/api/blueprint/export"
+        status={status}
+      />
     </main>
   );
 }

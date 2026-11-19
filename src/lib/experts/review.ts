@@ -12,6 +12,16 @@ import { createHmac } from "node:crypto";
 import type { Client, Transaction } from "@libsql/client";
 import { audit, NO_META, requireKey, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
+import { priceMicro } from "./callEngine.mjs";
+import {
+  loadHolidays,
+  proposalById,
+  proposeForClaim,
+  resolveUniverse,
+  storeProposal,
+  withIds,
+  type CallProposal,
+} from "./callProposals";
 import { fitCheck } from "./fit";
 import { nextStatusFor } from "./status";
 import {
@@ -453,4 +463,200 @@ export async function mergeCluster(
         return { ok: true, claimsMoved: r.claimsMoved } as const;
       }),
   });
+}
+
+// ---- call confirmation (M22 E3; KB-084, D-1435, D-524) ------------------------------------------------------------
+
+/** The market a call is written for (the page and the action pass the home market; the service holds none). */
+export type CallCtx = ReviewCtx & { market: string };
+
+const PROPOSAL_RE = /^[0-9a-f]{64}$/; // threshold-ok: a sha-256 hex proposal id (0042)
+const CODE_RE = /^[A-Z0-9][A-Z0-9.-]{0,31}$/; // threshold-ok: expert_call.code is at most 32 characters
+const MAX_HORIZON = 1000; // threshold-ok: longest horizon kept, in sessions
+const DAY_CHARS = 10; // threshold-ok: length of YYYY-MM-DD
+const dayOf = (at: string): string => at.slice(0, DAY_CHARS);
+const TAKEN_SQL =
+  "SELECT (SELECT COUNT(*) FROM expert_call WHERE claim_id = ?) + (SELECT COUNT(*) FROM expert_call_confirm WHERE claim_id = ?) AS n";
+
+/** The claim must be a call that is not rejected or parked and has no confirmation or stored call yet. */
+async function callClaimOpen(
+  c: ReviewCtx,
+  claimId: string,
+): Promise<ReviewResult<{ statement: string }>> {
+  let type: string | null;
+  let status: ClaimStatus | null;
+  let statement: string | null;
+  let taken: boolean;
+  try {
+    // rows-ok: primary-key lookups of one claim.
+    const r = await c.mainDb.execute({
+      sql: "SELECT type FROM claim WHERE id = ?",
+      args: [claimId],
+    });
+    type = r.rows[0] === undefined ? null : String(r.rows[0].type);
+    status = await currentClaimStatus(c.mainDb, claimId);
+    statement = (await claimById(c.mainDb, claimId))?.statement ?? null;
+    const k = await c.mainDb.execute({ sql: TAKEN_SQL, args: [claimId, claimId] });
+    taken = Number(k.rows[0]?.n ?? 0) > 0;
+  } catch {
+    return { error: "unavailable" };
+  }
+  if (type === null || status === null || statement === null) return { error: "not_found" };
+  if (type !== "call") return { error: "invalid" };
+  if (status === "rejected" || status === "parked" || taken) return { error: "illegal_edge" };
+  return { ok: true, statement };
+}
+
+/** Confirms `p` for `claimId`: the confirm row and the `expert_call` row in one transaction, once. */
+async function writeConfirmed(
+  c: CallCtx,
+  claimId: string,
+  p: CallProposal,
+): Promise<ReviewResult<{ tracked: boolean }>> {
+  return audited<{ tracked: boolean }>(c, {
+    action: "expert_call_confirm",
+    targetType: "expert_claim",
+    targetId: claimId,
+    detail: { proposal: p.proposalId, source: p.source },
+    write: async (at, actor) =>
+      inTransaction(c.mainDb, async (tx) => {
+        // rows-ok: primary-key lookups; a second confirmation (or a seed call) is refused, nothing is written.
+        const k = await tx.execute({ sql: TAKEN_SQL, args: [claimId, claimId] });
+        if (Number(k.rows[0]?.n ?? 0) > 0) return { error: "illegal_edge" } as const;
+        await storeProposal(tx, p, at);
+        // D-524: tracked only for a code of the active universe of the market (newest snapshot at or before today).
+        // rows-ok: one primary-key lookup.
+        const u = await tx.execute({
+          sql: `SELECT 1 FROM universe_snapshot
+                 WHERE market = ? AND code = ? AND status = 'active'
+                   AND d = (SELECT MAX(d) FROM universe_snapshot WHERE market = ? AND d <= ?)`,
+          args: [p.market, p.code, p.market, dayOf(at)],
+        });
+        const tracked = u.rows.length === 1 ? 1 : 0;
+        const basis = p.priceBasis === "open" ? "open" : "close";
+        await tx.execute({
+          sql: `INSERT INTO expert_call_confirm (claim_id, proposal_id, price_basis, confirmed_by, confirmed_at)
+                VALUES (?, ?, ?, ?, ?)`,
+          args: [claimId, p.proposalId, basis, actor, at],
+        });
+        await tx.execute({
+          sql: `INSERT INTO expert_call (claim_id, market, code, direction, call_d, horizon_sessions, target_micro,
+                  stop_micro, tracked, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [
+            claimId,
+            p.market,
+            p.code,
+            p.direction,
+            p.callD,
+            p.horizonSessions,
+            p.targetMicro,
+            p.stopMicro,
+            tracked,
+            at,
+          ],
+        });
+        return { ok: true, tracked: tracked === 1 } as const;
+      }),
+  });
+}
+
+/**
+ * One-click confirmation of the proposal shown for a call claim. The proposal must be a complete one of this claim:
+ * a stored one by id, or (for a claim whose proposal was not stored yet) the rules answer recomputed now, which must
+ * have the same id the person saw (otherwise the summary changed and the person looks again).
+ */
+export async function confirmCall(
+  c: CallCtx,
+  x: { claimId: unknown; proposalId: unknown },
+): Promise<ReviewResult<{ tracked: boolean }>> {
+  if (!validId(x.claimId) || typeof x.proposalId !== "string" || !PROPOSAL_RE.test(x.proposalId))
+    return { error: "invalid" };
+  const claimId = x.claimId;
+  const open = await callClaimOpen(c, claimId);
+  if ("error" in open) return open;
+  let p: CallProposal | null;
+  try {
+    p = await proposalById(c.mainDb, x.proposalId);
+    if (p !== null && p.claimId !== claimId) return { error: "invalid" };
+    if (p === null) {
+      const day = dayOf((c.now ?? new Date()).toISOString());
+      const universe = await resolveUniverse(c.mainDb, c.market, day, [open.statement]);
+      const calendar = await loadHolidays(c.mainDb, c.market);
+      const fresh = await proposeForClaim(claimId, open.statement, universe, calendar);
+      if (fresh.proposalId !== x.proposalId) return { error: "illegal_edge" };
+      p = fresh;
+    }
+  } catch {
+    return { error: "unavailable" };
+  }
+  if (p.state !== "complete") return { error: "illegal_edge" };
+  return writeConfirmed(c, claimId, p);
+}
+
+export type TypedCall = {
+  claimId: unknown;
+  code: unknown;
+  direction: unknown;
+  callD: unknown;
+  horizon: unknown;
+  priceBasis: unknown;
+  target?: unknown;
+  stop?: unknown;
+};
+
+const realDate = (v: unknown): v is string => {
+  if (typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
+  const t = new Date(`${v}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && dayOf(t.toISOString()) === v;
+};
+const optLevel = (v: unknown): number | null | "bad" => {
+  if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) return null;
+  if (typeof v !== "string") return "bad";
+  return priceMicro(v.trim()) ?? "bad";
+};
+
+/**
+ * The editable typed form: the person types the code, direction, date, horizon and price basis (and optionally a
+ * target and a stop); the values are checked here, stored as an owner proposal and confirmed in the same transaction.
+ */
+export async function confirmTypedCall(
+  c: CallCtx,
+  x: TypedCall,
+): Promise<ReviewResult<{ tracked: boolean }>> {
+  if (!validId(x.claimId)) return { error: "invalid" };
+  const code = typeof x.code === "string" ? x.code.trim().toUpperCase() : "";
+  const horizon =
+    typeof x.horizon === "string" && /^\d{1,4}$/.test(x.horizon.trim())
+      ? Number(x.horizon.trim())
+      : 0;
+  const target = optLevel(x.target);
+  const stop = optLevel(x.stop);
+  if (
+    !CODE_RE.test(code) ||
+    (x.direction !== "long" && x.direction !== "short") ||
+    !realDate(x.callD) ||
+    horizon < 1 ||
+    horizon > MAX_HORIZON ||
+    (x.priceBasis !== "close" && x.priceBasis !== "open") ||
+    target === "bad" ||
+    stop === "bad"
+  )
+    return { error: "invalid" };
+  const open = await callClaimOpen(c, x.claimId);
+  if ("error" in open) return open;
+  const p = withIds(x.claimId, {
+    market: c.market,
+    code,
+    direction: x.direction,
+    callD: x.callD,
+    horizonSessions: horizon,
+    priceBasis: x.priceBasis,
+    targetMicro: target,
+    stopMicro: stop,
+    state: "complete",
+    missing: [],
+    reason: "Typed by the person who checked the claim.",
+    source: "owner",
+  });
+  return writeConfirmed(c, x.claimId, p);
 }

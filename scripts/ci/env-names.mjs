@@ -28,6 +28,8 @@ export const NOT_CONFIG = new Set([
   "GITHUB_API_URL",
   "GITHUB_STEP_SUMMARY",
   "GITHUB_RUN_ID",
+  "GITHUB_HEAD_REF", // release-gate.mjs: the head branch of a pull_request run (ci-streak, D-964)
+  "GITHUB_REF_NAME", // release-gate.mjs: the branch of a push run (ci-streak, D-964)
   "GITHUB_RUN_ATTEMPT",
   "GITHUB_SHA",
   "GITHUB_REPOSITORY",
@@ -51,10 +53,21 @@ export const NOT_CONFIG = new Set([
   "PR_BASE_SHA",
   "PUSH_BEFORE_SHA",
   "PRAXIS_COVERAGE_RUN", // timing slack for two tests under coverage (M8 T17), set only by the coverage job
+  "E2E_WALK", // ci.yml walks lane: the capture folder of e2e/walks.spec.ts (M18 TST-134), not configuration
+  "E2E_WALK_ONLY", // ci.yml walks lane: the page filter of e2e/walks.spec.ts
+  "E2E_STATES", // ci.yml rich lane: which seeded states to load (M18 TST-135), not configuration
+  "PRAXIS_NET_LOG", // CI recorded day: the file the host guard writes refusals and markers to (M18 D-965)
+  "RECORD_AU_SNAPSHOT", // scripts/market/snapshot-au.mjs: the record switch of the AU constants snapshot test (M19 D-1007), not configuration
+  "PRAXIS_NET_LABEL", // CI recorded day: the label of one guarded process (M18 D-965)
+  "PRAXIS_SIM_NOW", // CI recorded day: the simulated instant of the app process (M18 D-965)
+  "PRAXIS_EDGAR_CONTACT", // Owner-store value (M20 D-1094): the contact in the SEC EDGAR User-Agent; no default, no example value, never in a file
+  "FRED_API_KEY", // Owner-store value (M20 DAT-244): the free FRED key; the US macro fetcher refuses without it, never in a file
   "ZAP_OUT", // per-run report folder of scripts/ci/zap-run.mjs (M8 T12), not configuration
   "FROM", // backfill-index.yml: the first-date input of a one-off dispatch (D-175), not configuration
   "HISTORY_FLAG", // asx-fetch.yml: the --history switch of a dispatch (D-194), not configuration
   "DATES", // diagnose-signals.yml: the sessions input of a read-only dispatch, not configuration
+  "SCENARIO", // diagnose-signals.yml: the optional named read-only scenario of a dispatch (D-1791), not configuration
+  "ASX_FETCH_BUDGET_MS", // scripts/asx/fetch.mjs: optional run-budget override (D-1789), not configuration
   "TARGET",
   "TARGETS",
   "TRAINS",

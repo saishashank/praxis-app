@@ -2,7 +2,7 @@
 // per risk profile, each with its value, profit or loss, worst fall, holdings and strategy split.
 import type { MyPortfolio, MyPortfoliosView } from "@/lib/ui/loaders/pickPortfolio";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDay, formatMicro, formatPpm } from "@/lib/view/format";
+import { currencyFormatFor, formatDay, formatMicro, formatPpm } from "@/lib/view/format";
 import { profileLabel } from "./text";
 
 const pctText = (ppm: number | null) =>
@@ -34,11 +34,11 @@ function One({ v }: { v: MyPortfolio }) {
       ) : (
         <>
           <p className="m-0 mt-1 text-base">
-            {v.value ? <Money micro={v.value.micro} /> : null}{" "}
+            {v.value ? <Money micro={v.value.micro} currency={v.value.currency} /> : null}{" "}
             {v.sinceStartPpm !== null ? (
               <GainLoss value={v.sinceStartPpm}>
                 {v.gain
-                  ? `${formatMicro(v.gain.micro, { sign: "always" })} (${pctText(v.sinceStartPpm)})`
+                  ? `${formatMicro(v.gain.micro, currencyFormatFor(v.gain.currency), { sign: "always" })} (${pctText(v.sinceStartPpm)})`
                   : `${pctText(v.sinceStartPpm)}`}
               </GainLoss>
             ) : null}
@@ -50,7 +50,7 @@ function One({ v }: { v: MyPortfolio }) {
                 <>
                   {" "}
                   End of day{v.asOfD ? ` ${formatDay(v.asOfD)}` : ""}:{" "}
-                  <Money micro={v.closeValue.micro} />
+                  <Money micro={v.closeValue.micro} currency={v.closeValue.currency} />
                   {v.closeSinceStartPpm !== null ? ` (${pctText(v.closeSinceStartPpm)})` : ""}.
                 </>
               ) : v.closeSinceStartPpm !== null ? (
@@ -67,7 +67,7 @@ function One({ v }: { v: MyPortfolio }) {
           </p>
           {v.cash ? (
             <p className="m-0 text-text-muted">
-              Cash <Money micro={v.cash.micro} />
+              Cash <Money micro={v.cash.micro} currency={v.cash.currency} />
               {v.asOfD ? `, end of day ${formatDay(v.asOfD)}` : ""}.
             </p>
           ) : null}
@@ -90,13 +90,13 @@ function One({ v }: { v: MyPortfolio }) {
                   {h.entry ? (
                     <>
                       {" "}
-                      bought at <Money micro={h.entry.micro} />
+                      bought at <Money micro={h.entry.micro} currency={h.entry.currency} />
                       {h.entryD ? ` on ${formatDay(h.entryD)}` : ""}
                     </>
                   ) : null}
                   {h.now ? (
                     <>
-                      , now <Money micro={h.now.micro} />
+                      , now <Money micro={h.now.micro} currency={h.now.currency} />
                     </>
                   ) : null}{" "}
                   {h.changePpm !== null ? (
@@ -150,7 +150,7 @@ export function PortfolioCard({ v }: { v: MyPortfoliosView }) {
         Three practice portfolios, one per risk profile
         {v.seed ? (
           <>
-            , each started with <Money micro={v.seed.micro} />
+            , each started with <Money micro={v.seed.micro} currency={v.seed.currency} />
           </>
         ) : null}
         . Each buys from every strategy&apos;s picks and shares its money by their records.

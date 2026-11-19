@@ -6,6 +6,8 @@
 // come from `replay_stat` rows of the newest batch 3 run. A figure that is not stored is `null`, and the
 // page says "Not measured yet" (REV-003).
 import "server-only";
+import { targetKeysOf, targetOf } from "@/lib/agents/families/targetOf";
+import type { Family } from "@/lib/agents/schema";
 import { lineageId } from "@/lib/stats/splits";
 import { cardHref } from "./cards";
 import {
@@ -31,29 +33,57 @@ import {
 } from "@/lib/data/quotes/latest";
 
 const MAX_TRADES = 50; // threshold-ok: trade strip length
-const TARGET_R = 2n; // threshold-ok: D-885 indicative target at twice the first-stop distance (2R)
 
 /**
- * D-885: the stop in force and the indicative target of one trade, in micro. The stop in force is
- * the higher of the first stop and the latest session's recomputed stops (decision 7); the target is
- * shown only (no strategy exits on it): entry + 2 x (entry - first stop). Masked viewers get neither.
+ * D-885: the stop in force of one trade, in micro: the higher of the first stop and the latest session's
+ * recomputed stops (decision 7). Masked viewers get none. The D-885 indicative 2R target is retired
+ * (D-1225); the real target comes from `targetDisplay`.
  */
 export function stopTarget(
   masked: boolean,
   entryMicro: number,
   firstStopMicro: number,
   latestStopMicro: number | null,
-): { stop: Money | null; target: Money | null } {
-  if (masked || !(firstStopMicro > 0) || !(entryMicro > firstStopMicro)) {
-    return { stop: null, target: null };
-  }
+  currency: string,
+): { stop: Money | null } {
+  if (masked || !(firstStopMicro > 0) || !(entryMicro > firstStopMicro)) return { stop: null };
   const inForce =
     latestStopMicro !== null && latestStopMicro > firstStopMicro ? latestStopMicro : firstStopMicro;
-  const entry = BigInt(entryMicro);
-  return {
-    stop: money(inForce),
-    target: money(Number(entry + TARGET_R * (entry - BigInt(firstStopMicro)))),
-  };
+  return { stop: money(inForce, currency) };
+}
+
+/** True when the rule version's params_json carries a FAM-010 target key (any value). */
+export function ruleHasTarget(family: Family, params: Readonly<Record<string, unknown>>): boolean {
+  return targetKeysOf(family).some((k) => Object.prototype.hasOwnProperty.call(params, k));
+}
+
+/**
+ * FAM-010 / D-1225: the real target of a trade from its rule version (`targetOf`, never recomputed here) and
+ * whether the delayed price of a later day has reached it (display only: nothing exits on this; the stored
+ * rule decides at the close). A masked viewer, a rule with no target, a cold stop or an invalid stored
+ * value all give no target.
+ */
+export function targetDisplay(
+  masked: boolean,
+  family: Family,
+  params: Readonly<Record<string, unknown>>,
+  entryMicro: number,
+  firstStopMicro: number,
+  currency: string,
+  quote: LatestQuote | undefined,
+  lastCloseD: string | null,
+): { target: Money | null; reached: boolean } {
+  const none = { target: null, reached: false };
+  if (masked || !ruleHasTarget(family, params)) return none;
+  let level: bigint | null;
+  try {
+    level = targetOf(params, BigInt(entryMicro), BigInt(Math.max(0, firstStopMicro)));
+  } catch {
+    return none; // an invalid stored value reads as "No target" here; registration already refuses it
+  }
+  if (level === null) return none;
+  const q = newerThanClose(quote, lastCloseD);
+  return { target: money(Number(level), currency), reached: q !== null && q.lastMicro >= level };
 }
 /**
  * D-900: the price shown for a trade. An open trade shows the delayed quote when it is from a later day
@@ -66,15 +96,19 @@ export function lastPriceOf(
   lastClose: unknown,
   lastCloseD: string | null,
   quote: LatestQuote | undefined,
+  currency: string,
 ): { lastPrice: Money | null; lastPriceAt: string | null } {
   if (masked || closed) return { lastPrice: null, lastPriceAt: null };
   const q = newerThanClose(quote, lastCloseD);
   if (q !== null) {
-    return { lastPrice: money(Number(q.lastMicro)), lastPriceAt: quoteTimeMelbourne(q.quoteAt) }; // money-float-ok: micro bigint to the Money view
+    return {
+      lastPrice: money(Number(q.lastMicro), currency),
+      lastPriceAt: quoteTimeMelbourne(q.quoteAt),
+    }; // money-float-ok: micro bigint to the Money view
   }
   if (lastClose === null || lastClose === undefined) return { lastPrice: null, lastPriceAt: null };
   return {
-    lastPrice: money(Math.round(Number(lastClose) * 1_000_000)), // money-float-ok: stored close in dollars to micro
+    lastPrice: money(Math.round(Number(lastClose) * 1_000_000), currency), // money-float-ok: stored close in dollars to micro
     lastPriceAt: null,
   };
 }
@@ -383,7 +417,8 @@ export type StripTrade = {
   /** Dates as shown: exact, or the ISO week for a masked viewer. */
   entryDay: string | null;
   exitDay: string | null;
-  qty: number;
+  /** Shares. Null for a masked viewer (UXN-320 b, D-1204): the Size column then does not render. */
+  qty: number | null;
   open: boolean;
   exitType: string | null;
   returnPpm: number | null;
@@ -394,10 +429,12 @@ export type StripTrade = {
   /** D-885: the stop in force (the higher of the first stop and the latest recomputed one). */
   stop: Money | null;
   /**
-   * D-885: an indicative target, shown only and never an exit rule: the buy price plus twice the
-   * distance to the first stop (2R). Null for a masked viewer.
+   * FAM-010 / D-1225: the real target of the rule version, from `targetOf`. Null when the rule version has
+   * no target, the stop is unusable, or for a masked viewer.
    */
   target: Money | null;
+  /** The delayed price of a later day has reached `target` (display only; the exit is at the next open). */
+  targetReached: boolean;
   /**
    * Latest price of an open trade: the delayed intraday quote when it is from a later day than the
    * stored close (D-900), else the stored close. Null when closed or for a masked viewer.
@@ -447,6 +484,8 @@ export type LabelView = {
 };
 
 export type StrategyExtras = {
+  /** D-1225: the live rule version has a target rule (false: the page says "No target: ..." once). */
+  hasTarget: boolean;
   /** Market mood on each NAV date (aligned to the NAV series of the detail loader); null when unknown. */
   regimes: Array<string | null>;
   trades: StripTrade[];
@@ -466,6 +505,7 @@ export type StrategyExtras = {
 };
 
 const NO_EXTRAS: StrategyExtras = {
+  hasTarget: false,
   regimes: [],
   trades: [],
   controls: [],
@@ -502,7 +542,7 @@ function labelOf(r: Record<string, unknown> | undefined): LabelView | null {
   };
 }
 
-function legOf(v: unknown): SleeveLegView | null {
+function legOf(v: unknown, currency: string): SleeveLegView | null {
   const o = asObj(v);
   if (!o) return null;
   const fig = asObj(o.figure);
@@ -513,7 +553,7 @@ function legOf(v: unknown): SleeveLegView | null {
   const hi = finite(iv?.upper);
   let net: Money | null = null;
   try {
-    net = money(Number(BigInt(str(o.netPlMicro))));
+    net = money(Number(BigInt(str(o.netPlMicro))), currency);
   } catch {
     net = null;
   }
@@ -550,6 +590,28 @@ export async function loadStrategyExtras(
   const e = ex.rows[0];
   if (!e) return NO_EXTRAS;
   const family = str(e.family);
+
+  // FAM-010 (D-1225): the target rule of the execution's rule version, read once (one row by primary key).
+  const pv = await soft(
+    () =>
+      deps.mainDb.execute({
+        // rows-ok: one rule_version row by primary key
+        sql: "SELECT params_json FROM rule_version WHERE id = ?",
+        args: [`${v.market}:${family}:${str(e.rule_version)}`],
+      }),
+    null,
+  );
+  const ruleParams = ((): Record<string, unknown> => {
+    try {
+      const j: unknown = JSON.parse(str(pv?.rows[0]?.params_json ?? "{}"));
+      return typeof j === "object" && j !== null && !Array.isArray(j)
+        ? (j as Record<string, unknown>)
+        : {};
+    } catch {
+      return {};
+    }
+  })();
+  const hasTarget = ruleHasTarget(family as Family, ruleParams);
 
   // Market mood on each NAV date (UXN-051): the newest version of each day.
   const regimes: Array<string | null> = [];
@@ -615,7 +677,6 @@ export async function loadStrategyExtras(
       const sc = scopeOf(str(r.entry_d));
       const ep = num(r.entry_price);
       const xp = numOrNull(r.exit_price);
-      const qty = num(r.qty);
       const closed = xp !== null;
       trades.push({
         key: `t${i + 1}`,
@@ -624,20 +685,37 @@ export async function loadStrategyExtras(
         exitDate: masked || r.exit_d === null || r.exit_d === undefined ? null : str(r.exit_d),
         entryDay: sc.day(str(r.entry_d)),
         exitDay: r.exit_d === null || r.exit_d === undefined ? null : sc.day(str(r.exit_d)),
-        qty,
+        qty: masked ? null : num(r.qty),
         open: r.exit_type === null || r.exit_type === undefined,
         exitType: strOrNull(r.exit_type),
         returnPpm: closed && ep > 0 ? Math.round(((xp - ep) * PPM) / ep) : null,
-        pnl: masked || !closed ? null : money(Number((BigInt(xp) - BigInt(ep)) * BigInt(qty))),
-        entryPrice: masked ? null : money(ep),
-        exitPrice: masked || xp === null ? null : money(xp),
-        ...stopTarget(masked, ep, num(r.first_stop), numOrNull(r.latest_stop)),
+        pnl:
+          masked || !closed
+            ? null
+            : money(Number((BigInt(xp) - BigInt(ep)) * BigInt(num(r.qty))), v.currency),
+        entryPrice: masked ? null : money(ep, v.currency),
+        exitPrice: masked || xp === null ? null : money(xp, v.currency),
+        ...stopTarget(masked, ep, num(r.first_stop), numOrNull(r.latest_stop), v.currency),
+        ...(() => {
+          const t = targetDisplay(
+            masked,
+            family as Family,
+            ruleParams,
+            ep,
+            num(r.first_stop),
+            v.currency,
+            closed ? undefined : live.get(str(r.code)),
+            strOrNull(r.last_close_d),
+          );
+          return { target: t.target, targetReached: !closed && t.reached };
+        })(),
         ...lastPriceOf(
           masked,
           closed,
           r.last_close,
           strOrNull(r.last_close_d),
           live.get(str(r.code)),
+          v.currency,
         ),
         cardHref:
           r.card_id === null || r.card_id === undefined ? null : cardHref(str(r.card_id), masked),
@@ -713,8 +791,8 @@ export async function loadStrategyExtras(
     const sv = json(sr.rows[0]?.value_json);
     sleeve = {
       hypotheticalLabel: "hypothetical leverage",
-      levered: legOf(sv?.levered),
-      reality: legOf(sv?.reality),
+      levered: legOf(sv?.levered, v.currency),
+      reality: legOf(sv?.reality, v.currency),
     };
   }
 
@@ -766,6 +844,7 @@ export async function loadStrategyExtras(
   });
 
   return {
+    hasTarget,
     regimes,
     trades,
     controls,

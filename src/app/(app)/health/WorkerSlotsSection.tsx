@@ -1,6 +1,7 @@
 // System Health "Worker slots" block (M8 T11, decision 32, D-155). Owner only: the page renders it
 // for the Owner and nothing else. A plain server component; the form is a client component.
 import { ALWAYS_ON_SLOTS, GO_LIVE_SLOTS, type SlotsView } from "@/lib/golive/slots";
+import { HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import { WorkerSlotsForm } from "./WorkerSlotsForm";
 import { setSlotsEnabledAction } from "./slotsActions";
 
@@ -31,6 +32,7 @@ export function WorkerSlotsSection({ view }: { view: SlotsView | null }) {
             slots={GO_LIVE_SLOTS.map((s) => ({ ...s }))}
             initial={view.listed ?? []}
             alwaysOn={ALWAYS_ON_SLOTS}
+            zone={HOME_TZ}
           />
         </>
       )}

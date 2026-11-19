@@ -36,7 +36,7 @@ import {
   loadSleeveConfig,
   sleeveConfigFrom,
 } from "@/lib/arena/closeBooks";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { cohortCostProfile } from "@/lib/arena/costs";
 import { recostRowsFor } from "@/lib/arena/recost";
 import { parseCohortParams } from "@/lib/arena/cohort";
 import { loadExecutions } from "@/lib/arena/cohortWriter";
@@ -65,6 +65,8 @@ import {
 import { syncForwardLedger, type ForwardResult } from "./forwardLedger";
 import { runStatusLooks } from "@/lib/cortex/look";
 import { scoreOutcomes } from "@/lib/cortex/stage";
+import { runShortShadow } from "@/lib/shortShadow";
+import { altRegimeNight } from "@/lib/regime/alt/shadow";
 import { loadAgentParams, type AgentParams } from "./params";
 import { wordsKey } from "@/lib/learning/learnFacts";
 import { liveRankIc } from "@/lib/learning/rankIcStage";
@@ -184,7 +186,9 @@ async function recordSkip(db: Client, o: ReviewOptions, reason: string): Promise
 
 async function decidedOk(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
-    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded') LIMIT 1`,
+    // M18 (D-1782): a 2b recorded `late_2a` decided nothing, so batch 3 has nothing to review
+    sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')
+          AND COALESCE(json_extract(details_json, '$.reason'), '') <> 'late_2a' LIMIT 1`,
     args: [signalsKey(market, d)],
   });
   return rs.rows.length > 0;
@@ -643,7 +647,7 @@ async function recheckCohort(
     },
     sleeveUnrealFor: () => sleeveUnreal,
     sleeveLiquidationCostFor: () => 0n,
-    profile: COST_PROFILES[params.costProfile],
+    profile: cohortCostProfile(params),
     tickCrossFactor: params.tickCrossFactor,
   };
   return checkCohortBooks(books, {
@@ -1070,6 +1074,31 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
       });
     }
 
+    // M21 R1 (VAL-121, D-1228): the shadow short stream, right after the would-have outcomes. Off unless the market's
+    // switch is on; writes its two tables only, no tick and no log line on success; a failure only logs.
+    try {
+      await runShortShadow(db, {
+        market: o.market,
+        d: o.d,
+        params,
+        now: o.now,
+        calendar: o.calendar,
+      });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `short shadow not run on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
     // V2-S1 (CTX-053, CTX-082, D-700): the quarterly live look at each family's status, after the
     // outcomes above. One look per family per quarter (a ledger cell), never a promotion outside the
     // CTX-053 rules; a failure only logs.
@@ -1084,6 +1113,26 @@ export async function reviewDay(db: Client, o: ReviewOptions): Promise<ReviewRes
           o.now(),
           REVIEW_JOB,
           `cortex status look failed on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
+            0,
+            LOG_MESSAGE_MAX,
+          ),
+          runId,
+        ],
+      });
+    }
+
+    // M22 E5 (DAT-248, D-1440, D-1441): the shadow regime reading, ONE call per session. It writes regime_alt_reading only and
+    // returns nothing the gate or any score reads (the base state is regime_daily, written by batch 2b, and is not touched here);
+    // with no outside input source accepted the row says `unavailable`. A failure only logs.
+    try {
+      await altRegimeNight(db, { market: o.market, d: o.d, now: o.now() });
+    } catch (error) {
+      await db.execute({
+        sql: "INSERT INTO app_log (at, level, source, message, run_id) VALUES (?, 'warn', ?, ?, ?)",
+        args: [
+          o.now(),
+          REVIEW_JOB,
+          `shadow regime reading not written on ${o.d}: ${error instanceof Error ? error.message : "error"}`.slice(
             0,
             LOG_MESSAGE_MAX,
           ),

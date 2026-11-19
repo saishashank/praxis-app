@@ -11,6 +11,7 @@
 // Melbourne day is [00:00, next 00:00) converted to UTC with the zone database, so a 23 or 25 hour
 // DST day is counted correctly.
 import type { Client } from "@libsql/client";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import {
   RECOST_KEYS,
   SHOCK_PCTS,
@@ -34,7 +35,7 @@ import type { WhatIfOptions, WhatIfView } from "./options";
 
 export type { WhatIfOptions, WhatIfView } from "./options";
 
-export const WHATIF_TZ = "Australia/Melbourne";
+export const WHATIF_TZ: string = OWNER_TZ;
 export const WHATIF_KINDS = ["cost", "shock", "custom"] as const;
 export type WhatIfKind = (typeof WHATIF_KINDS)[number];
 export const WHATIF_ACTION = "what_if.run";

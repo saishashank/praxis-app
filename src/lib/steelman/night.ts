@@ -14,6 +14,8 @@ import { opinionValue, settleDue } from "./opinion";
 import { buildPack, loadPackInput, type EvidencePack, type PackItem } from "./pack";
 import {
   insertNight,
+  insertPack,
+  limitCutPackId,
   readNight,
   readPackForSubject,
   readPoints,
@@ -49,6 +51,8 @@ export type NightOptions = {
   readonly llmParams: LlmParams;
   readonly keys: SteelmanKeys;
   readonly llm: SteelmanLlm;
+  /** Tokens the pick reflections still need from the writer role tonight (D-1493); absent = 0. */
+  readonly reflectionReserve?: number;
   readonly calendar: readonly CalendarRow[];
   /** ISO UTC time stamped on every row written. */
   readonly now: string;
@@ -59,7 +63,7 @@ export type NightResult = {
   status: "done" | "already_done" | "failed";
   requested: number;
   written: number;
-  notWritten: Record<"limit" | "budget" | "noModel" | "critic", number>;
+  notWritten: Record<"limit" | "budget" | "noModel" | "critic" | "error", number>;
   claimsTotal: number;
   claimsValid: number;
   validityPpm: number;
@@ -75,7 +79,7 @@ const empty = (status: NightResult["status"]): NightResult => ({
   status,
   requested: 0,
   written: 0,
-  notWritten: { limit: 0, budget: 0, noModel: 0, critic: 0 },
+  notWritten: { limit: 0, budget: 0, noModel: 0, critic: 0, error: 0 },
   claimsTotal: 0,
   claimsValid: 0,
   validityPpm: 0,
@@ -92,8 +96,9 @@ const bucket = (r: NotWrittenReason): keyof NightResult["notWritten"] => {
     case "budget":
       return "budget";
     case "no_model":
-    case "error":
       return "noModel";
+    case "error":
+      return "error"; // OPS-111 (6): apart from no_model, so the card does not claim a model was missing
     default:
       return "critic"; // critic_unavailable, rejected: did not pass review (D-503)
   }
@@ -108,6 +113,7 @@ const fromRow = (r: NightRow): NightResult => ({
     budget: r.notWrittenBudget,
     noModel: r.notWrittenNoModel,
     critic: r.notWrittenCritic,
+    error: r.notWrittenError,
   },
   claimsTotal: r.claimsTotal,
   claimsValid: r.claimsValid,
@@ -223,7 +229,13 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
       const failedBefore: WriteOutcome = {
         state: "not_written",
         reason: "rejected",
-        claims: { total: points.length, valid: 0 },
+        // OPS-111 (3), D-1794: the counters of a night that crashed before its row come back from the stored
+        // points, so a resumed night reads the same as an uninterrupted one: valid = kept by the author
+        // (shown or hidden by the critic), the rest were dropped by the claim checks.
+        claims: {
+          total: points.length,
+          valid: points.filter((p) => p.state === "shown" || p.state === "hidden_critic").length,
+        },
       };
       outcome =
         prior ??
@@ -240,6 +252,7 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
                 criticRouterFor: o.llm.criticRouterFor,
                 providers: o.llm.providers,
                 store: o.llm.store,
+                reflectionReserve: o.reflectionReserve,
               },
               subject,
               pack,
@@ -269,6 +282,28 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
       res.notWritten[bucket(outcome.reason)] += 1;
     }
   }
+  // D-1310 (UXN-323): a subject cut by the daily limit gets a zero-item pack, so its card can say so in plain
+  // words. The insert is idempotent (keyed, DO NOTHING), a failure never stops the night, and nothing reads
+  // the pack but the card reader and the settle step; no book, signal, rule, alert or pick sees it.
+  for (const subject of subjects.slice(cap)) {
+    try {
+      await insertPack(db, {
+        packId: limitCutPackId(o.market, o.d, subject.kind, subject.id),
+        market: o.market,
+        d: o.d,
+        subjectKind: subject.kind,
+        subjectId: subject.id,
+        code: subject.code,
+        cardId: subject.cardId,
+        cutoffAt: o.now,
+        items: [],
+        itemCount: 0,
+        createdAt: o.now,
+      });
+    } catch {
+      // the night row still counts the cut; the card then shows no steelman heading
+    }
+  }
   res.criticHidden = hidden;
   res.validityPpm =
     res.claimsTotal === 0 ? 0 : Math.floor((res.claimsValid * PPM) / res.claimsTotal);
@@ -282,6 +317,7 @@ export async function steelmanNight(db: Exec, o: NightOptions): Promise<NightRes
       notWrittenBudget: res.notWritten.budget,
       notWrittenNoModel: res.notWritten.noModel,
       notWrittenCritic: res.notWritten.critic,
+      notWrittenError: res.notWritten.error,
       claimsTotal: res.claimsTotal,
       claimsValid: res.claimsValid,
       validityPpm: res.validityPpm,

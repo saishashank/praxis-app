@@ -4,9 +4,11 @@
 // tests can call it directly.
 //
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
+//   close-books --kill market_off [--market <CODE>] [--date YYYY-MM-DD]   (the rollback kill, M20 D-1101: closes every
+//                open book of a market in rollback at the open, then disables it; src/lib/arena/kill.ts)
 //   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all]
 //                (batch 2b, M4 T8; batch 3, T15; then A6 `learn` and the `words` text, M6 T11; all = in that order)
-//   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market AU]
+//   replay --db file:<path> --from YYYY-MM-DD --to YYYY-MM-DD [--market <CODE>]
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, COMMIT_SHA (optional), GITHUB_OUTPUT (optional).
 // Output: statuses and counts only. Never a row, a code, a URL, a token or a driver error.
@@ -17,7 +19,8 @@
 // late the job waits (`--wait-minutes`, default 20) and then fails visibly; it never closes the
 // books on a stale ledger. A missed earlier session is caught up first, oldest first.
 import { appendFileSync } from "node:fs";
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { addDays, marketDate, sessionsBetween } from "@/lib/data/calendar";
 import { signalsDay, type SignalsResult } from "@/lib/agents/batch2b";
 import { reviewDay, type ReviewResult } from "@/lib/agents/batch3";
@@ -26,8 +29,8 @@ import { decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { waitForCutoffPoll } from "@/lib/sentinel/cutoffPoll";
 import { learnDay, type LearnResult } from "@/lib/learning/learnStage";
 import { wordsDay, type WordsLlm, type WordsResult } from "@/lib/learning/wordsStage";
-import { createRouter, type LlmRouter } from "@/lib/llm/router";
-import { DbStore } from "@/lib/llm/store";
+import { readLiveRoles } from "@/lib/llm/factory";
+import { nightlyLlm } from "@/lib/llm/nightlyLlm";
 import {
   ARENA_JOB,
   closeBooksDay,
@@ -36,10 +39,11 @@ import {
   recordCatchUpCapped,
   type CloseBooksResult,
 } from "./closeBooks";
+import { loadProfile } from "@/lib/market/profile";
+import { closeBooksKill, KILL_REASON } from "./kill";
+import { resolveCliMarket } from "./marketFlag";
 import { replaySessions } from "./replay";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
 const DEFAULT_WAIT_MINUTES = 20;
 const POLL_MS = 30_000;
 const DEFAULT_MAX_SESSIONS = 10;
@@ -53,7 +57,12 @@ function flag(args: readonly string[], name: string): string | null {
 
 export type CliDeps = {
   /** Test seam: the routers of the `words` phase (default: rules-only, no provider; LLM-040). */
-  readonly wordsLlm?: (ctx: { db: Client; params: AgentParams; kbVersion: string }) => WordsLlm;
+  readonly wordsLlm?: (ctx: {
+    db: Client;
+    params: AgentParams;
+    kbVersion: string;
+    liveRoles?: readonly string[] | null;
+  }) => WordsLlm;
   readonly openDb?: (url: string, token: string | undefined) => Client;
   readonly nowMs?: () => number;
   readonly sleep?: (ms: number) => Promise<void>;
@@ -65,7 +74,7 @@ function defaults(deps: CliDeps) {
     openDb:
       deps.openDb ??
       ((url: string, authToken: string | undefined) =>
-        createClient({ url, authToken, intMode: "bigint" })),
+        scriptDb({ url, token: authToken, intMode: "bigint" })),
     nowMs: deps.nowMs ?? (() => Date.now()),
     sleep: deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))),
     out: deps.out ?? ((line: string) => console.log(line)),
@@ -81,20 +90,20 @@ function summary(r: CloseBooksResult): string {
   );
 }
 
-async function hasMarker(db: Client, d: string): Promise<boolean> {
+async function hasMarker(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: "SELECT 1 FROM completion_marker WHERE market = ? AND d = ? AND kind = 'data'",
-    args: [MARKET, d],
+    args: [market, d],
   });
   return rs.rows.length > 0;
 }
 
 /** Last session with a successful batch 2a (the record's scheduled_for), or null. */
-async function lastClosed(db: Client): Promise<string | null> {
+async function lastClosed(db: Client, market: string): Promise<string | null> {
   const rs = await db.execute({
     sql: `SELECT MAX(scheduled_for) AS d FROM run_record
           WHERE job = ? AND market = ? AND status = 'success'`,
-    args: [ARENA_JOB, MARKET],
+    args: [ARENA_JOB, market],
   });
   const d = rs.rows.length === 0 ? null : rs.rows[0].d;
   return d === null || d === undefined ? null : String(d);
@@ -105,6 +114,7 @@ export async function closeBooksMain(
   env: Readonly<Record<string, string | undefined>>,
   deps: CliDeps = {},
 ): Promise<number> {
+  if (argv.includes("--kill")) return killMain(argv, env, deps);
   const { openDb, nowMs, sleep, out } = defaults(deps);
   const replay = argv.includes("--replay");
   const url = env.TURSO_MAIN_URL;
@@ -136,9 +146,16 @@ export async function closeBooksMain(
   let exit = 0;
   const lines: string[] = [];
   try {
-    const target = date ?? marketDate(new Date(nowMs()), MARKET_TZ);
-    const calendar = await loadCalendar(db, MARKET);
-    const done = await lastClosed(db);
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-2a: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const target = date ?? marketDate(new Date(nowMs()), tz);
+    const calendar = await loadCalendar(db, market);
+    const done = await lastClosed(db, market);
     let sessions =
       done === null || done >= target
         ? [target]
@@ -151,7 +168,7 @@ export async function closeBooksMain(
     if (capped > 0) sessions = sessions.slice(0, cap);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
-      args: [MARKET],
+      args: [market],
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
     for (const d of sessions) {
@@ -159,10 +176,10 @@ export async function closeBooksMain(
       // Batch 1 late: wait for the target's marker only when this run could actually write
       if (writes && isTarget) {
         const deadline = nowMs() + wait * 60_000;
-        while (!(await hasMarker(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+        while (!(await hasMarker(db, market, d)) && nowMs() < deadline) await sleep(POLL_MS);
       }
       const result = await closeBooksDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         strictCalendar: !replay, // D-711
@@ -190,7 +207,7 @@ export async function closeBooksMain(
       // R4-I3 (D-833): a record, so System Health shows the open target without GitHub
       if (!replay) {
         await recordCatchUpCapped(db, {
-          market: MARKET,
+          market: market,
           d: target,
           closed: sessions.length,
           remaining: capped,
@@ -213,6 +230,73 @@ export async function closeBooksMain(
   return exit;
 }
 
+/**
+ * `close-books --kill market_off` (M20 S1, D-1101): the rollback kill. Refused unless the value is `market_off`, never
+ * with `--replay`, and only against a market the resolver accepts (enabled: a market in rollback still is). Exit 0 when
+ * the books are closed and the market disabled (or the run is an expected skip), 1 when a position could not be sold,
+ * 2 on a usage error.
+ */
+export async function killMain(
+  argv: readonly string[],
+  env: Readonly<Record<string, string | undefined>>,
+  deps: CliDeps = {},
+): Promise<number> {
+  const { openDb, nowMs, out } = defaults(deps);
+  if (flag(argv, "--kill") !== KILL_REASON || argv.includes("--replay")) {
+    out(`arena-kill: refused (usage: --kill ${KILL_REASON}, never with --replay)`);
+    return 2;
+  }
+  const url = env.TURSO_MAIN_URL;
+  const token = env.TURSO_MAIN_TOKEN;
+  if (!has(url) || (!has(token) && !url.startsWith("file:"))) {
+    out("arena-kill: failed (database not configured)");
+    return 1;
+  }
+  let db: Client;
+  try {
+    db = openDb(url, has(token) ? token : undefined);
+  } catch {
+    out("arena-kill: failed (cannot open database)");
+    return 1;
+  }
+  let exit = 0;
+  try {
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-kill: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
+    const r = await closeBooksKill(db, {
+      market,
+      d,
+      now: () => new Date(nowMs()).toISOString(),
+      commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
+      notify: { env },
+    });
+    const why = r.reason === null ? "" : ` (${r.reason})`;
+    out(
+      `arena-kill ${market} ${d}: ${r.status}${why} sold=${r.sold} sleeve=${r.sleeveClosed} cancelled=${r.cancelled}` +
+        ` open=${r.basis.open} lastClose=${r.basis.lastClose} remaining=${r.remaining} disabled=${r.disabled}`,
+    );
+    if (r.status === "failed") exit = 1;
+    if (has(env.GITHUB_OUTPUT))
+      appendFileSync(
+        env.GITHUB_OUTPUT,
+        `status=${r.status}
+`,
+      );
+  } catch (error) {
+    out(`arena-kill: failed (unexpected error ${error instanceof Error ? error.name : "unknown"})`);
+    exit = 1;
+  } finally {
+    db.close();
+  }
+  return exit;
+}
+
 export async function replayMain(
   argv: readonly string[],
   env: Readonly<Record<string, string | undefined>>,
@@ -230,9 +314,14 @@ export async function replayMain(
     out("arena-replay: refused (a replay runs against a local file: database only)");
     return 2;
   }
-  const market = flag(argv, "--market") ?? MARKET;
   const db = openDb(url, undefined);
   try {
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-replay: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
     const results = await replaySessions(db, {
       market,
       from,
@@ -301,24 +390,29 @@ function wordsSummary(r: WordsResult): string {
   );
 }
 
-/** Rules-only routers over the database call log: the default until the bake-off (LLM-040). */
-function rulesOnlyLlm(ctx: { db: Client; params: AgentParams; kbVersion: string }): WordsLlm {
-  const store = new DbStore(ctx.db);
-  const make = (): LlmRouter =>
-    createRouter({
-      mode: "rules-only",
-      params: ctx.params.llm,
-      kbVersion: ctx.kbVersion,
-      store,
-      providers: [],
-    });
-  return { r5Router: make(), providers: [], routerFor: () => make(), store };
+/**
+ * The words phase's routers from the nightly seam (D-1445, D-1460): rules-only unless `llm_live_roles` (read once before the
+ * phase, `ctx.liveRoles`) lists a role whose bake-off passed and whose key is present; an unreadable list is rules-only (LLM-040).
+ */
+function nightWordsLlm(ctx: {
+  db: Client;
+  params: AgentParams;
+  kbVersion: string;
+  liveRoles?: readonly string[] | null;
+}): WordsLlm {
+  const night = nightlyLlm(ctx);
+  return {
+    r5Router: night.routerFor("R5"),
+    providers: night.providers,
+    routerFor: () => night.routerFor("R3"),
+    store: night.store,
+  };
 }
 
-async function hasClosedBooks(db: Client, d: string): Promise<boolean> {
+async function hasClosedBooks(db: Client, market: string, d: string): Promise<boolean> {
   const rs = await db.execute({
     sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
-    args: [closeBooksKey(MARKET, d)],
+    args: [closeBooksKey(market, d)],
   });
   return rs.rows.length > 0;
 }
@@ -367,18 +461,25 @@ export async function signalsMain(
   let lastLearn = "";
   let lastWords = "";
   try {
-    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
-    const calendar = await loadCalendar(db, MARKET);
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-2b: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
+    const calendar = await loadCalendar(db, market);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
-      args: [MARKET],
+      args: [market],
     });
     const writes = mode.rows.length > 0 && (String(mode.rows[0].mode) === "full" || replay);
     let runReview = phase === "3";
     if (phase === "2b" || phase === "all") {
       if (writes) {
         const deadline = nowMs() + wait * 60_000;
-        while (!(await hasClosedBooks(db, d)) && nowMs() < deadline) await sleep(POLL_MS);
+        while (!(await hasClosedBooks(db, market, d)) && nowMs() < deadline) await sleep(POLL_MS);
         // GL-05: then the "first completed poll after the cut-off" marker, at most 4 minutes (bounded,
         // never past cut-off + 4 min). A missing marker never stalls the night: signalsDay records
         // `cutoff_poll_missing` on the run and the announcements are bounded at cut-off + 4 min.
@@ -386,7 +487,7 @@ export async function signalsMain(
           let found = false;
           try {
             found = await waitForCutoffPoll(db, {
-              market: MARKET,
+              market: market,
               d,
               cutoffIso: decisionCutoffUtc(d, (await loadAgentParams(db)).decisionCutoff),
               nowMs,
@@ -399,7 +500,7 @@ export async function signalsMain(
         }
       }
       const result = await signalsDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         strictCalendar: !replay, // D-711
@@ -408,7 +509,7 @@ export async function signalsMain(
         commitSha: has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined,
         onTiming: (stage, ms, note) =>
           out(
-            `arena-2b ${MARKET} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
+            `arena-2b ${market} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
           ),
       });
       out(signalsSummary(result));
@@ -416,16 +517,20 @@ export async function signalsMain(
       if (result.status === "failed") exit = 1;
       // 2a missing after the wait: a visible failure, never orders on a stale ledger
       if (result.status === "skipped" && result.reason === "no_2a_success") exit = 1;
+      // M18 (D-1782): after 18:40 the night is recorded degraded `late_2a`: just as visible, and 2b decided nothing
+      const late2a = result.status === "degraded" && result.reason === "late_2a";
+      if (late2a) exit = 1;
       // batch 3 follows 2b back-to-back (design 4.1), unless 2b failed or never had its inputs
       runReview =
         phase === "all" &&
+        !late2a &&
         (result.status === "success" ||
           result.status === "degraded" ||
           result.status === "already_done");
     }
     if (runReview) {
       const review = await reviewDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         strictCalendar: !replay, // D-711
@@ -437,7 +542,7 @@ export async function signalsMain(
         notify: { env },
         onStage: (stage, ms, note) =>
           out(
-            `arena-3 ${MARKET} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
+            `arena-3 ${market} ${d}: stage=${stage} ms=${ms}${note === undefined ? "" : ` ${note}`}`,
           ),
       });
       out(reviewSummary(review));
@@ -453,7 +558,7 @@ export async function signalsMain(
     const commitSha = has(env.COMMIT_SHA) ? env.COMMIT_SHA : undefined;
     if (phase === "learn" || (phase === "all" && writes)) {
       const learn = await learnDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         calendar,
@@ -466,15 +571,17 @@ export async function signalsMain(
       if (learn.status === "failed") exit = 1;
     }
     if (phase === "words" || (phase === "all" && writes)) {
-      const llm = deps.wordsLlm ?? rulesOnlyLlm;
+      const llm = deps.wordsLlm ?? nightWordsLlm;
+      // D-1460: the list is read here, before the synchronous words phase; null (unreadable) keeps every role rules-only.
+      const liveRoles = await readLiveRoles(db);
       const words = await wordsDay(db, {
-        market: MARKET,
+        market: market,
         d,
         replay,
         calendar,
         now: nowIso,
         commitSha,
-        llm: (ctx) => llm({ db, ...ctx }),
+        llm: (ctx) => llm({ db, ...ctx, liveRoles }),
       });
       out(wordsSummary(words));
       lastWords = `words=${words.status}`;

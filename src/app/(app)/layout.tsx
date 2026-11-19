@@ -24,6 +24,7 @@ async function shellFor(user: CurrentUser): Promise<ShellModel> {
       user: { id: user.id, role: user.role },
       masked: true,
       market: null,
+      markets: [],
       bell: { count: 0, topTier: null },
       banners: [{ id: "shell:unavailable", text: "Some header information is unavailable." }],
     };
@@ -45,6 +46,7 @@ export default async function AppLayout({
     <AppShell
       role={user.role}
       market={shell.market}
+      markets={shell.markets}
       bell={shell.bell}
       banners={shell.banners}
       signOut={signOutAction}

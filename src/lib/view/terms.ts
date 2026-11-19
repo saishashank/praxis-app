@@ -3,6 +3,8 @@
 // official term stays in exports, logs and the spec; the UI shows `shown` and puts `official` and
 // `hover` in the hover / tap / focus text. Pure data and lookups.
 
+import { displayName } from "@/lib/view/format";
+
 export type Term = { official: string; shown: string; hover: string };
 
 export const TERMS: readonly Term[] = [
@@ -183,5 +185,6 @@ export function strategyDisplayName(
   leveraged: boolean,
 ): string {
   const row = Object.hasOwn(names, family) ? names[family] : undefined;
-  return `${row?.name ?? family} — ${moneyTypeLabel(leveraged)}`;
+  const stored = row !== undefined && row.name.trim() !== "" ? displayName(row.name) : family;
+  return `${stored} — ${moneyTypeLabel(leveraged)}`;
 }

@@ -5,7 +5,7 @@
 // reason but no price, cost, stop or target; narrative, alert and health text pass through maskText;
 // links are dropped; the Owner and unmasked users keep the stored HTML (the page decides).
 import type { ReviewFacts } from "@/lib/email/templates/review";
-import { formatCents } from "./format";
+import { currencyFormatFor, formatCents } from "./format";
 import { findLeaks, maskText, StockAliases, type MaskLookup, EMPTY_LOOKUP } from "./mask";
 
 export type MaskedReview = {
@@ -55,7 +55,7 @@ export function maskedReview(
   for (const e of arr(facts.executions)) {
     if (!isObj(e)) continue;
     summary.push(
-      `${t(str(e.id))} ${t(str(e.label))}: day profit/loss ${formatCents(num(e.dayPlCents), { currency: str(e.currency) === "AUD" ? "A$" : `${str(e.currency)} `, sign: "always" })}`,
+      `${t(str(e.id))} ${t(str(e.label))}: day profit/loss ${formatCents(num(e.dayPlCents), currencyFormatFor(str(e.currency)), { sign: "always" })}`,
     );
   }
   if (isObj(facts.scorecard)) {

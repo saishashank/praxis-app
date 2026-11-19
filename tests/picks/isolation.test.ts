@@ -84,6 +84,14 @@ describe("picks are never read by ranking or sizing", () => {
       f === "src/lib/experts/calls.ts" ||
       // D-950: the page loader of the My portfolio card reads its settings and the split words
       f === "src/lib/ui/loaders/pickPortfolio.ts" ||
+      // OPS-110 (D-941): Home and the Evening Review read the stored "No picks tonight: ..." line
+      f === "src/lib/ui/loaders/home.ts" ||
+      f === "src/lib/ui/loaders/reviews.ts" ||
+      // M21 B1 (D-1217, D-1260): the Owner's recommendations page sizes the night's picks with the Owner's own
+      // capital through the exported `sizeForAmount` and reads the `pick` table; it is display only (no trading,
+      // learning or Cortex module reads it back) and lives behind the Owner-tools switch.
+      f === "src/lib/ownerTools/sizing.ts" ||
+      f === "src/lib/ownerTools/recommendations.ts" ||
       // D-1062 (O-84): the pick scorecard replays the nightly picks on past data as a report; it is
       // outside the trading folders and writes only its own two tables and one report-only look.
       f.startsWith("src/lib/scorecard/") ||
@@ -104,6 +112,7 @@ describe("picks are never read by ranking or sizing", () => {
     // exit code; no other trading file may even mention the picks folder.
     const bad = allCode
       .filter(inTrading)
+      .filter((f) => !/\.test\.(?:mjs|ts)$/.test(f)) // D-1541: a test that stubs the stage list is not trading code
       .filter((f) => /["'`]src\/lib\/picks/.test(readFileSync(f, "utf8"))) // quoted, not a comment
       .map(rel);
     expect(bad).toEqual(["scripts/arena/signals.mjs"]);
@@ -121,7 +130,8 @@ describe("picks are never read by ranking or sizing", () => {
   });
 
   it("writes only to its own tables (pick_check: D-187; pick_market: ARN-103; pick_portfolio_*: D-913, D-950)", () => {
-    const re = /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
+    // INSERT OR IGNORE / OR REPLACE INTO counts too (D-1780).
+    const re = /\b(?:INSERT\s+(?:OR\s+[a-z]+\s+)?INTO|UPDATE|DELETE\s+FROM)\s+([a-z_]+)/gi;
     const targets = new Set<string>();
     for (const file of walk(path.join(ROOT, "src/lib/picks"))) {
       for (const m of readFileSync(file, "utf8").matchAll(re)) targets.add(m[1]!.toLowerCase());

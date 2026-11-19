@@ -4,7 +4,9 @@
 // `experts` stat into a warning. Read-only; never throws.
 import { afterEach, describe, expect, it } from "vitest";
 import { expertsHealthOf, loadExpertsHealth, statWarnings } from "@/lib/health/experts";
-import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { maskExpertsHealth } from "@/lib/ui/loaders/health";
+import { loadMaskLookup, maskText, StockAliases } from "@/lib/view/mask";
+import { allowMarket, cleanupTempDbs, freshDb } from "../db/helpers";
 import { addProposal, addScreening, importZzSeed } from "../experts/zzWorld";
 
 afterEach(cleanupTempDbs);
@@ -49,6 +51,40 @@ describe("expertsHealthOf", () => {
       "F7 gate fired: needs an Owner decision",
     ]);
     expect(h.text).toContain("Attention: degraded:screen; degraded:docs; F7 gate fired");
+  });
+});
+
+// OPS-112 (6), D-1795 (D-652): a masked viewer sees the last screening as an ISO week, never a date; an
+// unmasked viewer sees the stored day. The masker is the one the health loader applies.
+describe("the experts line for a masked viewer", () => {
+  it("turns the screening date into an ISO week in both the field and the text", async () => {
+    const db = await freshDb("main");
+    await importZzSeed(db);
+    await addScreening(db, { market: "AU", d: "2026-10-16", clusterIds: ["K-ZZ1"] });
+    const line = await loadExpertsHealth(db, "AU");
+    expect(line.text).toContain("last screening 2026-10-16");
+    const lookup = await loadMaskLookup(db, "AU");
+    const masked = maskExpertsHealth(line, (s) => maskText(s, new StockAliases([]), lookup));
+    expect(masked.lastScreening).toBe("2026-W42");
+    expect(masked.text).toContain("last screening 2026-W42");
+    expect(masked.text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    // an unmasked viewer's identity function leaves the day
+    expect(maskExpertsHealth(line, (s) => s).text).toContain("2026-10-16");
+    // counts and fixed words survive the mask
+    expect(masked.claimsToCheck).toBe(line.claimsToCheck);
+    expect(masked.text).toMatch(
+      /^Experts: \d+ claims? to check; last screening 2026-W42; \d+ clusters? parked\.$/,
+    );
+  });
+
+  it("a line with no screening yet has no date to mask", async () => {
+    const db = await freshDb("main");
+    const lookup = await loadMaskLookup(db, "AU");
+    const m = maskExpertsHealth(await loadExpertsHealth(db, "AU"), (s) =>
+      maskText(s, new StockAliases([]), lookup),
+    );
+    expect(m.lastScreening).toBeNull();
+    expect(m.text).toContain("last screening none yet");
   });
 });
 
@@ -129,7 +165,8 @@ describe("loadExpertsHealth", () => {
     const h = await loadExpertsHealth(db, "AU");
     expect(h.warnings).toEqual(["F7 gate fired: needs an Owner decision"]);
     expect(h.state).toBe("attention");
-    // another market's stat does not leak in
+    // another market's stat does not leak in (M19 0038: its row needs the market enabled)
+    await allowMarket(db, "US");
     await addStat(db, "r3", "2030-03-15", { degraded: ["degraded:docs"] }, "US");
     expect((await loadExpertsHealth(db, "AU")).warnings).toEqual([
       "F7 gate fired: needs an Owner decision",

@@ -49,6 +49,8 @@ export function createTestLoginHandler(deps: TestLoginDeps) {
         secret: deps.env.TEST_IDENTITY_SECRET,
         headers: req.headers,
         rawBody,
+        method: req.method,
+        path: new URL(req.url).pathname,
         nowSec,
         store: deps.store,
       });

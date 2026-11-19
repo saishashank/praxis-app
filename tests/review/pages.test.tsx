@@ -154,7 +154,9 @@ describe("/reviews/[date]", () => {
     as("owner");
     const html = await page(D);
     expect(html).toContain("<iframe");
-    expect(html).toContain('sandbox=""');
+    expect(html).toContain('sandbox="allow-same-origin"');
+    expect(html).not.toContain("allow-scripts");
+    expect(html).not.toMatch(/80vh/);
     expect(html).toContain("ZZUP");
   });
 

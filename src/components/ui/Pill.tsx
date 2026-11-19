@@ -21,9 +21,9 @@ const STATE: Record<string, Entry> = {
   livetested: { hue: "status-livetested", text: "Live-tested" },
 };
 const TIER: Record<string, Entry> = {
-  P0: { hue: "tier-p0", text: "P0" },
-  P1: { hue: "tier-p1", text: "P1" },
-  P2: { hue: "tier-p2", text: "P2" },
+  P0: { hue: "tier-p0", text: "Urgent" },
+  P1: { hue: "tier-p1", text: "Important" },
+  P2: { hue: "tier-p2", text: "FYI" },
 };
 const STATUS: Record<string, Entry> = {
   ok: { hue: "positive", text: "OK" },

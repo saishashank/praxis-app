@@ -60,30 +60,30 @@ describe("Money, GainLoss, Percent", () => {
   it("formats zero, negative and large cents; zero has no sign", () => {
     const { container } = render(
       <>
-        <Money cents={0} />
-        <Money cents={-123456} />
-        <Money cents={60000} />
+        <Money currency="AUD" cents={0} />
+        <Money currency="AUD" cents={-123456} />
+        <Money currency="AUD" cents={60000} />
       </>,
     );
     const t = [...container.querySelectorAll("[data-money]")].map((e) => e.textContent);
     expect(t).toEqual(["A$0.00", "-A$1,234.56", "A$600.00"]);
   });
   it("missing money says Not measured yet, never 0", () => {
-    render(<Money cents={null} />);
+    render(<Money currency="AUD" cents={null} />);
     expect(screen.getByText("Not measured yet")).toBeInTheDocument();
     expect(screen.queryByText("A$0.00")).toBeNull();
   });
   it("masked money shows the lock text and no figure", () => {
-    const { container } = render(<Money cents={99999} masked />);
+    const { container } = render(<Money currency="AUD" cents={99999} masked />);
     expect(container).toHaveTextContent("Hidden for your role");
     expect(container).not.toHaveTextContent("999");
   });
   it("GainLoss gives sign, arrow and words, not colour alone", () => {
     render(
       <>
-        <GainLoss value={1250} />
-        <GainLoss value={-1250} />
-        <GainLoss value={0} />
+        <GainLoss currency="AUD" value={1250} />
+        <GainLoss currency="AUD" value={-1250} />
+        <GainLoss currency="AUD" value={0} />
       </>,
     );
     expect(screen.getByRole("img", { name: "gain: +A$12.50" })).toHaveTextContent("▲");
@@ -376,7 +376,7 @@ describe("states", () => {
 
 describe("GlyphBar", () => {
   it("labels every mark in text and describes the value", () => {
-    render(<GlyphBar label="Buy the dip" valueCents={72500} />);
+    render(<GlyphBar currency="AUD" label="Buy the dip" valueCents={72500} />);
     const img = screen.getByRole("img", { name: /Buy the dip: A\$725\.00/ });
     expect(img.getAttribute("aria-label")).toMatch(/Loss limit A\$300\.00/);
     expect(img.getAttribute("aria-label")).toMatch(/Goal A\$1,200\.00/);
@@ -384,13 +384,13 @@ describe("GlyphBar", () => {
     expect(screen.getByText("Start A$600.00")).toBeInTheDocument();
   });
   it("negative, zero, above-goal and missing values stay inside the bar", () => {
-    const { container, rerender } = render(<GlyphBar label="S" valueCents={-500} />);
+    const { container, rerender } = render(<GlyphBar currency="AUD" label="S" valueCents={-500} />);
     expect(container.querySelector<HTMLElement>("[data-glyph-fill]")!.style.width).toBe("0%");
-    rerender(<GlyphBar label="S" valueCents={0} />);
+    rerender(<GlyphBar currency="AUD" label="S" valueCents={0} />);
     expect(container.querySelector<HTMLElement>("[data-glyph-fill]")!.style.width).toBe("0%");
-    rerender(<GlyphBar label="S" valueCents={200000} />);
+    rerender(<GlyphBar currency="AUD" label="S" valueCents={200000} />);
     expect(container.querySelector<HTMLElement>("[data-glyph-fill]")!.style.width).toBe("100%");
-    rerender(<GlyphBar label="S" valueCents={null} />);
+    rerender(<GlyphBar currency="AUD" label="S" valueCents={null} />);
     expect(container.querySelector("[data-glyph-fill]")).toBeNull();
     expect(screen.getByRole("img")).toHaveAttribute(
       "aria-label",

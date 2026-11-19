@@ -114,6 +114,61 @@ describe("no broker or trading links, no buy-now calls to action", () => {
   });
 });
 
+// M21 B1 (D-1219, AT-78): the pick surfaces above stay clean exactly as before. The one external link a pick tile may
+// carry is the Owner-tools BrokerLinks component, which reaches the tile as its `extra` slot from a dynamic import behind
+// the hidden-route predicate; no pick surface imports it, or any other Owner-tools module, statically.
+describe("the Owner-tools broker link on a pick tile (D-1219)", () => {
+  const BROKER_LINKS = "src/components/ownerTools/BrokerLinks.tsx";
+  const SECTION = /(?:^|\/)(?:lib|components)\/ownerTools(?:\/|["'])/;
+  const staticSpecifiers = (src: string): string[] =>
+    [
+      ...src.matchAll(
+        /(?:^|\n)[ \t]*(?:import|export)\s+(?!type\s)[^;]*?\bfrom\s*(["'])([^"']+)\1/g,
+      ),
+    ].map((m) => m[2]!);
+
+  it("no pick surface imports an Owner-tools module statically", () => {
+    const bad: string[] = [];
+    for (const f of surfaces) {
+      const hit = staticSpecifiers(read(f)).filter((x) => SECTION.test(x));
+      if (hit.length > 0) bad.push(`${f}: ${hit.join(", ")}`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  it("the Picks page loads the tile extras only through a dynamic import", () => {
+    const page = stripComments(read("src/app/(app)/picks/page.tsx"));
+    expect(page).toMatch(/import\(\s*"@\/lib\/ownerTools\/pickExtras"\s*\)/);
+    expect(page).toMatch(/ownerToolsVisibleTo\(/);
+  });
+
+  it("PickCard has no external link of its own: only an optional slot", () => {
+    const card = stripComments(read("src/app/(app)/picks/PickCard.tsx"));
+    expect(card).toMatch(/extra\?: ReactNode/);
+    expect(card).not.toMatch(/https?:\/\//);
+    expect(card).not.toMatch(/target=/);
+  });
+
+  it("BrokerLinks is the one Owner-tools file that writes an external link, and only from the Owner's templates", () => {
+    const comp = stripComments(read(BROKER_LINKS));
+    expect(comp).toMatch(/href=\{l\.href\}/);
+    expect(comp).toMatch(/rel="noopener noreferrer"/);
+    expect(comp).toMatch(/target="_blank"/);
+    expect(comp).not.toMatch(/https?:\/\//);
+    const others = [
+      ...walk(path.join(ROOT, "src/components/ownerTools")),
+      ...walk(path.join(ROOT, "src/app/(app)/(owner-tools)")),
+      ...walk(path.join(ROOT, "src/lib/ownerTools")),
+    ]
+      .map(rel)
+      .filter((f) => f !== BROKER_LINKS);
+    const bad = others.filter((f) =>
+      /<a\b[^>]*\bhref=\{?["'`]https?:/s.test(stripComments(read(f))),
+    );
+    expect(bad).toEqual([]);
+  });
+});
+
 describe("NFR-041 wording: delayed prices, a quote time, never real-time", () => {
   const REAL_TIME = /real[\s\-_]?time/i;
 

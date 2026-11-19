@@ -25,7 +25,22 @@ import {
   type PackRow,
   type PointRow,
 } from "@/lib/steelman/store";
-import { cleanupTempDbs, freshDb, MIGRATIONS, schemaOf, tempDbUrl, track } from "./helpers";
+import {
+  allowMarket,
+  cleanupTempDbs,
+  freshDb as baseFreshDb,
+  MIGRATIONS,
+  schemaOf,
+  tempDbUrl,
+  track,
+} from "./helpers";
+
+// M19 0038: these tests key their rows by the invented market ZZ; the write guard needs it enabled.
+const freshDb = async (name: "main" | "auth") => {
+  const db = await baseFreshDb(name);
+  if (name === "main") await allowMarket(db, "ZZ");
+  return db;
+};
 
 afterEach(cleanupTempDbs);
 
@@ -85,6 +100,7 @@ const night = {
   notWrittenBudget: 1,
   notWrittenNoModel: 1,
   notWrittenCritic: 0,
+  notWrittenError: 0,
   claimsTotal: 40,
   claimsValid: 39,
   validityPpm: 975_000,
@@ -158,11 +174,11 @@ describe("migration 0021_steelman: apply, roll back, apply again", () => {
     const after = await schemaOf(db);
     for (const t of NEW_TABLES) expect(after.some((s) => s.startsWith(`table:${t}:`))).toBe(true);
 
-    expect(await migrateDown(db, ms, 13)).toEqual({ rolledBack: 13, version: 20 });
+    expect(await migrateDown(db, ms, 23)).toEqual({ rolledBack: 23, version: 20 });
     const mid = await schemaOf(db);
     for (const t of NEW_TABLES) expect(mid.some((s) => s.startsWith(`table:${t}:`))).toBe(false);
 
-    expect(await migrateUp(db, ms)).toEqual({ applied: 13, version: 33 });
+    expect(await migrateUp(db, ms)).toEqual({ applied: 23, version: 43 });
     expect(await schemaOf(db)).toEqual(after);
   });
 });

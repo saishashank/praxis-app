@@ -25,6 +25,12 @@ on:
     - cron: "15 7 * * *"
     - cron: "15 8 * * *"
   workflow_dispatch:
+    inputs:
+      market:
+        description: Market code (empty = the single enabled market; the Worker sets it when more than one market is enabled)
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -94,8 +100,9 @@ jobs:
       - run: npm ci
       - name: Plan the fetch (read-only)
         id: plan
-        run: node scripts/ingest/batch1.mjs prepare --request request.json
+        run: node scripts/ingest/batch1.mjs prepare ${MARKET_INPUT:+--market "$MARKET_INPUT"} --request request.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -120,11 +127,29 @@ jobs:
         run: node scripts/ingest/asic_fetch.mjs --request request.json --output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
+        run: node scripts/ingest/batch1.mjs run ${MARKET_INPUT:+--market "$MARKET_INPUT"} --bars bars.json --index index.json --short short.json --actions actions.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
+      # DAT-251 c (D-1790): RBA and ABS macro series, Fridays only (Sydney), and only when the Owner has set the
+      # repository variable MACRO_FETCH to 1 after accepting the terms: unset = this step is skipped (ships OFF).
+      # One request each, an identifying User-Agent, conditional requests; a failure never fails the batch
+      # (continue-on-error). Secrets only in this step's env: it writes macro_series.
+      - name: Macro series (Friday, off unless MACRO_FETCH is set)
+        if: ${{ !cancelled() && vars.MACRO_FETCH == '1' }}
+        continue-on-error: true
+        run: |
+          if [ "$(TZ=Australia/Sydney date +%u)" != "5" ]; then echo "macro: not a Friday, skipped"; exit 0; fi
+          rc=0
+          node scripts/macro/rba.mjs || rc=1
+          node scripts/macro/abs.mjs || rc=1
+          exit $rc
+        env:
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          MACRO_USER_AGENT: ${{ vars.ASX_USER_AGENT }}
 
   # M8 T9 (decision 30, 31; NFR-040): the staging job. The staging Worker dispatches `ref: main`
   # (SEC-017 b-s). Same flow as production, but: it checks out the dispatched `main` commit (staging
@@ -156,8 +181,9 @@ jobs:
       - run: npm ci
       - name: Plan the fetch (read-only)
         id: plan
-        run: node scripts/ingest/batch1.mjs prepare --request request.json
+        run: node scripts/ingest/batch1.mjs prepare ${MARKET_INPUT:+--market "$MARKET_INPUT"} --request request.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
       - name: Check out the private fixtures repo (read-only)
@@ -174,8 +200,9 @@ jobs:
         run: node scripts/ingest/recorded_day.mjs --request request.json --fixtures fixtures --output bars.json --index-output index.json --short-output short.json
       - name: Ingest batch 1
         if: ${{ !cancelled() && steps.plan.outcome == 'success' }}
-        run: node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json
+        run: node scripts/ingest/batch1.mjs run ${MARKET_INPUT:+--market "$MARKET_INPUT"} --bars bars.json --index index.json --short short.json --actions actions.json
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
           COMMIT_SHA: ${{ github.sha }}

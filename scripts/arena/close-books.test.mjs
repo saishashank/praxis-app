@@ -60,6 +60,44 @@ test("close-books.mjs: data_only production records a skip and writes nothing", 
   }
 });
 
+test("close-books.mjs: --market IN under the seed is refused, exit 2, no run record (MKT-110 a)", async () => {
+  const { dir, url, db } = await freshDb();
+  try {
+    const lines = [];
+    const code = await closeBooks(
+      ["--date", "2026-10-13", "--market", "IN"],
+      { TURSO_MAIN_URL: url, TURSO_MAIN_TOKEN: "secret-token-do-not-print" },
+      { nowMs: () => NOW, out: (s) => lines.push(s) },
+    );
+    assert.equal(code, 2);
+    assert.deepEqual(lines, ["arena-2a: refused: market not enabled"]);
+    const runs = await db.execute("SELECT COUNT(*) AS n FROM run_record");
+    assert.equal(Number(runs.rows[0].n), 0);
+    // omitted --market: the single enabled market (AU) is used, as the nightly job runs it
+    const lines2 = [];
+    const code2 = await closeBooks(
+      ["--date", "2026-10-13"],
+      { TURSO_MAIN_URL: url, TURSO_MAIN_TOKEN: "t" },
+      { nowMs: () => NOW, out: (s) => lines2.push(s) },
+    );
+    assert.equal(code2, 0);
+    assert.match(lines2[0], /^arena-2a AU 2026-10-13: skipped/);
+    // two enabled markets and no flag: market required
+    await db.execute("UPDATE market SET enabled = 1 WHERE code = 'IN'");
+    const lines3 = [];
+    const code3 = await closeBooks(
+      ["--date", "2026-10-14"],
+      { TURSO_MAIN_URL: url, TURSO_MAIN_TOKEN: "t" },
+      { nowMs: () => NOW, out: (s) => lines3.push(s) },
+    );
+    assert.equal(code3, 2);
+    assert.deepEqual(lines3, ["arena-2a: refused: market required"]);
+  } finally {
+    db.close();
+    cleanup(dir);
+  }
+});
+
 test("close-books.mjs: not configured -> exit 1; --replay on a remote database -> exit 2", async () => {
   const lines = [];
   const deps = { out: (s) => lines.push(s) };

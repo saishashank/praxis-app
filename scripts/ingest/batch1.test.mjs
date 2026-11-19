@@ -85,6 +85,8 @@ test("prepare writes request.json and the step outputs, and changes nothing", as
       codes: ["ZZA", "ZZB"],
       start: "2026-10-12",
       end: "2026-10-13",
+      suffix: ".AX",
+      currency: "AUD",
       indices: ["^AXJO", "^GSPC", "^VIX"],
       short_dates: [
         "2026-10-02",

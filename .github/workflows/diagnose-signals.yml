@@ -17,6 +17,11 @@ on:
         description: Sessions to diagnose, comma separated (YYYY-MM-DD)
         required: true
         default: "2026-10-28,2026-10-29,2026-10-30"
+      scenario:
+        description: Optional named read-only scenario instead of the sessions (splitFrequency, DAT-252)
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -56,9 +61,10 @@ jobs:
       - run: npm ci
       # The only step with database secrets; it reads only.
       - name: Diagnose the sessions (read-only)
-        run: node scripts/arena/diagnose.mjs --dates "$DATES"
+        run: node scripts/arena/diagnose.mjs --dates "$DATES" ${SCENARIO:+--scenario "$SCENARIO"}
         env:
           DATES: ${{ inputs.dates }}
+          SCENARIO: ${{ inputs.scenario }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
 

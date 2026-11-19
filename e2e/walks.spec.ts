@@ -1,7 +1,8 @@
 // UXR-050 / AT-48 walk capture. Only runs with E2E_WALK=<output dir>: screenshots every tab, Settings and
 // one sub-page per tab at 375 and 1280 px for one theme and one role (E2E_WALK_THEME, E2E_WALK_ROLE), and
 // writes metrics (overflow, contrast, selection cues, sticky offsets) to <dir>/<role>-<theme>.json.
-// The images and the log stay outside this repo (SEC-110).
+// The images and the log stay outside this repo (SEC-110). Starts from the rich scenario plus the named states
+// `steelman-cards` and `blueprint-full` when the lane sets E2E_STATES (e2e/seed/states.mjs, TST-135).
 import { test, type Page } from "@playwright/test";
 import { createClient } from "@libsql/client";
 import AxeBuilder from "@axe-core/playwright";
@@ -10,10 +11,10 @@ import path from "node:path";
 import { setTheme, signIn, type Role } from "./helpers";
 import { ensureRich } from "./seed/rich";
 
-const OUT = process.env.E2E_WALK ?? "";
+import { requireEnv } from "./support/requireScenario";
+const OUT = requireEnv("E2E_WALK", "set E2E_WALK=<dir> to capture a walk (the walks lane)");
 const THEMES_ = (process.env.E2E_WALK_THEME ?? "dark").split(",");
 const ROLES_ = (process.env.E2E_WALK_ROLE ?? "owner").split(",") as Role[];
-test.skip(!OUT, "set E2E_WALK=<dir> to capture a walk");
 test.describe.configure({ timeout: 900_000 });
 test.beforeAll(async () => {
   await ensureRich();

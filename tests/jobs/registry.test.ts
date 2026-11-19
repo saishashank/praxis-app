@@ -5,7 +5,8 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { AU_SLOTS, DISPATCHABLE_WORKFLOWS } from "../../worker/src/schedule";
+import { DISPATCHABLE_WORKFLOWS } from "../../worker/src/schedule";
+import { AU_SLOTS } from "../../worker/test/auRow";
 import { GO_LIVE_SLOTS } from "@/lib/golive/slots";
 import { findJob, JOBS, RUNNABLE_JOBS, validateParams } from "@/lib/jobs/registry.mjs";
 

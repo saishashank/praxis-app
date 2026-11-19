@@ -8,6 +8,7 @@
 // counts at that session's cut-off and not at the previous one (00:00Z of a Melbourne date is
 // 10:00 / 11:00 local, hours before the 18:10 cut-off and hours after the previous day's).
 import { AU_TIME_ZONE, decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { asicPublishedAt } from "@/lib/data/backfill/rules.mjs";
 import { addDays, localToUtc } from "@/lib/data/calendar";
 import type { InputKind, KnownTimeRow, KnownTimeRule, SessionClock } from "./types";
@@ -17,8 +18,10 @@ export const ALWAYS_KNOWN = "1970-01-01T00:00:00.000Z";
 /** Never usable inside this world: a "+n sessions" rule that runs past the end of the session list. */
 export const NEVER_KNOWN = "9999-12-31T23:59:59.000Z";
 
+/** The known-time rule of a global index bar (CXA-002 a): local wall time, zone and lag in days, from the profile. */
+const INDEX_GLOBAL = homeProfile().knownTimeRules!.index_global;
 /** Local wall time at which US index bars dated D are assumed known (D+1, all year; CTX-010). */
-export const INDEX_US_KNOWN_LOCAL = "09:00";
+export const INDEX_US_KNOWN_LOCAL: string = INDEX_GLOBAL.local!;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -143,7 +146,11 @@ export const KNOWN_TIME: Readonly<Record<InputKind, KnownTimeRule>> = {
   index_au: barAtCutoff,
   // US session D closes after the Melbourne cut-off of D: known D+1 09:00 Melbourne all year (D-290).
   index_us: (row) =>
-    localToUtc(addDays(need(row.d, "d"), 1), INDEX_US_KNOWN_LOCAL, AU_TIME_ZONE).toISOString(),
+    localToUtc(
+      addDays(need(row.d, "d"), INDEX_GLOBAL.lag_days!),
+      INDEX_US_KNOWN_LOCAL,
+      INDEX_GLOBAL.zone!,
+    ).toISOString(),
   // ASIC publishes with a lag: asicPublishedAt = as_of + ASIC_PUBLISH_LAG_WEEKDAYS weekdays, end of day.
   asic_short: (row) => asicPublishedAt(need(row.asOf, "asOf")),
   // A stamped publication wins; otherwise the series rule from the observation date.

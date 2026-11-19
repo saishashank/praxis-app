@@ -84,6 +84,25 @@ describe("proxy (real JWT decoding)", () => {
     expect(re.test("/_next/static/a.js")).toBe(false);
     expect(re.test("/brand/praxis-logo-light.svg")).toBe(false);
     expect(re.test("/icon.png")).toBe(false);
+    // M21 A2 (D-1247): entries are anchored and escaped, so a look-alike path still goes through the proxy
+    for (const p of [
+      "/sw.js",
+      "/manifest.webmanifest",
+      "/favicon.ico",
+      "/icon.svg",
+      "/apple-icon.png",
+    ]) {
+      expect(re.test(p), p).toBe(false);
+    }
+    for (const p of [
+      "/swxjs",
+      "/sw.js/x",
+      "/icon.png.evil",
+      "/manifestxwebmanifest",
+      "/iconxpng",
+    ]) {
+      expect(re.test(p), p).toBe(true);
+    }
     expect(re.test("/")).toBe(true);
     expect(re.test("/api/auth/session")).toBe(true);
     expect(re.test("/signin")).toBe(true);

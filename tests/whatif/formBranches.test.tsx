@@ -19,7 +19,9 @@ const options: WhatIfOptions = {
 
 describe("what-if form variants", () => {
   it("names each trading-cost choice in plain words, with the stored name or a neutral fallback", () => {
-    render(<WhatIfForm options={options} remaining={3} limit={5} action={vi.fn()} />);
+    render(
+      <WhatIfForm currency="AUD" options={options} remaining={3} limit={5} action={vi.fn()} />,
+    );
     const profile = screen.getByRole("combobox", { name: "Trading costs" });
     const texts = within(profile)
       .getAllByRole("option")
@@ -48,7 +50,7 @@ describe("what-if form variants", () => {
       },
       budget: { limit: 5, used: 1, remaining: 4 },
     });
-    render(<WhatIfForm options={options} remaining={5} limit={5} action={action} />);
+    render(<WhatIfForm currency="AUD" options={options} remaining={5} limit={5} action={action} />);
     fireEvent.change(screen.getByLabelText("What do you want to ask?"), {
       target: { value: "shock" },
     });
@@ -88,7 +90,7 @@ describe("what-if form variants", () => {
       },
       budget: { limit: 5, used: 1, remaining: 4 },
     });
-    render(<WhatIfForm options={options} remaining={5} limit={5} action={action} />);
+    render(<WhatIfForm currency="AUD" options={options} remaining={5} limit={5} action={action} />);
     fireEvent.change(screen.getByLabelText("What do you want to ask?"), {
       target: { value: "shock" },
     });
@@ -102,7 +104,9 @@ describe("what-if form variants", () => {
   });
 
   it("offers no strategy or profile choice for the custom question", () => {
-    render(<WhatIfForm options={options} remaining={3} limit={5} action={vi.fn()} />);
+    render(
+      <WhatIfForm currency="AUD" options={options} remaining={3} limit={5} action={vi.fn()} />,
+    );
     fireEvent.change(screen.getByLabelText("What do you want to ask?"), {
       target: { value: "custom" },
     });

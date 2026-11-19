@@ -8,7 +8,10 @@ export async function testLogin(baseUrl, secret, email, fetchImpl = fetch) {
   const body = JSON.stringify({ email });
   const headers = {
     "Content-Type": "application/json",
-    ...sign(secret, body, Math.floor(Date.now() / 1000), randomBytes(16).toString("hex")),
+    ...sign(secret, body, Math.floor(Date.now() / 1000), randomBytes(16).toString("hex"), {
+      method: "POST",
+      path: "/api/test-identity/login",
+    }),
   };
   const res = await fetchImpl(`${String(baseUrl).replace(/\/+$/, "")}/api/test-identity/login`, {
     method: "POST",

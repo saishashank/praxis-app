@@ -1,4 +1,5 @@
-// D-884/D-885: the trades table of a strategy round (Open first, Closed, All).
+// D-884/D-885: the trades table of a strategy round (Open first, Closed, All). M21 C2: the Size column rule (UXN-320 b, D-1204)
+// and the real target or "No target" (FAM-010, D-1225).
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TradesTable, type ChartTrade } from "@/app/(app)/strategies/[execution]/StrategyChart";
@@ -20,7 +21,9 @@ const trade = (over: Partial<ChartTrade>): ChartTrade => ({
   entryPriceText: "A$10.00",
   exitPriceText: null,
   stopText: "A$9.00",
-  targetText: "A$12.00",
+  targetText: "A$13.00",
+  noTarget: false,
+  targetReached: false,
   lastPriceText: "A$10.50",
   lastPriceAtText: null,
   openReturnText: null,
@@ -52,7 +55,7 @@ describe("TradesTable (D-884, D-885)", () => {
     let table = screen.getByRole("table", { name: /open/ });
     expect(table).toHaveTextContent("AAA");
     expect(table).not.toHaveTextContent("BBB");
-    for (const t of ["A$10.00", "A$9.00", "A$12.00", "A$10.50", "Open"])
+    for (const t of ["A$10.00", "A$9.00", "A$13.00", "A$10.50", "Open"])
       expect(table).toHaveTextContent(t);
     fireEvent.click(within(table).getByText("AAA"));
     expect(onPick).toHaveBeenCalledWith("t1");
@@ -112,5 +115,99 @@ describe("TradesTable live price (D-900)", () => {
     const table = screen.getByRole("table", { name: /open/ });
     expect(table).toHaveTextContent("delayed, 11:35");
     expect(table).toHaveTextContent("Open ▲ +5.0 %");
+  });
+});
+
+describe("TradesTable Size column (UXN-320 b, D-1204)", () => {
+  const headers = () => screen.queryByRole("columnheader", { name: "Size" });
+  it("shows Size when at least one row has a value", () => {
+    render(
+      <TradesTable
+        trades={[trade({ qty: null }), trade({ key: "t2", qty: 7 })]}
+        selected={null}
+        onPick={vi.fn()}
+      />,
+    );
+    expect(headers()).toBeInTheDocument();
+  });
+  it("hides the header and every cell when no row has a value (masked role)", () => {
+    render(
+      <TradesTable
+        trades={[trade({ qty: null }), trade({ key: "t2", qty: null })]}
+        selected={null}
+        onPick={vi.fn()}
+      />,
+    );
+    expect(headers()).toBeNull();
+    const table = screen.getByRole("table", { name: /open/ });
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(8);
+    expect(
+      within(table.querySelectorAll("tbody tr")[0] as HTMLElement).getAllByRole("cell"),
+    ).toHaveLength(7);
+  });
+  it("a closed-only filter still uses all rows to decide", () => {
+    render(
+      <TradesTable
+        trades={[
+          trade({ qty: 3 }),
+          trade({ key: "t2", open: false, qty: null, exitDay: "2026-11-04" }),
+        ]}
+        selected={null}
+        onPick={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Closed (1)" }));
+    expect(headers()).toBeInTheDocument();
+  });
+});
+
+describe("TradesTable target (FAM-010, D-1225)", () => {
+  it("shows the real target of a rule version with f1_target_r = 3", () => {
+    render(<TradesTable trades={[trade({})]} selected={null} onPick={vi.fn()} />);
+    const table = screen.getByRole("table", { name: /open/ });
+    expect(table).toHaveTextContent("A$13.00");
+    expect(table).not.toHaveTextContent("No target");
+    expect(table).not.toHaveTextContent("A$12.00");
+  });
+  it("a position with no target rule says No target, in plain words, and the note appears once", () => {
+    render(
+      <TradesTable
+        trades={[
+          trade({ targetText: null, noTarget: true }),
+          trade({ key: "t2", targetText: null, noTarget: true }),
+        ]}
+        noTargetNote
+        selected={null}
+        onPick={vi.fn()}
+      />,
+    );
+    const table = screen.getByRole("table", { name: /open/ });
+    expect(within(table).getAllByText("No target")).toHaveLength(2);
+    expect(
+      screen.getAllByText("No target: this strategy exits by its stop, trail or time rule."),
+    ).toHaveLength(1);
+    expect(document.body.textContent).not.toMatch(/twice the distance|2R/);
+  });
+  it("no note when the rule version has a target", () => {
+    render(<TradesTable trades={[trade({})]} selected={null} onPick={vi.fn()} />);
+    expect(screen.queryByText(/this strategy exits by its stop, trail or time rule/)).toBeNull();
+  });
+  it("a target reached by the delayed price says it exits at the next open", () => {
+    render(
+      <TradesTable trades={[trade({ targetReached: true })]} selected={null} onPick={vi.fn()} />,
+    );
+    expect(
+      screen.getByText("Target reached today (delayed), exits at the next open"),
+    ).toBeInTheDocument();
+  });
+  it("a hidden row (masked) still reads Hidden, not No target", () => {
+    render(
+      <TradesTable
+        trades={[trade({ targetText: null, noTarget: false, qty: null })]}
+        selected={null}
+        onPick={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("No target")).toBeNull();
   });
 });

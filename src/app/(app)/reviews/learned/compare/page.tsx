@@ -113,7 +113,7 @@ function Item({ item }: { item: CompareItem }) {
 export default async function ComparePage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", `${LEARNED}/compare`);
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const raw = asList(sp.ids);
   const ids = parseCompareIds(raw);
   const model = ids === null ? null : await loadCompare(env, ids);

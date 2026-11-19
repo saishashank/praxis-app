@@ -1,0 +1,10 @@
+export const HOME_MARKET: string;
+export const HOME_TZ: string;
+export const HOME_CURRENCY: string;
+export const HOME_CUTOFF: string;
+export const HOME_BENCHMARK: string;
+export function seedSlots(code: string): import("./profileCore.mjs").SlotAnchors | null;
+export function seedEnabledMarkets(): string[];
+export const HOME_BENCHMARK_YAHOO: string;
+export const HOME_YAHOO_SUFFIX: string;
+export const HOME_SLOTS: import("./profileCore.mjs").SlotAnchors;

@@ -7,22 +7,25 @@
 // with a plain sentence; nothing is assumed green. The result holds no token, URL, SHA or
 // secret: only condition ids, fixed labels, counts, ages and workflow job names (fixed file text).
 //
+// M18 OPS-107 / D-964: there is no staging environment. The three conditions that used to read staging
+// workflow runs are re-homed onto CI: `recorded-day` (the CI job `recorded-day` of the run on the
+// commit), `ci-streak` (the three newest completed push CI runs on the head branch are green and the
+// newest is the commit) and `zap-local` (the authenticated ZAP scan of the local build, on the commit).
+// No condition is waivable (WAIVABLE is empty; the D-860 machinery stays, dormant).
+//
 // MODES (decision 25, explicit and never defaulted):
-//   "full"            PR gate + staging E2E day + nightly + ZAP on staging + restore drill (TST-112
-//                     "Full release gate"). Required from the second release and for the go-live
-//                     switch.
-//   "infrastructure"  the first M8 release (data-only, BLD-024): the staging workflows added in M8
-//                     cannot run before they are on the default branch (TST-115), so only the PR
-//                     gate and the local checks (licence, quarantine, exceptions) are required; the
-//                     four staging conditions are listed as "not required". It is refused once a
-//                     go-live sign-off exists (`signoffExists`): from then on only "full" releases.
+//   "full"            PR gate + recorded day + CI streak + ZAP on the local build + restore drill
+//                     (TST-112 "Full release gate"). Required from the second release and for the
+//                     go-live switch.
+//   "infrastructure"  the first M8 release (data-only, BLD-024): only the PR gate and the local
+//                     checks (licence, quarantine, exceptions) are required; the four other
+//                     conditions are listed as "not required". It is refused once a go-live sign-off
+//                     exists (`signoffExists`): from then on only "full" releases.
 
 export const MODES = /** @type {const} */ (["full", "infrastructure"]);
 
 // threshold-ok: calendar and count limits fixed by the spec / decisions, not tunable rule values.
-export const NIGHTLY_GREENS = 3; // decision 21
-export const NIGHTLY_MAX_HOURS = 24; // decision 21, TST-132
-export const ZAP_MAX_DAYS = 7; // staging ZAP scan must be this fresh
+export const STREAK_GREENS = 3; // AT-31 "three greens in a row", re-homed onto push CI runs (D-964)
 export const DRILL_MAX_DAYS = 120; // TST-112, TST-108, D-155
 
 /** CI jobs of ci.yml that must have succeeded on the commit (the PR gate, M7 and M8 checks). */
@@ -41,24 +44,26 @@ export const CI_REQUIRED_JOBS = [
 
 /** Step names the gate reads (workflow text; a rename must be mirrored here and in the tests). */
 export const STEP = {
-  e2eDeadlines: "PLT-073 deadline check",
-  e2eStaging: "Staging end-to-end checks (viewer test identity)",
-  zapScan: "Scan staging as the viewer test identity",
+  // ci.yml job `recorded-day` (D-965): the PLT-073 deadline check on the simulated clock, and the final
+  // network assertion (no request left the machine, every process wrote its guard marker).
+  recordedDeadlines: "PLT-073 deadline check (simulated clock)",
+  recordedNetwork: "Network assertion (no market-data host reached, every guard installed)",
+  // zap-baseline.yml job `local`: the authenticated scan (TST-113 re-homed, D-964).
+  zapScan: "Scan the local build as the viewer test identity",
   drill: "Drill or restore",
   // GL-09: the strict step of the ci.yml fixtures job (release PRs only): real fixtures checked out,
   // no fixture-backed test skipped. A skipped step is NOT a pass here.
   fixturesStrict: "Release PR fixtures strict check (checked out, none skipped)",
 };
-export const JOB = { stagingE2eDay: "staging", nightly: "staging", zap: "staging" };
+export const JOB = { recordedDay: "recorded-day", zap: "local" };
 
-// D-860: Owner waivers (docs/release/waivers.json). Narrow on purpose: only conditions on this
-// allow-list can be waived, never CI, nightly, ZAP, the restore drill or the strict fixtures step;
-// a waiver lasts at most 14 days; anything invalid is ignored and the condition is judged normally.
-export const WAIVABLE = ["staging-e2e-day"];
+// D-860 / D-964: Owner waivers (docs/release/waivers.json). The machinery is kept but DORMANT: no
+// condition is waivable any more (the staging-e2e-day waiver closed with the condition), so every
+// entry is ignored and the condition is judged normally. A waiver would last at most 14 days.
+export const WAIVABLE = /** @type {string[]} */ ([]);
 export const MAX_WAIVER_DAYS = 14; // threshold-ok: calendar limit fixed by D-860, not a tunable rule value
 const WAIVER_TEXT_MAX = 600; // threshold-ok: length cap on Owner-written waiver prose
 
-const HOUR_MS = 3_600_000; // threshold-ok: ms per hour
 const DAY_MS = 86_400_000; // threshold-ok: ms per day
 
 const ok = (id, label, reason) => ({ id, label, required: true, status: "pass", reason });
@@ -167,111 +172,137 @@ function exceptionsCondition(input) {
   return ok(id, label, "both exception files are valid and unexpired");
 }
 
-// 5. staging E2E day on this SHA.
-function e2eDayCondition(input, sha) {
-  const id = "staging-e2e-day";
-  const label = "Staging E2E day is green on this commit";
-  const runs = newestFirst(input.stagingE2eDay).filter((r) => r?.headSha === sha);
-  if (runs.length === 0) {
-    return fail(id, label, "no Staging E2E day run exists for this commit; dispatch it on main");
+// 5. the recorded day: the CI job `recorded-day` of the run on this commit (D-964, D-965).
+function recordedDayCondition(input) {
+  const id = "recorded-day";
+  const label = "The recorded day is green in CI on this commit";
+  const jobs = input.ci;
+  if (!Array.isArray(jobs) || jobs.length === 0) {
+    return fail(id, label, "no CI run was found for this commit; push it and wait for CI");
   }
-  for (const r of runs) {
-    const job = jobOf(r, JOB.stagingE2eDay);
-    if (
-      r.conclusion === "success" &&
-      job?.conclusion === "success" &&
-      stepOf(job, STEP.e2eDeadlines)?.conclusion === "success" &&
-      stepOf(job, STEP.e2eStaging)?.conclusion === "success"
-    ) {
-      return ok(id, label, "a green run covers every PLT-073 step and the staging E2E checks");
-    }
+  const j = jobs.find((x) => x?.name === JOB.recordedDay);
+  if (!j) {
+    return fail(
+      id,
+      label,
+      `the ${JOB.recordedDay} job is not in the CI run for this commit (a fork pull request or an old workflow); push the commit to the repository and wait for CI`,
+    );
   }
-  return fail(
+  if (j.conclusion === null || j.conclusion === undefined) {
+    return fail(id, label, `the ${JOB.recordedDay} job is still running`);
+  }
+  if (j.conclusion === "skipped") {
+    return fail(
+      id,
+      label,
+      `the ${JOB.recordedDay} job was skipped (it needs the fixtures token and does not run on fork pull requests); a skipped day is not a pass`,
+    );
+  }
+  if (j.conclusion !== "success") {
+    return fail(
+      id,
+      label,
+      `the ${JOB.recordedDay} job did not succeed (${j.conclusion}); a PLT-073 step was late or missing, the walk failed, or a process reached a market-data host`,
+    );
+  }
+  // A green job whose two closing steps did not succeed (renamed, skipped) is not trusted.
+  const missing = [STEP.recordedDeadlines, STEP.recordedNetwork].filter(
+    (n) => stepOf(j, n)?.conclusion !== "success",
+  );
+  if (missing.length) {
+    return fail(
+      id,
+      label,
+      `the ${JOB.recordedDay} job is green but its closing step "${missing[0]}" did not succeed (missing or skipped)`,
+    );
+  }
+  return ok(
     id,
     label,
-    "the Staging E2E day run for this commit is not green (a PLT-073 step was late or missing, or the staging checks failed); fix and dispatch it again",
+    "the recorded day ran green: every PLT-073 deadline met on the simulated clock and no request reached a market-data host",
   );
 }
 
-// 6. nightly: three consecutive greens, and one inside 24 h that ran after the commit existed.
-function nightlyCondition(input, now) {
-  const id = "nightly";
-  const label = `Nightly suite: ${NIGHTLY_GREENS} green nights in a row, one within ${NIGHTLY_MAX_HOURS} h`;
-  const runs = newestFirst(input.nightly).filter((r) => (time(r?.createdAt) ?? Infinity) <= now);
+// 6. CI streak: the three newest completed push runs on the head branch are green, newest = commit.
+// A run cancelled by a newer push (concurrency) or skipped is "not run": neither green nor red.
+function ciStreakCondition(input, sha, now) {
+  const id = "ci-streak";
+  const label = `CI streak: the ${STREAK_GREENS} newest push runs on the branch are green and the newest is this commit`;
+  if (!Array.isArray(input.ciStreak)) {
+    return fail(
+      id,
+      label,
+      "the push CI runs of the head branch could not be read (branch unknown or the API failed)",
+    );
+  }
+  const runs = newestFirst(input.ciStreak).filter(
+    (r) =>
+      (time(r?.createdAt) ?? Infinity) <= now &&
+      r?.conclusion !== null &&
+      r?.conclusion !== undefined &&
+      r.conclusion !== "cancelled" &&
+      r.conclusion !== "skipped",
+  );
+  if (runs.length === 0) {
+    return fail(
+      id,
+      label,
+      "no completed push CI run was found on the head branch; push and wait for CI",
+    );
+  }
+  if (runs[0].headSha !== sha) {
+    return fail(
+      id,
+      label,
+      "the newest completed push CI run on the branch is not on this commit; wait for CI to finish on it",
+    );
+  }
   let greens = 0;
   let broken = false;
-  for (const r of runs) {
-    const c = jobOf(r, JOB.nightly)?.conclusion ?? null;
-    if (c === null || c === "skipped") continue; // not run: neither green nor red
-    if (c === "success") greens += 1;
+  for (const r of runs.slice(0, STREAK_GREENS)) {
+    if (r.conclusion === "success") greens += 1;
     else {
       broken = true;
       break;
     }
   }
-  const problems = [];
-  if (greens < NIGHTLY_GREENS) {
-    problems.push(
-      `${greens} of ${NIGHTLY_GREENS} consecutive green nights${broken ? " (a red night ended the count)" : ""}`,
-    );
-  }
-  const commitAt = time(input.commitDate);
-  const fresh = runs.find((r) => {
-    const t = time(r?.createdAt);
-    return (
-      t !== null &&
-      now - t <= NIGHTLY_MAX_HOURS * HOUR_MS &&
-      jobOf(r, JOB.nightly)?.conclusion === "success" &&
-      commitAt !== null &&
-      t >= commitAt
-    );
-  });
-  if (!fresh) {
-    problems.push(
-      commitAt === null
-        ? `the commit date is unknown, so no night can be shown to be newer than it`
-        : `no green night in the last ${NIGHTLY_MAX_HOURS} hours that started after this commit; dispatch Nightly`,
-    );
-  }
-  return problems.length
-    ? fail(id, label, problems.join("; "))
-    : ok(
+  return greens < STREAK_GREENS
+    ? fail(
         id,
         label,
-        `${greens} green nights in a row; the newest ran within ${NIGHTLY_MAX_HOURS} h`,
-      );
+        `${greens} of ${STREAK_GREENS} consecutive green push runs${broken ? " (a red run ended the count)" : " (fewer runs exist)"}`,
+      )
+    : ok(id, label, `${STREAK_GREENS} green push runs in a row, the newest on this commit`);
 }
 
-// 7. ZAP baseline on staging.
-function zapCondition(input, now) {
-  const id = "zap-staging";
-  const label = `ZAP baseline on staging is green within ${ZAP_MAX_DAYS} days`;
-  const runs = newestFirst(input.zapStaging);
-  const recent = runs.filter((r) => {
-    const t = time(r?.createdAt);
-    return t !== null && t <= now && now - t <= ZAP_MAX_DAYS * DAY_MS;
-  });
-  for (const r of recent) {
+// 7. ZAP baseline on the local build, on this commit, authenticated (TST-113 re-homed, D-964).
+function zapCondition(input, sha) {
+  const id = "zap-local";
+  const label = "ZAP baseline on the local build is green on this commit, authenticated";
+  const runs = newestFirst(input.zapLocal).filter((r) => r?.headSha === sha);
+  if (runs.length === 0) {
+    return fail(
+      id,
+      label,
+      "no ZAP baseline run exists for this commit; push it and wait for ZAP baseline",
+    );
+  }
+  let unauth = false;
+  for (const r of runs) {
     const job = jobOf(r, JOB.zap);
     if (r.conclusion === "success" && job?.conclusion === "success") {
-      const auth = stepOf(job, STEP.zapScan)?.conclusion === "success";
-      return ok(
-        id,
-        label,
-        auth
-          ? "green staging scan; authenticated: yes"
-          : "green staging scan; authenticated: no (the report states authenticated pages were not scanned, TST-112)",
-      );
+      if (stepOf(job, STEP.zapScan)?.conclusion === "success") {
+        return ok(id, label, "green scan of the local build; authenticated: yes");
+      }
+      unauth = true;
     }
   }
   return fail(
     id,
     label,
-    runs.length === 0
-      ? "no ZAP baseline run on staging was found; dispatch ZAP baseline on main"
-      : recent.length === 0
-        ? `the newest ZAP staging run is older than ${ZAP_MAX_DAYS} days; dispatch it again`
-        : "the ZAP staging run in the last days is not green (a high finding or an expired exception)",
+    unauth
+      ? "the ZAP scan was green but not authenticated (the viewer test identity step did not succeed); authenticated pages must be scanned"
+      : "the ZAP baseline run for this commit is not green (a high finding or an expired exception)",
   );
 }
 
@@ -342,7 +373,7 @@ const prose = (v) =>
  * non-Owner or non-allow-listed entry is dropped (and counted), never half-applied.
  * @returns {{ valid: any[], ignored: number }}
  */
-export function validateWaivers(raw, today) {
+export function validateWaivers(raw, today, allow = WAIVABLE) {
   const t = dayNumber(today);
   const valid = [];
   let ignored = 0;
@@ -356,7 +387,7 @@ export function validateWaivers(raw, today) {
     const good =
       w &&
       typeof w === "object" &&
-      WAIVABLE.includes(w.condition) &&
+      allow.includes(w.condition) &&
       w.decidedBy === "Owner" &&
       prose(w.reason) &&
       prose(w.followUp) &&
@@ -468,17 +499,17 @@ export function evaluateReleaseGate(input) {
 
   if (mode === "full") {
     conditions.push(
-      e2eDayCondition(input, sha),
-      nightlyCondition(input, now),
-      zapCondition(input, now),
+      recordedDayCondition(input),
+      ciStreakCondition(input, sha, now),
+      zapCondition(input, sha),
       drillCondition(input, now),
     );
   } else {
     const why = "not required under the infrastructure gate (first release, decision 25)";
     conditions.push(
-      notRequired("staging-e2e-day", "Staging E2E day is green on this commit", why),
-      notRequired("nightly", "Nightly suite is green", why),
-      notRequired("zap-staging", "ZAP baseline on staging is green", why),
+      notRequired("recorded-day", "The recorded day is green in CI on this commit", why),
+      notRequired("ci-streak", "CI streak is green", why),
+      notRequired("zap-local", "ZAP baseline on the local build is green", why),
       notRequired("restore-drill", "Restore drill and verify-removed run", why),
     );
   }
@@ -503,7 +534,7 @@ export function renderGate(result) {
   ];
   if (result.mode === "infrastructure") {
     lines.push(
-      "> Infrastructure gate (first release, data-only mode): the staging conditions are not required. The full gate applies from the second release and for the go-live switch.",
+      "> Infrastructure gate (first release, data-only mode): the recorded-day, CI-streak and ZAP conditions are not required. The full gate applies from the second release and for the go-live switch.",
       "",
     );
   }

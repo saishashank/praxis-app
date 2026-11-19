@@ -15,8 +15,9 @@ import {
   scorecardRunId,
   type ScorecardRun,
 } from "./pickScorecardStore";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET; // the scorecard replays the home market only
 
 /** `--sessions N`: 1 to SESSIONS_MAX, default SESSIONS_DEFAULT; null = a bad argument. */
 export function parseSessions(text: string | null): number | null {

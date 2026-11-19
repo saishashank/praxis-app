@@ -1,0 +1,14 @@
+{
+  "code": "IN",
+  "name": "India (NSE)",
+  "tz": "Asia/Kolkata",
+  "decisionTz": "Asia/Kolkata",
+  "openTime": "09:15",
+  "closeTime": "15:30",
+  "cutoffTime": "17:30",
+  "currency": "INR",
+  "productionMode": "off",
+  "seededMode": "off",
+  "built": true,
+  "note": "Generated from src/lib/market/seed/IN.mjs (M19 A1): built and off in production (MKT-110); every value is [VERIFY] until M20 (MKT-114)."
+}

@@ -67,7 +67,7 @@ describe("status text (every role)", () => {
       as(role);
       await show(view({ dispatchEnabled: true, asxEnabled: true }));
       const s = within(section());
-      expect(s.getByText(/Production data-only mode \(BLD-024\)/)).toBeInTheDocument();
+      expect(s.getByText(/Production data-only mode/)).toBeInTheDocument();
       expect(row("Nightly dispatch")).toHaveTextContent("On");
       expect(row("ASX contact")).toHaveTextContent("On");
       expect(row("ASX announcements (O-23)")).toHaveTextContent("Not accepted yet");
@@ -97,7 +97,7 @@ describe("status text (every role)", () => {
         markets: [{ market: "AU", mode: "off", configMode: "off", inSync: true }],
       }),
     );
-    expect(screen.queryByText(/Production data-only mode \(BLD-024\)/)).toBeNull();
+    expect(screen.queryByText(/Production data-only mode/)).toBeNull();
     expect(row("AU market mode")).toHaveTextContent("✓ Off");
   });
 
@@ -126,8 +126,8 @@ describe("Owner controls", () => {
     expect(s.getByRole("switch", { name: "Accept risk (O-26)" })).toBeInTheDocument();
     expect(s.queryByRole("switch", { name: "Turn dispatch on" })).toBeNull();
     expect(s.queryByRole("switch", { name: "Turn ASX contact on" })).toBeNull();
-    expect(s.getByText("Accept the Yahoo source (O-26) first.")).toBeInTheDocument();
-    expect(s.getByText("Accept the ASX source (O-23) first.")).toBeInTheDocument();
+    expect(s.getByText("Accept the Yahoo source first.")).toBeInTheDocument();
+    expect(s.getByText("Accept the ASX source first.")).toBeInTheDocument();
     // market mode is a segmented control: the current mode is marked, the others are buttons
     expect(within(row("AU market mode")).getByRole("button", { name: "Off" })).toBeInTheDocument();
     expect(within(row("AU market mode")).getByRole("button", { name: "Full" })).toBeInTheDocument();

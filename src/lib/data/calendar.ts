@@ -45,6 +45,30 @@
 //    replay goldens depend on it, and the arithmetic walks a range a gate has already checked.
 import { formatTime, type TimeFormat } from "@/lib/health/format";
 import { dayStatusRows, isWalkDay, isWeekendDate, type DayStatus } from "./calendarCore.mjs";
+import { CALENDAR_RULE_MODULES } from "./calendarRules.mjs";
+
+/**
+ * The markets with computed calendar rules: the keys of CALENDAR_RULE_MODULES (calendarRules.mjs), the one table
+ * a market is added to (M19 D-1808; was a literal AU list). Lives here (pure) so config/keys.ts can read it
+ * without the DB-touching admin module. A built market without rules (IN, US until M20) is not listed.
+ */
+export function calendarMarkets(): readonly string[] {
+  return Object.keys(CALENDAR_RULE_MODULES)
+    .filter((m) => CALENDAR_RULE_MODULES[m].onEnable !== true)
+    .sort();
+}
+
+/**
+ * Every market that has calendar rules, including those whose rows are written on enable (M20 D-1097, D-1146):
+ * the list the Owner's confirmation and ensureCalendarYears accept. `calendarMarkets()` stays the migration-seeded
+ * list, so the AU constants snapshot and the production default of `calendar_draft_markets` do not move.
+ */
+export function calendarRuleMarkets(): readonly string[] {
+  return Object.keys(CALENDAR_RULE_MODULES).sort();
+}
+
+/** The same list as a constant, derived (not a second definition); readers should prefer calendarMarkets(). */
+export const CALENDAR_MARKETS: readonly string[] = calendarMarkets();
 
 export type CalendarKind = "session" | "holiday" | "early_close";
 

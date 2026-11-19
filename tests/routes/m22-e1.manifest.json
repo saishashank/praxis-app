@@ -1,0 +1,8 @@
+{
+  "$comment": "M22 E1 (KB-083, D-1472): the Owner's accept-the-risk action on the expert page. A test file must mention the path.",
+  "routes": {
+    "action src/app/(app)/reviews/experts/[id]/actions.ts#acceptRiskAction": {
+      "tests": ["tests/experts/licence/accept.test.ts", "tests/experts/licence/page.test.tsx"]
+    }
+  }
+}

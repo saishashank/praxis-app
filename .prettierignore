@@ -16,3 +16,9 @@ tests/fixtures
 src/generated
 # M8 T9: byte-exact stored copies of the production jobs (scripts/ci/prod-job-lock.mjs); never reformatted
 scripts/ci/fixtures/prod-jobs/
+# Third-party licence texts, kept verbatim (D-1805)
+src/app/fonts/LICENSE-*.md
+# M19 step-0 identity baselines (D-1007): never rewritten, not even by the formatter
+tests/acceptance/v3/replay-hash.baseline.json
+tests/market/au-constants.snapshot.json
+worker/test/fixtures/au-slots.snapshot.json

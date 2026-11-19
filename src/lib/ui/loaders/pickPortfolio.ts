@@ -15,14 +15,7 @@ import { loadPortfolioSettings, MY_PROFILES } from "@/lib/picks/portfolioConfig"
 import { splitLine, strategyNames } from "@/lib/picks/portfolioWords";
 import { familyNames } from "@/lib/review/names";
 import { soft } from "./common";
-import {
-  marketOf,
-  maskKitByDate,
-  money,
-  priceMicro,
-  type LoaderEnv,
-  type MoneyView,
-} from "./shell";
+import { maskKitByDate, money, priceMicro, type LoaderEnv, type MoneyView } from "./shell";
 
 const PPM = 1_000_000n; // threshold-ok: parts per million
 const RECENT_TRADES = 3; // threshold-ok: latest trades shown per portfolio
@@ -94,7 +87,7 @@ const byProfile = (rows: Row[]): Map<string, Row[]> => {
 };
 
 export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView> {
-  const market = marketOf(env);
+  const market = env.market;
   const masked = env.mask.masked;
   const settings = await loadPortfolioSettings(env.main);
   const names = strategyNames(await soft(() => familyNames(env.main), {}));
@@ -195,7 +188,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
       started: false,
       holdingsMax,
       asOfD: null,
-      seed: masked ? null : money(seed),
+      seed: masked ? null : money(seed, env.currency),
       value: null,
       cash: null,
       gain: null,
@@ -249,12 +242,12 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
       ...base,
       started: true,
       asOfD: masked ? null : s(day.d),
-      value: masked ? null : money(shown),
-      cash: masked ? null : money(s(day.cash_micro)),
-      gain: masked ? null : money(shown - seed),
+      value: masked ? null : money(shown, env.currency),
+      cash: masked ? null : money(s(day.cash_micro), env.currency),
+      gain: masked ? null : money(shown - seed, env.currency),
       sinceStartPpm: ppm(shown - seed, seed),
       liveLabel,
-      closeValue: masked || liveLabel === null ? null : money(value),
+      closeValue: masked || liveLabel === null ? null : money(value, env.currency),
       closeSinceStartPpm: liveLabel === null ? null : ppm(value - seed, seed),
       worstFallPpm: Number(worst.get(profile)?.[0]?.worst ?? 0), // money-float-ok: SQL integer ppm
       holdings: held.map((h) => {
@@ -265,8 +258,8 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
           company: companyOf.get(s(h.code)) ?? null,
           strategy: nameOf(h.strategy),
           entryD: masked ? null : s(h.entry_d),
-          entry: masked ? null : money(entry),
-          now: masked || now === null ? null : money(now),
+          entry: masked ? null : money(entry, env.currency),
+          now: masked || now === null ? null : money(now, env.currency),
           changePpm: now === null ? null : ppm(now - entry, entry),
         };
       }),
@@ -284,7 +277,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
   });
   return {
     masked,
-    seed: masked ? null : money(seed),
+    seed: masked ? null : money(seed, env.currency),
     stockMaxPct: settings.stockMaxPct,
     strategyMaxPct: settings.strategyMaxPct,
     portfolios,

@@ -33,7 +33,19 @@ export type AuTableName = (typeof AU_TABLES)[keyof typeof AU_TABLES];
 
 /** Column names per table, in table order. */
 export const AU_COLUMNS = {
-  market: ["code", "tz", "open_time", "close_time", "cutoff_time", "currency", "mode"],
+  market: [
+    "code",
+    "tz",
+    "open_time",
+    "close_time",
+    "cutoff_time",
+    "currency",
+    "mode",
+    "enabled", // 0037 (M19, D-1809)
+    "slots_json", // 0037 (M19, D-1811)
+    "data_only_since", // 0039 (M20, D-1100)
+    "rollback_at", // 0039 (M20, D-1101)
+  ],
   trading_calendar: ["market", "d", "kind", "close_time", "confirmed", "source"],
   instrument: [
     "id",
@@ -168,6 +180,15 @@ export const AU_SOURCES = [
 ] as const;
 export type AuSource = (typeof AU_SOURCES)[number];
 /**
+ * M22 (D-1439, D-1443, D-1444): the register rows that are pending and off until the Owner accepts them; defined in
+ * scripts/ci/licence-register.mjs (PENDING_SOURCE_ROWS), written by no migration. No fetcher exists for any of them.
+ */
+export const M22_PENDING_SOURCES = [
+  "polymarket_public",
+  "kalshi_public",
+  "yahoo_delayed_batch",
+] as const;
+/**
  * The ASX listed-companies file (D-067): a register row only (migration 0006), covered by the ASX
  * announcements entry O-23. It has no source_status row; the rate token uses `asx_announcements`.
  */
@@ -182,6 +203,8 @@ export const REFERENCE_SOURCES = [
   "index_changes_manual",
   "industry_map_manual",
   "fred", // M15 (DAT-101, D-291; migration 0019): pending, no fetcher
+  "asic_documents", // M18 (DAT-253, D-1792; migration 0036): pending, links and own summary only, no fetcher
+  "ssrn_papers", // M18 (DAT-253, D-1792; migration 0036): pending, abstract page links only, no fetcher
 ] as const;
 
 export type MarketMode = "off" | "data_only" | "full";

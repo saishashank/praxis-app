@@ -1,7 +1,7 @@
 // PLT-076, PLT-016, SEC-017: caller side of the nightly maintenance route.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { melbourneDate, run } from "./run.mjs";
 
 const SECRET = "a".repeat(64);
@@ -57,9 +57,19 @@ test("sends a signed POST with the purpose and Melbourne date", async () => {
   assert.equal(h["X-Praxis-Timestamp"], String(Math.floor(NOW_MS / 1000)));
   assert.match(h["X-Praxis-Nonce"], /^[0-9a-f]{32}$/);
   const mac = createHmac("sha256", SECRET)
-    .update(`${h["X-Praxis-Timestamp"]}.${h["X-Praxis-Nonce"]}.${init.body}`)
+    .update(
+      [
+        "v2",
+        "POST",
+        "/api/internal/maintenance",
+        h["X-Praxis-Timestamp"],
+        h["X-Praxis-Nonce"],
+        createHash("sha256").update(init.body).digest("hex"),
+      ].join("\n"),
+    )
     .digest("hex");
   assert.equal(h["X-Praxis-Signature"], mac);
+  assert.equal(h["X-Praxis-Version"], "2");
 });
 
 test("each run uses a fresh nonce", async () => {

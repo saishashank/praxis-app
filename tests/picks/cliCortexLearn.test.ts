@@ -53,7 +53,8 @@ async function cli(url: string): Promise<{ code: number; lines: string[] }> {
       openDb: (u) => createClient({ url: u }),
     },
   );
-  return { code, lines };
+  // OPS-110: a night without picks adds one "no_picks" line (tests/picks/cli.test.ts covers it)
+  return { code, lines: lines.filter((l) => !l.includes(": no_picks blocked=")) };
 }
 
 const counts = { movers: 40, lessons: 8, improvements: 2, hypotheses: 0 };

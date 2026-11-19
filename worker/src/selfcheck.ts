@@ -103,13 +103,14 @@ async function safe(name: string, body: () => Promise<CheckResult>): Promise<Che
 const hexOf = (buf: ArrayBuffer) =>
   Array.from(new Uint8Array(buf), (x) => x.toString(16).padStart(2, "0")).join("");
 
+/** URL pathname only (no query, no host): the path the v2 signature covers (SEC-115). */
+export const pathOf = (url: string): string => new URL(url).pathname;
+
 export async function signHeaders(
   secret: string,
-  body: string,
-  nowSec: number,
-  nonce: string,
+  o: { method: string; path: string; body: string; nowSec: number; nonce: string },
 ): Promise<Record<string, string>> {
-  const timestamp = String(nowSec);
+  const timestamp = String(o.nowSec);
   const enc = new TextEncoder();
   // key = the secret string as UTF-8 (not hex-decoded), exactly like createHmac("sha256", secret).
   const key = await crypto.subtle.importKey(
@@ -119,12 +120,16 @@ export async function signHeaders(
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    enc.encode(hmacMessage(timestamp, nonce, body)),
-  );
-  return signedHeaders(timestamp, nonce, hexOf(sig));
+  const bodySha256Hex = hexOf(await crypto.subtle.digest("SHA-256", enc.encode(o.body)));
+  const message = hmacMessage({
+    method: o.method,
+    path: o.path,
+    timestamp,
+    nonce: o.nonce,
+    bodySha256Hex,
+  });
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return signedHeaders(timestamp, o.nonce, hexOf(sig));
 }
 
 // ---- when to run -----------------------------------------------------------------------------
@@ -303,12 +308,13 @@ async function sendReport(env: SelfCheckEnv, results: CheckResult[], deps: Deps)
       has(env.BUILD_COMMIT) && COMMIT_RE.test(env.BUILD_COMMIT) ? env.BUILD_COMMIT : "unknown",
     results,
   });
-  const headers = await signHeaders(
-    env.WORKER_HMAC_SECRET,
+  const headers = await signHeaders(env.WORKER_HMAC_SECRET, {
+    method: "POST",
+    path: pathOf(url),
     body,
-    Math.floor(deps.nowMs() / 1000),
-    randomHex(16),
-  );
+    nowSec: Math.floor(deps.nowMs() / 1000),
+    nonce: randomHex(16),
+  });
   const res = await timed(deps.fetch, url, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },

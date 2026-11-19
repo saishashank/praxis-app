@@ -3,11 +3,12 @@
 // validates it, upserts it into `vendor_action` and reads it back. Plain ESM + JSDoc so the
 // Actions CLI runs it without a build. Evidence only: nothing here adjusts a price or decides an
 // action (the GL-01 veto and the GL-10 total-return benchmark read these rows in later tasks).
+import { HOME_CURRENCY, HOME_MARKET } from "../../market/homeMarket.mjs";
 import { isRealDate } from "../pipeline/rules.mjs";
 
-export const VENDOR_ACTION_MARKET = "AU";
+export const VENDOR_ACTION_MARKET = HOME_MARKET;
 export const VENDOR_ACTION_SOURCE = "yahoo";
-export const VENDOR_ACTION_CURRENCY = "AUD";
+export const VENDOR_ACTION_CURRENCY = HOME_CURRENCY;
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
 const FETCHED_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/;
 const MICRO = 1_000_000;

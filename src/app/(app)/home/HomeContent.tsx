@@ -14,7 +14,7 @@ import { StatusStrip, type Mood } from "@/components/ui/StatusStrip";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { hueStyle } from "@/components/ui/hue";
 import { GainLoss, Masked, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatDay, formatMicro, formatPpm, plural } from "@/lib/view/format";
+import { currencyFormatFor, formatDay, formatMicro, formatPpm, plural } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 import type { Loaded } from "@/lib/ui/loaders/common";
 import type { HomeNeed, HomePick, HomeSinceRow, HomeView } from "@/lib/ui/loaders/home";
@@ -132,7 +132,9 @@ export function daySentence(v: HomeView): string {
   if (n > 0) {
     parts.push(`${n} ${plural(n, "pick")} on the list for the next session.`);
   } else {
-    parts.push(`No picks yet: the first ones come after ${nextRunPhrase(v.nextRun)}.`);
+    parts.push(
+      v.noPicksLine ?? `No picks yet: the first ones come after ${nextRunPhrase(v.nextRun)}.`,
+    );
   }
   const ppm = v.headline[0]?.dayChangePpm ?? null;
   if (ppm !== null) {
@@ -337,11 +339,19 @@ function PickRow({
 }
 
 /** A price with its percentage, kept on one line; either part may be missing (masked viewer). */
-function PriceChange({ micro, ppm }: { micro: number | null; ppm: number | null }) {
+function PriceChange({
+  micro,
+  ppm,
+  currency,
+}: {
+  micro: number | null;
+  ppm: number | null;
+  currency: string;
+}) {
   if (micro === null && ppm === null) return <>n/a</>;
   return (
     <span className="whitespace-nowrap">
-      {micro !== null ? <Money micro={micro} /> : null}
+      {micro !== null ? <Money micro={micro} currency={currency} /> : null}
       {ppm !== null ? `${micro !== null ? " " : ""}${pct(ppm)}` : null}
     </span>
   );
@@ -387,7 +397,7 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
         {p.entryMicro !== null ? (
           <PickRow label={p.entryBought ? "Bought" : "Entry"} testId="home-entry-line">
             <span className="whitespace-nowrap">
-              <Money micro={p.entryMicro} />
+              <Money micro={p.entryMicro} currency={p.currency} />
             </span>
             {!p.entryBought && p.lastCloseD !== null ? (
               <span className="whitespace-nowrap"> · close {formatDay(p.lastCloseD)}</span>
@@ -397,7 +407,7 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
         {p.nowMicro !== null ? (
           <PickRow label="Now" testId="home-now-line">
             <span className="whitespace-nowrap">
-              <Money micro={p.nowMicro} />
+              <Money micro={p.nowMicro} currency={p.currency} />
               {p.nowChangePpm !== null ? ` ${nowPct(p.nowChangePpm)}` : ""}
             </span>
             {p.nowLabel ? <span className="whitespace-nowrap"> · {p.nowLabel}</span> : null}
@@ -410,10 +420,10 @@ function PickCard({ p, masked }: { p: HomePick; masked: boolean }) {
         {p.referenceMicro !== null || p.aimPpm !== null || p.stopPpm !== null ? (
           <>
             <PickRow label="Aim">
-              <PriceChange micro={p.aimMicro} ppm={p.aimPpm} />
+              <PriceChange micro={p.aimMicro} ppm={p.aimPpm} currency={p.currency} />
             </PickRow>
             <PickRow label="Stop">
-              <PriceChange micro={p.stopMicro} ppm={p.stopPpm} />
+              <PriceChange micro={p.stopMicro} ppm={p.stopPpm} currency={p.currency} />
             </PickRow>
           </>
         ) : null}
@@ -473,14 +483,15 @@ function SummaryCard({ v }: { v: HomeView }) {
                 </Link>
               </p>
               <p className="m-0 mt-1 text-xl font-semibold">
-                <Money micro={t.value.micro} />
+                <Money micro={t.value.micro} currency={t.value.currency} />
               </p>
               <p className="m-0 mt-1 text-xs text-text-muted">
-                Started with <Money micro={t.seed.micro} /> on {formatDay(t.startD)}
+                Started with <Money micro={t.seed.micro} currency={t.seed.currency} /> on{" "}
+                {formatDay(t.startD)}
               </p>
               <p className="m-0 mt-1 text-sm">
                 <GainLoss value={t.sinceStart.micro}>
-                  {`${formatMicro(t.sinceStart.micro, { sign: "always" })}${
+                  {`${formatMicro(t.sinceStart.micro, currencyFormatFor(t.sinceStart.currency), { sign: "always" })}${
                     t.sinceStartPpm !== null
                       ? ` (${formatPpm(t.sinceStartPpm, { sign: "always" })})`
                       : ""
@@ -492,7 +503,7 @@ function SummaryCard({ v }: { v: HomeView }) {
                 <p className="m-0 mt-1 text-xs text-text-muted">
                   {v.dayLabel ?? "Today"}:{" "}
                   <GainLoss value={t.dayChange.micro}>
-                    {`${formatMicro(t.dayChange.micro, { sign: "always" })}${
+                    {`${formatMicro(t.dayChange.micro, currencyFormatFor(t.dayChange.currency), { sign: "always" })}${
                       t.dayChangePpm !== null
                         ? ` (${formatPpm(t.dayChangePpm, { sign: "always" })})`
                         : ""
@@ -620,7 +631,7 @@ export function HomeContent({
           </>
         ) : (
           <Empty hue="family-br" shape="picks">
-            No picks yet. The first ones come after tonight&apos;s run.
+            {v.noPicksLine ?? "No picks yet. The first ones come after tonight's run."}
           </Empty>
         )}
       </Section>

@@ -48,14 +48,19 @@ import {
   type CalendarRow,
 } from "@/lib/data/calendar";
 
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { homeProfile, staticProfile } from "@/lib/market/staticProfile.mjs";
+
 type Exec = Pick<Client, "execute">;
 
 export const PREOPEN_PURPOSE = "preopen";
-/** Exchange-time instant the evidence is bounded by (spec 09:55); the Worker calls at 09:54. */
-export const PREOPEN_AT = "09:55";
+/**
+ * Exchange-time instant the evidence is bounded by: session open minus `preopen_recheck_min` (AU 09:55, from the
+ * home profile); the Worker calls a minute earlier. A run reads its own market's `preopenAt`.
+ */
+export const PREOPEN_AT: string = homeProfile().preopenAt!;
 export const PREOPEN_ATTEMPTS = [1, 2] as const;
-const DEFAULT_MARKET = "AU";
-const DAY_TZ = "Australia/Sydney";
+const DEFAULT_MARKET = HOME_MARKET;
 
 const text = (v: unknown): string => String(v);
 
@@ -563,7 +568,8 @@ export async function runPreopen(db: Client, o: PreopenOptions): Promise<Preopen
   const reasons: Record<string, number> = {};
   try {
     const params = o.params ?? (await loadAgentParams(db));
-    const asOf = localToUtc(d, PREOPEN_AT, DAY_TZ).toISOString();
+    const marketProfile = staticProfile(market);
+    const asOf = localToUtc(d, marketProfile.preopenAt!, marketProfile.tz!).toISOString();
     const asxOn = await asxFeedOn(db, new Date(asOf));
     const priorD = previousTradingDay(d, calendar);
     for (const c of await pendingEntries(db, market, d)) {

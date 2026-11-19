@@ -11,6 +11,9 @@ import { Banner } from "@/components/ui/States";
 import { NotMeasured } from "@/components/ui/Values";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { loadRegimeLine } from "@/lib/regime/alt/shadow";
 import {
   loadCortex,
   type AbstainReason,
@@ -18,8 +21,9 @@ import {
   type PassportView,
   type TickRowView,
 } from "@/lib/ui/loaders/cortex";
-import { formatCount, formatDay, formatMicro } from "@/lib/view/format";
+import { currencyFormatFor, formatCount, formatDay, formatMicro } from "@/lib/view/format";
 import { StrategyTabs } from "../strategies/StrategyTabs";
+import { ResearchSections, researchHas } from "./ResearchSections";
 
 export const dynamic = "force-dynamic";
 
@@ -84,18 +88,19 @@ const reasonCols: Column<AbstainReason>[] = [
   { key: "label", header: "Reason", cell: (r) => <span className="break-words">{r.label}</span> },
   { key: "n", header: "Strategy-nights", align: "right", cell: (r) => formatCount(r.count) },
 ];
+const SYMBOL = homeProfile().currencyFormat!.symbol; // the tick table is the home market's (D-1816)
 const tickCols: Column<TickRowView>[] = [
   {
     key: "p",
     header: "Share price",
     align: "right",
-    cell: (r) => `A$${(r.priceMicro / MICRO).toFixed(2)}`,
+    cell: (r) => `${SYMBOL}${(r.priceMicro / MICRO).toFixed(2)}`,
   },
   {
     key: "t",
     header: "Price step",
     align: "right",
-    cell: (r) => `A$${(r.tickMicro / MICRO).toFixed(3)}`,
+    cell: (r) => `${SYMBOL}${(r.tickMicro / MICRO).toFixed(3)}`,
   },
   ...(["U1", "U2", "U3"] as const).map((t) => ({
     key: t,
@@ -110,6 +115,8 @@ export default async function CortexPage() {
   const page = await loadCortex({ mainDb: mainDb(), authDb: authDb(), user });
   const v = page.data;
   const a = v.abstains;
+  // D-1441: both regime readings in plain words, only while the switch is on (a display line, nothing reads it).
+  const regimeLine = await loadRegimeLine(mainDb(), HOME_MARKET);
   // Parts with nothing stored yet are gathered in one closed list instead of eight "Not measured yet" cards.
   const has = {
     passports: v.passports.total > 0,
@@ -119,6 +126,7 @@ export default async function CortexPage() {
     abstain: a.total > 0 || a.shadowFilled > 0 || a.idleSharePpm !== null,
     sector: v.sectorTilt !== null,
     opinion: v.opinions.length > 0,
+    ...researchHas(v.research),
   };
   const missing = [
     has.passports ? null : "Angles",
@@ -128,6 +136,10 @@ export default async function CortexPage() {
     has.abstain ? null : "Nights with no trade",
     has.sector ? null : "Sector tilt (shadow only)",
     has.opinion ? null : "Opinion track",
+    has.tests ? null : "Tests and their one look",
+    has.waiting ? null : "Waiting for data",
+    has.monitors ? null : "Risk monitors",
+    has.sectorSeries ? null : "Sector series",
   ].filter((x): x is string => x !== null);
 
   return (
@@ -143,6 +155,12 @@ export default async function CortexPage() {
           {v.asOfMelbourne !== null ? ` Latest run: ${v.asOfMelbourne}.` : ""}
         </p>
       </header>
+
+      {regimeLine !== null ? (
+        <p className="m-0 text-sm" data-regime-alt="">
+          {regimeLine}
+        </p>
+      ) : null}
 
       {v.shadowOnly ? (
         <Banner tone="info" title="Shadow only">
@@ -314,7 +332,7 @@ export default async function CortexPage() {
               <>
                 {formatCount(a.shadowFilled)} trades
                 {a.shadowTotalNet !== null
-                  ? `, ${formatMicro(a.shadowTotalNet.micro)} after costs in total`
+                  ? `, ${formatMicro(a.shadowTotalNet.micro, currencyFormatFor(a.shadowTotalNet.currency))} after costs in total`
                   : ""}
                 .
               </>
@@ -368,6 +386,8 @@ export default async function CortexPage() {
         </Section>
       ) : null}
 
+      <ResearchSections research={v.research} />
+
       <Section id="ticks" title="Price steps and costs">
         <DataTable
           caption="Price step and half spread by share price and liquidity tier"
@@ -406,6 +426,12 @@ export default async function CortexPage() {
                 Change a Cortex setting
               </Link>{" "}
               (each change counts as a trial and the maps are refitted)
+            </li>
+            <li>
+              <Link href="/cortex/labels" className="text-accent underline">
+                Label announcements
+              </Link>{" "}
+              (your own answers, the yardstick for the automatic labels)
             </li>
           </ul>
         ) : (

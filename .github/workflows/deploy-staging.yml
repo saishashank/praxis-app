@@ -1,3 +1,6 @@
+# Disabled 2026-11-09 (D-906, OPS-107): staging is retired; kept for history and the rollback runbook.
+# Dispatch only: the `push` to main trigger was removed (D-964); nothing deploys staging any more.
+#
 # Deploy staging (OPS-041, PLT-006, SEC-108 a). Runs only for commits on `main` (the
 # `deploy-staging` environment allows `main` only). Vercel builds remotely, so no environment
 # value is pulled onto the runner. Targets are hard-coded and nothing else is ever named here:
@@ -6,8 +9,6 @@
 name: Deploy staging
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions: {}

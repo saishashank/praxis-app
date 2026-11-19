@@ -1,6 +1,7 @@
 // M2 T11 (D-067): the Worker's universe slot. Real SQLite via node:sqlite; no network anywhere (the
 // ASX URL and the app are answered by local fakes, and most tests assert they were never called).
 // Synthetic CSV text only (SEC-110).
+import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
@@ -16,7 +17,8 @@ import {
 } from "../src/asx/universe";
 import { ASX_JOBS, pollDue } from "../src/asx/slots";
 import { PRIORITY_LIMITS } from "../src/asx/policy";
-import { AU_SLOTS, DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { DISPATCHABLE_WORKFLOWS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import { sydneyLocal } from "../src/localtime";
 import { TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows, type Net } from "./fakeTurso";
 
@@ -135,7 +137,7 @@ describe("the universe slot (schedule and arithmetic)", () => {
     expect(DISPATCHABLE_WORKFLOWS.some((w) => /universe/.test(w))).toBe(false);
     // The Actions clock never picks a Worker-run slot.
     for (let m = 0; m < 1440; m += 1) {
-      const c = candidateSlots({ ...at(0, 0), minute: m });
+      const c = candidateSlots({ ...at(0, 0), minute: m }, AU_SLOTS);
       expect(c.some((x) => x.id === "universe")).toBe(false);
     }
   });
@@ -416,9 +418,17 @@ describe("runUniverse: a live import", () => {
     expect(hh["X-Praxis-Nonce"]).toMatch(/^[0-9a-f]{32}$/);
     const expected = await hmacHex(
       SECRET,
-      `${hh["X-Praxis-Timestamp"]}.${hh["X-Praxis-Nonce"]}.${body}`,
+      [
+        "v2",
+        "POST",
+        "/api/internal/universe-import",
+        hh["X-Praxis-Timestamp"],
+        hh["X-Praxis-Nonce"],
+        createHash("sha256").update(body).digest("hex"),
+      ].join("\n"),
     );
     expect(hh["X-Praxis-Signature"]).toBe(expected);
+    expect(hh["X-Praxis-Version"]).toBe("2");
     expect(log()).toContain("universe: ok");
     expect(log()).toContain("universe: import accepted");
   });

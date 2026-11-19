@@ -5,11 +5,16 @@
 // null = the page does not state the figure for the free plan (read it in the provider dashboard).
 
 export type RosterStatus = "verified" | "unverified" | "retired";
-export type RosterProvider = "google" | "groq" | "openrouter" | "github-models";
+export type RosterProvider = "google" | "groq" | "openrouter" | "github-models" | "workers-ai";
+
+/** LLM-080 (D-1408): model size class. small: 20B or less, or "lite"/"instant"; medium: about 27-70B, or "flash"; large: 100B or more, or "pro". */
+export type ModelTier = "small" | "medium" | "large";
 
 export type RosterEntry = {
   provider: RosterProvider;
   modelId: string;
+  /** Size class (D-1408); null for a provider-wide retired entry. A refresh must set it on every new row. */
+  tier: ModelTier | null;
   roles: readonly string[];
   limits: { rpm: number | null; rpd: number | null; tpm: number | null };
   trainsOnPrompts: boolean | null;
@@ -29,16 +34,18 @@ export type RosterEntry = {
   note: string;
 };
 
-const GOOGLE = "https://ai.google.dev/gemini-api/docs/rate-limits";
+const GOOGLE = "https://ai.google.dev/gemini-api/docs/rate-limits"; // redirects to aistudio.google.com/docs/rate-limits (read 2026-11-17)
 const GROQ = "https://console.groq.com/docs/rate-limits";
 const OPENROUTER = "https://openrouter.ai/docs/api-reference/limits";
+const WORKERS_AI = "https://developers.cloudflare.com/workers-ai/platform/pricing/";
 const NO_LIMITS = { rpm: null, rpd: null, tpm: null } as const;
-const CHECKED = "2026-10-29";
+const CHECKED = "2026-11-17"; // D-1485: provider pages re-read this day (see docs/llm-roster.md)
 
 export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.5-pro",
+    tier: "large",
     roles: ["R3", "R6"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -52,6 +59,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.5-flash",
+    tier: "medium",
     roles: ["R2"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -65,6 +73,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-3.5-flash-lite",
+    tier: "small",
     roles: ["R1"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -78,6 +87,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-3.8-flash",
+    tier: "medium",
     roles: ["R2"],
     limits: NO_LIMITS,
     trainsOnPrompts: true,
@@ -91,6 +101,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "openai/gpt-oss-120b",
+    tier: "large",
     roles: ["R2", "R3", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
@@ -104,6 +115,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "openai/gpt-oss-20b",
+    tier: "small",
     roles: ["R1", "R2", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
@@ -117,6 +129,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "qwen/qwen3.8-27b",
+    tier: "medium",
     roles: ["R2", "R6"],
     limits: { rpm: 30, rpd: 1000, tpm: 8000 }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: false,
@@ -128,21 +141,9 @@ export const ROSTER: readonly RosterEntry[] = [
     note: "Same base table; TPD 200K. Next bake-off candidate (D-182).",
   },
   {
-    provider: "groq",
-    modelId: "llama-3.1-8b-instant",
-    roles: ["R1"],
-    limits: NO_LIMITS,
-    trainsOnPrompts: false,
-    strictSchema: null,
-    knowledgeCutoff: null,
-    checkedOn: CHECKED,
-    status: "unverified",
-    sourceUrl: GROQ,
-    note: "Not in the rate-limits table read on this date; returned errors on all items in D-180.",
-  },
-  {
     provider: "openrouter",
     modelId: "qwen/qwen3.8-27b:free",
+    tier: "medium",
     roles: ["R2"],
     limits: { rpm: 20, rpd: 50, tpm: null }, // threshold-ok: documented provider limit (LLM-070)
     trainsOnPrompts: null,
@@ -153,10 +154,67 @@ export const ROSTER: readonly RosterEntry[] = [
     sourceUrl: OPENROUTER,
     note: "Fallback only, never primary. Limits are the account-wide :free limits (50/day under 10 credits, 1000/day at 10+). Per-model trains_on_prompts not re-read.",
   },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/meta/llama-3.2-3b-instruct",
+    tier: "small",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Neuron-priced, not request-limited: free allowance 10,000 neurons a day. No role until a bake-off passes (D-1407).",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/openai/gpt-oss-20b",
+    tier: "small",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Same allowance; must handle the strict answer schema or it fails its bake-off (D-1476).",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/qwen/qwen3.8-27b",
+    tier: "medium",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Same allowance; output is the dearest per token of the list.",
+  },
+  {
+    provider: "workers-ai",
+    modelId: "@cf/openai/gpt-oss-120b",
+    tier: "large",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: false,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "unverified",
+    sourceUrl: WORKERS_AI,
+    note: "Same allowance; large tier.",
+  },
   // Retired: must never be reachable.
   {
     provider: "google",
     modelId: "gemini-2.0-flash",
+    tier: "medium",
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -170,6 +228,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "google",
     modelId: "gemini-2.0-flash-lite",
+    tier: "small",
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -183,6 +242,7 @@ export const ROSTER: readonly RosterEntry[] = [
   {
     provider: "groq",
     modelId: "llama-3.3-70b-versatile",
+    tier: "medium",
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -194,8 +254,23 @@ export const ROSTER: readonly RosterEntry[] = [
     note: "Shut down 2026-08-16 (D-182).",
   },
   {
+    provider: "groq",
+    modelId: "llama-3.1-8b-instant",
+    tier: "small",
+    roles: [],
+    limits: NO_LIMITS,
+    trainsOnPrompts: null,
+    strictSchema: null,
+    knowledgeCutoff: null,
+    checkedOn: CHECKED,
+    status: "retired",
+    sourceUrl: "https://console.groq.com/docs/deprecations",
+    note: "Shut down 2026-08-16 (deprecations page read 2026-11-17); replacement openai/gpt-oss-20b.",
+  },
+  {
     provider: "github-models",
     modelId: "*",
+    tier: null,
     roles: [],
     limits: NO_LIMITS,
     trainsOnPrompts: null,
@@ -207,6 +282,41 @@ export const ROSTER: readonly RosterEntry[] = [
     note: "GitHub Models retired 2026-07-30 (spec 03 / LLM-070); no adapter exists.",
   },
 ];
+
+/** Cheapest first (D-1408): the chain of a role is its passing models in this order, then roster order. */
+export const TIER_RANK: Readonly<Record<ModelTier, number>> = { small: 0, medium: 1, large: 2 };
+
+/** The roles the bake-off verdicts are kept for (D-1404): R3 and R5 are gated by the words verdict (D-1402). */
+export type GateRole = "R1" | "R2" | "R6" | "R7" | "words";
+export const GATE_ROLES: readonly GateRole[] = ["R1", "R2", "R6", "R7", "words"];
+
+/** The verdict a router role is gated by: the words phase (R3 wording, R5 narrative) has one switch and one verdict. */
+export function gateOf(role: string): GateRole | null {
+  if (role === "R3" || role === "R5") return "words";
+  return (GATE_ROLES as readonly string[]).includes(role) ? (role as GateRole) : null;
+}
+
+/** Which tiers each role may use (D-1408). The words phase follows R3 and R5. */
+export const ROLE_TIERS: Readonly<Record<string, readonly ModelTier[]>> = {
+  R1: ["small", "medium"],
+  R2: ["medium", "large", "small"],
+  R3: ["small", "medium"],
+  R5: ["small", "medium"],
+  R6: ["large", "medium"],
+  R7: ["large"],
+  words: ["small", "medium"],
+};
+
+/** Plain words for the roles in every Owner-read text (D-1402, D-922): never the code. */
+export const ROLE_WORDS: Readonly<Record<string, string>> = {
+  R1: "announcement triage",
+  R2: "claim extraction",
+  R3: "review wording",
+  R5: "daily summary wording",
+  R6: "case writing",
+  R7: "Committee judge",
+  words: "plain-words writing",
+};
 
 /** Is this provider/model usable on a route? Unknown ids and retired ids are not. */
 export function isRoutable(provider: string, modelId: string): boolean {
@@ -270,4 +380,9 @@ export function assertWindowAfterCutoff(
     throw new Error(
       `${provider}/${modelId}: window starts ${windowStartD}, not after the knowledge cut-off ${hit.knowledgeCutoff}`,
     );
+}
+
+/** The newest `checkedOn` day of the roster (D-1405: a bake-off report names it, and a candidate is run once per golden set and roster day). */
+export function rosterCheckedOn(): string {
+  return ROSTER.reduce((m, e) => (e.checkedOn > m ? e.checkedOn : m), "");
 }

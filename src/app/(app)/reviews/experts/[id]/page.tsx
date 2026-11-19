@@ -9,7 +9,10 @@ import { AlertIcon } from "@/components/ui/icons";
 import { Banner, EmptyState } from "@/components/ui/States";
 import { NotMeasured } from "@/components/ui/Values";
 import { requireUser } from "@/lib/auth/guard";
+import { can, type Role } from "@/lib/auth/permissions";
 import { authDb, mainDb } from "@/lib/db/client";
+import { licenceWords } from "@/lib/experts/licence/policy";
+import { licenceView } from "@/lib/experts/licence/store";
 import { CLAIM_STATUSES } from "@/lib/experts/types";
 import {
   CLAIM_STATUS_WORD,
@@ -20,6 +23,8 @@ import {
 } from "@/lib/ui/loaders/experts";
 import { PageHead, Shell } from "../../learned/parts";
 import { EXPERTS, Out, PageLink, TECHNIQUES, pct } from "../parts";
+import { acceptRiskAction } from "./actions";
+import { AcceptRisk } from "./AcceptRisk";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +106,8 @@ export default async function ExpertPage({ params }: { params: Promise<{ id: str
   );
   if (out === null) notFound();
   const e = out.data;
+  const sources = (await licenceView(mainDb(), id)) ?? [];
+  const isOwner = can(user.role as Role, "admin");
   const groups = new Map<string, { name: string; roles: Set<string> }>();
   for (const c of e.claims)
     for (const k of c.clusters) {
@@ -143,6 +150,65 @@ export default async function ExpertPage({ params }: { params: Promise<{ id: str
             )}
           </dd>
         </dl>
+      </Card>
+
+      <Card title="Sources and licence">
+        {sources.length === 0 ? (
+          <p className="m-0 text-sm text-text-muted">No sources are recorded for this expert.</p>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-3 p-0 text-sm" data-licence-sources="">
+            {sources.map((s, n) => {
+              const latest = s.latest;
+              const fetchable = s.source.origin !== null;
+              const canAccept =
+                isOwner &&
+                latest !== null &&
+                !s.source.manual &&
+                fetchable &&
+                latest.robots !== "disallows" &&
+                (latest.status === "no" || latest.status === "unchecked");
+              return (
+                <li key={s.source.key} className="flex min-w-0 flex-col gap-1">
+                  <span className="min-w-0 break-words">
+                    <span className="font-medium">
+                      {out.masked ? `Source ${n + 1}` : s.source.key}
+                    </span>
+                    <span className="text-text-muted">
+                      {" "}
+                      — {licenceWords(latest, s.source.manual, fetchable)}
+                    </span>
+                  </span>
+                  <span className="text-xs text-text-muted">
+                    {latest === null
+                      ? "Never checked."
+                      : `Last checked ${latest.checkedAt.slice(0, 10)}. ${
+                          latest.termsUrl === null
+                            ? "No terms page was found."
+                            : "A terms page was found."
+                        }`}
+                  </span>
+                  {canAccept ? (
+                    <AcceptRisk
+                      action={acceptRiskAction}
+                      expertId={id}
+                      sourceKey={s.source.key}
+                      label={
+                        out.masked
+                          ? `Accept the risk for source ${n + 1}`
+                          : `Accept the risk for ${s.source.key}`
+                      }
+                    />
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="m-0 mt-2 text-xs text-text-muted">
+          A source is read only when it is allowed. Where the terms are silent on summaries, only
+          the title and link are kept. The checks are only a first reading, so read the terms
+          yourself before you rely on them.
+        </p>
       </Card>
 
       <Card title="Red flags" data-red-flag-card="">

@@ -1,0 +1,11 @@
+{
+  "format": "praxis-minilm-head/1",
+  "trained": false,
+  "labels": [],
+  "dim": 384,
+  "modelSha": null,
+  "weights": [],
+  "bias": [],
+  "trainedOn": 0,
+  "trainedAt": null
+}

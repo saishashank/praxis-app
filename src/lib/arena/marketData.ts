@@ -10,6 +10,9 @@ import { MICRO_PER_DOLLAR, toMicroFromVendor, type Micro } from "@/lib/money/mic
 import { divFloor } from "@/lib/money/rational";
 import { nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import { assertBar, type Bar } from "./fills";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
+import { haltReader } from "@/lib/cortex/profileReaders";
+import { bandLockedForSession, loadPriceBand } from "@/lib/cortex/states/bands";
 
 /** Thrown when a read would pass the closing day. */
 export class LookAheadError extends Error {
@@ -47,6 +50,11 @@ export type MarketData = {
   adv(code: string, asOfD: string): Promise<Micro>;
   /** universe_snapshot.halted on `d` (absent row = not halted). */
   halted(code: string, d: string): Promise<boolean>;
+  /**
+   * M20 D-1109: the session of `code` on `d` closed at one of its price-band limits (IN), so no fill is possible
+   * (`bandLockedForSession`). Absent, or false, for a market with no price bands (AU, US): the engine never asks.
+   */
+  bandLocked?(code: string, d: string): Promise<boolean>;
   /** First session of the current halted stretch ending at `d` (the day after the last unhalted row). */
   haltStart(code: string, d: string, calendar: readonly CalendarRow[]): Promise<string>;
   /** max(ingested_at) over the bars of `d`; null when there are none. */
@@ -60,6 +68,10 @@ export function createMarketData(db: Reader, market: string, guardD: string): Ma
   const bars = new Map<string, Bar | null>();
   const advs = new Map<string, Micro>();
   const halts = new Map<string, boolean>();
+  const locks = new Map<string, boolean>();
+  // M20 D-1109: only a market whose halt model is the price-band one reads `price_band` at all (AU and US: no query)
+  const profile = staticProfile(market);
+  const bandsOn = haltReader(profile) === "in_bands";
 
   return {
     guardD,
@@ -127,6 +139,32 @@ export function createMarketData(db: Reader, market: string, guardD: string): Ma
       const halted = rs.rows.length > 0 && wholeNumber(rs.rows[0].halted) === 1n;
       halts.set(key, halted);
       return halted;
+    },
+    async bandLocked(code, d) {
+      check(d);
+      if (!bandsOn) return false;
+      const key = `${code}|${d}`;
+      const cached = locks.get(key);
+      if (cached !== undefined) return cached;
+      const bar = await this.bar(code, d);
+      let locked = false;
+      if (bar !== null) {
+        const row = await loadPriceBand(db, market, code, d);
+        const prev = await db.execute({
+          // rows-ok: the previous close of one code through the primary key, LIMIT 1
+          sql: `SELECT c FROM price_bar WHERE market = ? AND code = ? AND d < ? AND d <= ?
+                ORDER BY d DESC LIMIT 1`,
+          args: [market, code, d, guardD],
+        });
+        locked = bandLockedForSession(
+          row,
+          prev.rows.length === 0 ? null : priceMicro(prev.rows[0].c),
+          bar,
+          profile.tickTable!,
+        );
+      }
+      locks.set(key, locked);
+      return locked;
     },
     async haltStart(code, d, calendar) {
       check(d);

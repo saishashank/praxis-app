@@ -10,9 +10,12 @@ import {
   rejectReasonText,
   resizeEntryAtFill,
   sizeEntry,
+  STALL_FLOOR_SLIPPAGE_BPS,
+  stallFloorBpsOf,
   stallFloorMicro,
   type SizingInput,
 } from "@/lib/arena/sizing";
+import { homeProfile, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { makeRational } from "@/lib/money/rational";
 
 const BASE: SizingInput = {
@@ -435,5 +438,53 @@ describe("entry quantity at the fill (GL-03, D-207 item 3)", () => {
         availableCashMicro: 505_000_000n,
       }),
     ).toEqual({ status: "resized", qty: 50n });
+  });
+});
+
+describe("stall floor from the market profile (M20 A2, D-1118)", () => {
+  const au = homeProfile();
+  // IN and US carry AU's slippage figures (ARN-118); their profiles are filled by M20 A4, so a filled stand-in is used
+  const filled = (bps: number) => ({
+    code: "IN",
+    slippage: { ...au.slippage!, stall_floor_bps: bps },
+  });
+
+  it("AU reads 10 bps from its profile, and the constant is that figure", () => {
+    expect(au.slippage!.stall_floor_bps).toBe(10);
+    expect(STALL_FLOOR_SLIPPAGE_BPS).toEqual(makeRational(10n));
+    expect(stallFloorBpsOf(au)).toEqual(makeRational(10n));
+  });
+
+  it("the AU result is unchanged by passing the AU profile: 510_606_061 micro, with and without a reference price", () => {
+    expect(stallFloorMicro({ profile: COST_PROFILES.P5, marketProfile: au })).toBe(510_606_061n);
+    expect(
+      stallFloorMicro({ profile: COST_PROFILES.P5, marketProfile: au, refPriceMicro: 9_800_000n }),
+    ).toBe(510_616_368n);
+  });
+
+  it("a market profile with its own stall_floor_bps moves the floor: 20 bps gives the hand-computed value", () => {
+    // (500_000_000 + 5_000_000 + 500_000_000 x 20 / 10_000) / 0.99 = 506_000_000 / 0.99 = 511_111_111.1
+    expect(stallFloorMicro({ profile: COST_PROFILES.P5, marketProfile: filled(20) })).toBe(
+      511_111_111n,
+    );
+    // an explicit slippageBps still wins over the profile
+    expect(
+      stallFloorMicro({
+        profile: COST_PROFILES.P5,
+        marketProfile: filled(20),
+        slippageBps: makeRational(10n),
+      }),
+    ).toBe(510_606_061n);
+  });
+
+  it("an IN or US profile whose slippage is not set yet refuses, naming the market, rather than guess 10 bps", () => {
+    for (const code of ["IN", "US"]) {
+      const p = staticProfile(code);
+      if (p.slippage !== null) continue; // set by A4: nothing to refuse
+      expect(() => stallFloorMicro({ profile: COST_PROFILES.P5, marketProfile: p })).toThrow(
+        new RegExp(`market ${code} has no slippage buckets`),
+      );
+    }
+    expect(() => stallFloorBpsOf({ code: "ZZ", slippage: null })).toThrow(RangeError);
   });
 });
