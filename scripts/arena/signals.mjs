@@ -14,6 +14,9 @@
 // `market.mode != 'full'` it only records a skipped run record and writes nothing to the arena or
 // agent tables (D-066, BLD-024). It waits for batch 2a of the same session and never decides a past
 // session. Exit 0 success or expected skip, 1 failed, 2 usage.
+// D-1847 (V3 defect, 2026-11-19): with the default phase the night runs `--phase core` (2b -> 3), then the
+// picks and the portfolio, then `--phase after` (learn -> words). Before, picks came after learn and words
+// and the 120-minute job limit cut them off on 16, 17 and 18 Nov (no picks since Fri 13 Nov).
 // D-181: after a night that includes batch 3, the published picks (AGT-113, ARN-095) follow from their
 // own bundle (src/lib/picks/cli.ts): this script passes the same arguments and nothing comes back but
 // an exit code, so no arena module reads picks (tests/picks/isolation.test.ts).
@@ -57,10 +60,16 @@ export async function run(argv0, env, deps0 = {}) {
   // `deps.loadEngine` lets a test break one bundle build (OPS-111 (5), D-1794); production passes nothing.
   const load = deps.loadEngine ?? loadEngine;
   const { signalsMain } = await load();
-  const code = await signalsMain(argv, env, deps);
+  const pi = argv.indexOf("--phase");
+  const whole = pi < 0 || argv[pi + 1] === "all";
+  const withPhase = (p) =>
+    pi < 0 ? [...argv, "--phase", p] : argv.map((a, i) => (i === pi + 1 ? p : a));
+  // D-1847: a whole night publishes the picks before the learning stages, so a slow learn never costs them.
+  const code = await signalsMain(whole ? withPhase("core") : argv, env, deps);
   if (code === 2) return code;
   const { picksMain } = await load(PICKS_ENTRY);
-  const afterPicks = Math.max(code, await picksMain(argv, env, deps));
+  let afterPicks = Math.max(code, await picksMain(argv, env, deps));
+  if (whole) afterPicks = Math.max(afterPicks, await signalsMain(withPhase("after"), env, deps));
   // D-504: every stage after the picks is an opinion or a shadow only. A bundle that fails to build or a stage that throws
   // past its own guard is logged in one line and changes neither the exit code nor anything above, nor the stages after it.
   const soft = async (name, entry, exportName, args) => {
