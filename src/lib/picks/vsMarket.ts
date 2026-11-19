@@ -5,12 +5,14 @@
 // A missed pick stores the would-be window (first session after publication to the earlier of its
 // `valid_until_d` and the night it was withdrawn), with the pick side and the difference NULL.
 // Pure maths first; the one INSERT statement joins the settlement batch of ./track.ts. Rows are fixed.
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { makeRational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import type { BenchBasis, TotalReturnPoint } from "./benchmark";
 import type { Outcome } from "./track";
 
-export const BENCH_INDEX = "AXJO";
+/** The home market's benchmark index code (`benchmark_index`); a run reads its own market's through `benchmarkIndexOf`. */
+export const BENCH_INDEX: string = homeProfile().benchmarkIndex!;
 /** ARN-104 / D-491: fewer settled, filled picks than this shows "insufficient history". */
 export const VS_MARKET_MIN_N = 30; // threshold-ok: ARN-104 fixes n < 30 as insufficient history
 const PPM = 1_000_000n; // threshold-ok: parts per million

@@ -51,7 +51,7 @@ describe("steelmanNight with a model (mock providers)", () => {
     const db = await seedNight();
     const r = await steelmanNight(db, opts(db));
     expect(r).toMatchObject({ status: "done", requested: 3, written: 3, suggestions: 2 });
-    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 0 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 0, error: 0 });
     expect(r.claimsTotal).toBe(12);
     expect(r.validityPpm).toBe(1_000_000);
 
@@ -120,7 +120,7 @@ describe("steelmanNight with a model (mock providers)", () => {
     });
     const r = await steelmanNight(db, opts(db));
     expect(r).toMatchObject({ requested: 4, written: 4 });
-    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 0 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 0, error: 0 });
     const packs = (await listPacks(db, MARKET, D)).filter((p) => p.subjectKind === "pick");
     expect(packs.map((p) => p.subjectId).sort()).toEqual([
       `${MARKET}|${D}|balanced|1`,
@@ -165,7 +165,10 @@ describe("steelmanNight with a model (mock providers)", () => {
     const r = await steelmanNight(db, opts(db, { keys: { ...KEYS, dailyCards: 1 } }));
     expect(r).toMatchObject({ requested: 3, written: 1 });
     expect(r.notWritten.limit).toBe(2);
-    expect((await listPacks(db, MARKET, D)).map((p) => p.code)).toEqual(["ZZB"]); // rank 9.5
+    // the cut subjects get zero-item packs (D-1310); only the written one has items
+    const packs = await listPacks(db, MARKET, D);
+    expect(packs.filter((p) => p.itemCount > 0).map((p) => p.code)).toEqual(["ZZB"]); // rank 9.5
+    expect(packs.filter((p) => p.itemCount === 0).map((p) => p.code)).toEqual(["ZZA", "ZZP"]);
   });
 
   it("0 cards turns the stage off but still stores the night row", async () => {
@@ -219,7 +222,7 @@ describe("steelmanNight without a model: counted, stored, never thrown (AT-37, D
       }),
     );
     expect(r).toMatchObject({ status: "done", requested: 3, written: 0 });
-    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 3, critic: 0 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 3, critic: 0, error: 0 });
     expect(await readNight(db, MARKET, D)).toMatchObject({ notWrittenNoModel: 3, written: 0 });
     // packs are on file (the log), no point, no suggestion, no opinion
     expect(await listPacks(db, MARKET, D)).toHaveLength(3);
@@ -251,7 +254,7 @@ describe("steelmanNight without a model: counted, stored, never thrown (AT-37, D
       store,
     );
     const r = await steelmanNight(db, opts(db, { llm }));
-    expect(r.notWritten).toEqual({ limit: 0, budget: 3, noModel: 0, critic: 0 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 3, noModel: 0, critic: 0, error: 0 });
   });
 
   it("no critic provider: `critic` counts, nothing is shown", async () => {
@@ -260,7 +263,7 @@ describe("steelmanNight without a model: counted, stored, never thrown (AT-37, D
       db,
       opts(db, { llm: llmOf([scripted("alpha", genericAuthor())], []) }),
     );
-    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 3 });
+    expect(r.notWritten).toEqual({ limit: 0, budget: 0, noModel: 0, critic: 3, error: 0 });
     expect(
       (await db.execute("SELECT 1 FROM steelman_point WHERE state = 'shown'")).rows,
     ).toHaveLength(0);

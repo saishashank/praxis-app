@@ -1,0 +1,11 @@
+{
+  "$comment": "M22 E3 (KB-084, D-1435): the one-click confirmation of a proposed call and the typed call form in the claims queue. A test file must mention the path.",
+  "routes": {
+    "action src/app/(app)/reviews/experts/queue/actions.ts#confirmCallAction": {
+      "tests": ["tests/experts/confirmCall.test.ts"]
+    },
+    "action src/app/(app)/reviews/experts/queue/actions.ts#typedCallAction": {
+      "tests": ["tests/experts/confirmCall.test.ts"]
+    }
+  }
+}

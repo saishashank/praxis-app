@@ -6,7 +6,7 @@ import { SEED_MICRO, roundOverridesFor } from "@/lib/arena/cohort";
 import { restartSession } from "@/lib/arena/terminal";
 import { nextTradingDay } from "@/lib/data/calendar";
 import { readCalendar } from "@/lib/intraday/run";
-import { formatDay, formatMicro } from "@/lib/view/format";
+import { currencyFormatFor, formatDay, formatMicro } from "@/lib/view/format";
 import { melbourneDate } from "@/lib/view/active";
 import { soft } from "./common";
 
@@ -28,6 +28,7 @@ const LIVE_UNLEVERED =
 export async function pendingRoundNote(
   db: Exec,
   market: string,
+  currency: string,
   now: Date,
 ): Promise<string | null> {
   return soft(async () => {
@@ -62,7 +63,7 @@ export async function pendingRoundNote(
     const today = melbourneDate(now.toISOString());
     const verb = today !== null && startD <= today ? "started" : "starts";
     return (
-      `Round ${round} ${verb} ${formatDay(startD, now)} with ${formatMicro(seed).replace(/\.00$/, "")} a strategy. ` +
+      `Round ${round} ${verb} ${formatDay(startD, now)} with ${formatMicro(seed, currencyFormatFor(currency)).replace(/\.00$/, "")} a strategy. ` +
       `Orders are placed after ${verb === "started" ? "each" : "that"} day's close; the first buys are at the open on ${formatDay(buyD, now)}.`
     );
   }, null);

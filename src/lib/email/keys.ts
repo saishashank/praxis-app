@@ -1,6 +1,7 @@
 // Email keys and slot rules (M5 T3, design 2.3 and 2.4, EML-010, NFR-006). One email per key.
 //   review:<d>  p0:<alert_key>  p0b:<first_alert_key>  inc:<incident_id>:open|s1  tokens:<d>
 //   unread7:<d>  reminder:<d>  brief:<d>  test:<d>:<n>  dbdown:<d>:<slot>
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import { createHash } from "node:crypto";
 import type { EmailKind, EmailSlot } from "@/lib/sentinel/schema";
 
@@ -40,6 +41,12 @@ export const emailKeys = {
   // M17 WP4 (D-388/D-389): one key per pick per session (alertId = the 64-hex sha of `pick_alert`).
   pickHit: (alertId: string, sessionD: string) => `pickhit:${alertId}:${sessionD}`,
   pickCleared: (alertId: string, sessionD: string) => `pickclr:${alertId}:${sessionD}`,
+  /**
+   * M21 C3 (D-1226): the stop-hit mail rides on kind `pick_cleared`, with its own hash so it never collides with
+   * the cleared mail of the same alert: the first 32 hex of sha256("stop_hit|" + alertId), one per alert and session.
+   */
+  pickStopHit: (alertId: string, sessionD: string) =>
+    `pickclr:${createHash("sha256").update(`stop_hit|${alertId}`).digest("hex").slice(0, 32)}:${sessionD}`,
   pickCandidate: (market: string, sessionD: string, code: string) =>
     `pickcand:${market}:${sessionD}:${code}`,
   pickBatch: (userId: string, sessionD: string, tail: string) =>
@@ -111,7 +118,7 @@ export function monthlyCapExempt(kind: EmailKind, slot: EmailSlot): boolean {
 }
 
 const dateFmt = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   year: "numeric",
   month: "2-digit",
   day: "2-digit",

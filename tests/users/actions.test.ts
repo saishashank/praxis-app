@@ -1,18 +1,19 @@
 // @vitest-environment node
 import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupTempDbs } from "../db/helpers";
+import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { addUser as seedUser, auditRows, authDb, KEY } from "../auth/helpers";
 
 const requireUser = vi.hoisted(() => vi.fn());
 const revalidatePath = vi.hoisted(() => vi.fn());
 const dbMock = vi.hoisted(() => vi.fn());
+const mainMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("next/cache", () => ({ revalidatePath: (...a: unknown[]) => revalidatePath(...a) }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-real-ip": "9.9.9.9", "user-agent": "agent" }),
 }));
-vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock() }));
+vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock(), mainDb: () => mainMock() }));
 
 import {
   addUserAction,
@@ -41,6 +42,7 @@ beforeEach(async () => {
   db = await authDb();
   dbMock.mockReset();
   dbMock.mockReturnValue(db);
+  mainMock.mockReturnValue(await freshDb("main"));
   ownerId = await seedUser(db, { email: "owner@example.test", role: "owner" });
   requireUser.mockResolvedValue({
     id: ownerId,

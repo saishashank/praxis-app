@@ -1,5 +1,5 @@
 // My alerts (UXN-303, M17 WP8, D-473): the signed-in user's pick alerts for the last 30 sessions, by state,
-// with the delivery status of each e-mail (sent, batched, held back). Actions: mute an armed alert, and turn
+// with the delivery status of each e-mail (sent, batched, held back). Actions: mute an armed alert, unmute one you muted (UXN-322), and turn
 // alerts for all picks on or off. Masked users see letters, words and times, never a limit. Own rows only.
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/guard";
@@ -7,8 +7,8 @@ import { loadMyAlerts } from "@/lib/ui/loaders/pickAlerts";
 import { envFor } from "@/lib/ui/loaders/shell";
 import { Money, Masked } from "@/components/ui/Values";
 import { ALERT_DELAY_HELP, CLEAR_WORDS, MAIL_WORDS, profileLabel } from "../picks/text";
-import { muteAlertAction, setAlertsForAllAction } from "./actions";
-import { AllPicksToggle, MuteButton } from "./MuteButton";
+import { muteAlertAction, setAlertsForAllAction, unmuteAlertAction } from "./actions";
+import { AllPicksToggle, MuteButton, UnmuteButton } from "./MuteButton";
 
 export const dynamic = "force-dynamic";
 
@@ -53,13 +53,31 @@ export default async function MyAlertsPage() {
                   >
                     <span className="min-w-0 break-words">
                       <strong>{r.stock}</strong> · {profileLabel(r.profile)} #{r.rank} · picked{" "}
-                      {r.pickDate} · limit {r.limit ? <Money micro={r.limit.micro} /> : <Masked />}
+                      {r.pickDate} · limit{" "}
+                      {r.limit ? (
+                        <Money micro={r.limit.micro} currency={r.limit.currency} />
+                      ) : (
+                        <Masked />
+                      )}
                       {r.hitTime ? ` · hit at ${r.hitTime} (delayed quote)` : ""}
                       {r.reason ? ` · ${CLEAR_WORDS[r.reason] ?? r.reason}` : ""}
                       <span className="text-text-muted"> · {MAIL_WORDS[r.mail]}</span>
                     </span>
                     {r.canMute ? (
-                      <MuteButton action={muteAlertAction} alertId={r.alertId} stock={r.stock} />
+                      <MuteButton
+                        action={muteAlertAction}
+                        undoAction={unmuteAlertAction}
+                        alertId={r.alertId}
+                        stock={r.stock}
+                      />
+                    ) : null}
+                    {r.canUnmute ? (
+                      <UnmuteButton
+                        action={unmuteAlertAction}
+                        undoAction={muteAlertAction}
+                        alertId={r.alertId}
+                        stock={r.stock}
+                      />
                     ) : null}
                   </li>
                 ))}

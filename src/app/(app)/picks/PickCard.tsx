@@ -1,6 +1,7 @@
 // One pick card (UXN-040, UXN-045): plain words, every price from the stored pick. A masked user sees
 // "Stock A", percentages and counts only: no company name, price, size or exact date (DAT-124, UX-009).
 import Link from "next/link";
+import type { ReactNode } from "react";
 import type { PickRowView } from "@/lib/ui/loaders/picks";
 import { formatDay } from "@/lib/view/format";
 import { Rail } from "@/components/ui/Family";
@@ -40,7 +41,7 @@ function StateBadge({ pick }: { pick: PickRowView }) {
       {o?.state === "bought" && o.entry ? (
         <>
           {" at "}
-          <Money micro={o.entry.micro} />
+          <Money micro={o.entry.micro} currency={o.entry.currency} />
         </>
       ) : null}
     </span>
@@ -52,6 +53,7 @@ export function PickCard({
   masked,
   beatsLuck,
   chip = null,
+  extra = null,
   profile = null,
 }: {
   pick: PickRowView;
@@ -60,6 +62,8 @@ export function PickCard({
   masked: boolean;
   beatsLuck: boolean;
   chip?: AlertChipView | null;
+  /** M21 D-1219: the Owner's tier label and links, passed in by the page only while the Owner tools are on. */
+  extra?: ReactNode;
 }) {
   const frame = timeFrameText(pick.timeFrameSessions);
   const famCode = FAMILY_BADGES[pick.family]?.code;
@@ -102,6 +106,7 @@ export function PickCard({
             <AlertChip chip={chip} />
           </p>
         ) : null}
+        {extra}
         <ul className="m-0 mt-3 list-none space-y-1 p-0 text-sm">
           <li data-testid="chance-line">
             {pick.chanceText}
@@ -111,7 +116,8 @@ export function PickCard({
           </li>
           {pick.entry ? (
             <li data-testid="entry-line">
-              {entryLabel(pick.entryBought)} <Money micro={pick.entry.micro} />
+              {entryLabel(pick.entryBought)}{" "}
+              <Money micro={pick.entry.micro} currency={pick.entry.currency} />
               {entryNote(pick.entryBought, pick.lastCloseD)}
             </li>
           ) : null}
@@ -119,7 +125,7 @@ export function PickCard({
             <li data-testid="now-line">
               {pick.now.money ? (
                 <>
-                  Now <Money micro={pick.now.money.micro} />
+                  Now <Money micro={pick.now.money.micro} currency={pick.now.money.currency} />
                   {nowNote(pick.now.changePpm, pick.now.label)}
                 </>
               ) : pick.now.changePpm !== null ? (
@@ -131,19 +137,31 @@ export function PickCard({
             <Term meaning="The highest price at which this pick counts as bought: tonight's closing price plus a small allowance for price slip.">
               Buy up to
             </Term>{" "}
-            {masked || !pick.buyUpTo ? <Masked /> : <Money micro={pick.buyUpTo.micro} />} (from{" "}
-            {masked ? pick.validUntil : formatDay(pick.validUntil)}, checked again each night)
+            {masked || !pick.buyUpTo ? (
+              <Masked />
+            ) : (
+              <Money micro={pick.buyUpTo.micro} currency={pick.buyUpTo.currency} />
+            )}{" "}
+            (from {masked ? pick.validUntil : formatDay(pick.validUntil)}, checked again each night)
           </li>
           <li>
             <Term meaning={STOP_GAP_HOVER}>Stop-loss</Term>{" "}
-            {masked || !pick.stop ? <Masked /> : <Money micro={pick.stop.micro} />}
+            {masked || !pick.stop ? (
+              <Masked />
+            ) : (
+              <Money micro={pick.stop.micro} currency={pick.stop.currency} />
+            )}
             {pick.stopPpm !== null ? ` (${pct(pick.stopPpm)})` : null}
           </li>
           <li>
             <Term meaning="The price at which the strategy takes profit, from its own rule, and the share of past similar trades that reached it.">
               Aim
             </Term>{" "}
-            {masked || !pick.aim ? <Masked /> : <Money micro={pick.aim.micro} />}
+            {masked || !pick.aim ? (
+              <Masked />
+            ) : (
+              <Money micro={pick.aim.micro} currency={pick.aim.currency} />
+            )}
             {pick.aimPpm !== null ? ` (${pct(pick.aimPpm)})` : null}
             {frame ? ` in ${frame}` : null}
           </li>
@@ -168,8 +186,10 @@ export function PickCard({
               <Masked />
             ) : (
               <>
-                up to <Money micro={pick.size.micro} />; if the stop-loss is hit you would lose
-                about <Money micro={pick.riskAtStop.micro} /> plus fees
+                up to <Money micro={pick.size.micro} currency={pick.size.currency} />; if the
+                stop-loss is hit you would lose about{" "}
+                <Money micro={pick.riskAtStop.micro} currency={pick.riskAtStop.currency} /> plus
+                fees
               </>
             )}
           </li>

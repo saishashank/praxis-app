@@ -16,6 +16,11 @@ const EXACT: Readonly<Record<string, TabId>> = {
   "/alerts": "picks",
   "/what-if": "strategies",
   "/cortex": "strategies",
+  // M21 (D-1214, D-1236): the Owner tools sit under Picks, the labelling page under Strategies > Cortex.
+  "/recommendations": "picks",
+  "/holdings": "picks",
+  "/trades": "picks",
+  "/cortex/labels": "strategies",
 };
 
 export function activeTabOf(pathname: string): TabId | null {

@@ -10,7 +10,7 @@
 // failing field (LLM-074). A model never gets a second repair.
 import { randomUUID } from "node:crypto";
 import type { LlmParams } from "@/lib/agents/params";
-import { allowance, estimateTokens, fits, type Role } from "./budget";
+import { allowance, bucketOf, estimateTokens, fits, type BudgetKey, type Role } from "./budget";
 import { checkGrounding } from "./grounding";
 import { datamark, DATAMARK } from "./datamark";
 import { DEFAULT_INJECTION_PHRASES, filterMany } from "./injection";
@@ -44,6 +44,11 @@ export type RouterConfig = {
 
 export type RouteRequest<T> = {
   role: Role;
+  /**
+   * M22 (D-1410): the budget bucket the call is charged to and logged under (`llm_call.role`): its own role by default
+   * (R7, the Committee judge, defaults to the Committee bucket). The model lookup and the cache still use `role`.
+   */
+  budgetKey?: BudgetKey;
   market: string;
   /** Business date (YYYY-MM-DD) the call is charged to. */
   d: string;
@@ -142,6 +147,25 @@ export function requestReservation(
   return reservedTokens(first, repair, req.maxOutputTokens);
 }
 
+/**
+ * OPS-111 (2), D-1794: the reservation is the estimate, raised to the measured need when the trailing mean
+ * of a call of this role (the provider's own returned counts) says a first call plus a repair would cost
+ * more. The estimate is the floor: a measured mean never lowers it.
+ */
+export function reservationWithMeasured(
+  estimate: number,
+  measuredMeanPerCall: number | null,
+): number {
+  if (
+    measuredMeanPerCall === null ||
+    !Number.isFinite(measuredMeanPerCall) ||
+    measuredMeanPerCall <= 0
+  ) {
+    return estimate;
+  }
+  return Math.max(estimate, Math.ceil(measuredMeanPerCall * 2)); // first call + one repair
+}
+
 /** LLM-074: tokens to reserve before the first call: the first call plus one repair call. */
 export function reservedTokens(prompt: string, repairPrompt: string, maxOutput: number): number {
   return estimateTokens(prompt) + maxOutput + estimateTokens(repairPrompt) + maxOutput;
@@ -179,6 +203,7 @@ export function createRouter(cfg: RouterConfig) {
     let tokensOut = 0;
     let budgetExhausted = false;
     const fl = filterMany(req.untrusted ?? [], phrases);
+    const bucket = bucketOf(req.budgetKey ?? req.role);
 
     const finish = async (
       value: T,
@@ -192,7 +217,7 @@ export function createRouter(cfg: RouterConfig) {
       if (write) {
         const row: CallRow = {
           id,
-          role: req.role,
+          role: bucket,
           provider: source === "cache" ? attempts[attempts.length - 1].provider : source,
           modelId,
           fallbackDepth: depth,
@@ -267,11 +292,14 @@ export function createRouter(cfg: RouterConfig) {
         }
       }
 
-      const usage = await cfg.store.usage(req.role, req.market, today);
-      const allow = allowance(cfg.params, req.role, req.market, req.nightly === true, usage);
+      const usage = await cfg.store.usage(bucket, req.market, today);
+      const allow = allowance(cfg.params, bucket, req.market, req.nightly === true, usage);
       const schema =
         req.schema && req.citationIds ? withCitationEnum(req.schema, req.citationIds) : req.schema;
-      if (!fits(allow, requestReservation(req, text, prompt))) {
+      const measured = cfg.store.measuredMean
+        ? await cfg.store.measuredMean(bucket, req.market, today)
+        : null;
+      if (!fits(allow, reservationWithMeasured(requestReservation(req, text, prompt), measured))) {
         // Role and total budgets are shared by every provider, so exhaustion ends the chain (LLM-050).
         budgetExhausted = true;
         attempts.push({ provider: p.id, outcome: `budget-exhausted:${allow.binding}` });

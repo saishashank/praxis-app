@@ -4,6 +4,9 @@
 //   cash buffer = one half-away-from-zero rounding to 1 micro (decisions 6 and 7).
 // HIGH-RISK money maths: no float, no iteration (ARN-024a s13).
 import { type Micro } from "@/lib/money/micro";
+import type { TickBand } from "@/lib/money/tick";
+import type { MarketProfile } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import {
   addRat,
   divFloor,
@@ -13,7 +16,7 @@ import {
   type Rational,
 } from "@/lib/money/rational";
 import { floorRat, roundHalfAwayFromZero } from "@/lib/money/round";
-import { feeFor, type CostProfile, type FeeContext } from "./costs";
+import { feeFor, quantityAt, type CostProfile, type FeeContext } from "./costs";
 import type { Tier } from "./schema";
 import {
   DEFAULT_TICK_CROSS_FACTOR,
@@ -25,16 +28,26 @@ import {
   type UntradeableReason,
 } from "./slippage";
 
-/** [VERIFY] ARN-024 (l.56): AU minimum marketable parcel A$500. Not Owner-approved yet. */
-export const MIN_MARKETABLE_PARCEL_MICRO: Micro = 500_000_000n;
+/** ARN-024 (l.56): the minimum marketable parcel, from the home market's profile (`parcel_floor`; AU A$500, D-710). */
+export const MIN_MARKETABLE_PARCEL_MICRO: Micro = homeProfile().parcelFloorMicro!;
 /** V1-S2 / D-710: false until the Owner approves the parcel; the `full` go-live gate reads it. */
 export const MIN_MARKETABLE_PARCEL_VERIFIED = false;
 /** ARN-024 (l.56) / ch.15 `participation_cap`: 1 % of the 20-session ADV (in shares). */
 export const DEFAULT_PARTICIPATION_CAP: Rational = makeRational(1n, 100n);
 /** ARN-024a (l.57) / ch.15 `cash_buffer`: 1 % of NAV. */
 export const DEFAULT_CASH_BUFFER: Rational = makeRational(1n, 100n);
-/** Stall floor (spec 05 section 5.1): entry slippage is taken at 10 bps of the parcel. */
-export const STALL_FLOOR_SLIPPAGE_BPS: Rational = makeRational(10n);
+/**
+ * Stall floor (spec 05 section 5.1): entry slippage is taken at `slippage.stall_floor_bps` of the parcel, read from
+ * the market profile (M20 A2, D-1118; AU 10 bps, IN and US carry AU's). The constant is the home market's figure.
+ */
+export function stallFloorBpsOf(profile: Pick<MarketProfile, "slippage" | "code">): Rational {
+  if (profile.slippage === null || profile.slippage === undefined)
+    throw new RangeError(
+      `market ${profile.code} has no slippage buckets: its stall floor is not set`,
+    );
+  return makeRational(BigInt(profile.slippage.stall_floor_bps));
+}
+export const STALL_FLOOR_SLIPPAGE_BPS: Rational = stallFloorBpsOf(homeProfile());
 
 /**
  * Why a buy is not placed (mirrors `KNOWN_REJECT_REASONS` in schema.ts). Stall condition (b) of
@@ -63,6 +76,8 @@ export type SizingInput = {
   readonly cashBuffer?: Rational;
   readonly tickCrossFactor?: Rational;
   readonly buckets?: readonly SlippageBucket[];
+  /** The market's tick grid (D-1154 item 2); absent = the home market's. */
+  readonly tickTable?: readonly TickBand[];
   readonly untradeableAdvFraction?: Rational;
 };
 
@@ -124,6 +139,7 @@ export function sizeEntry(input: SizingInput): SizingResult {
     input.advValueMicro,
     input.tickCrossFactor ?? DEFAULT_TICK_CROSS_FACTOR,
     input.buckets ?? SLIPPAGE_BUCKETS,
+    input.tickTable,
   );
   const buffer = roundHalfAwayFromZero(
     mulRat(makeRational(input.navMicro), input.cashBuffer ?? DEFAULT_CASH_BUFFER),
@@ -161,7 +177,10 @@ export function sizeEntry(input: SizingInput): SizingResult {
   if (pre <= 0n) return noCash(0n, pre);
 
   const feeContext = input.feeContext ?? {};
-  const est = feeFor(input.profile, pre, "buy", feeContext);
+  const est = feeFor(input.profile, pre, "buy", {
+    ...feeContext,
+    quantity: quantityAt(pre, quote.fillMicro),
+  });
   const deployable = pre - est;
   if (deployable <= 0n) return noCash(est, deployable);
 
@@ -176,7 +195,7 @@ export function sizeEntry(input: SizingInput): SizingResult {
     };
   }
   const value = qty * quote.fillMicro;
-  const brokerage = feeFor(input.profile, value, "buy", feeContext);
+  const brokerage = feeFor(input.profile, value, "buy", { ...feeContext, quantity: qty });
   const total = value + brokerage;
   const reasons: SizingReason[] = [];
   // Cannot happen with a non-decreasing profile (P5); guards a profile whose fee falls with value.
@@ -207,13 +226,17 @@ export type StallFloorInput = {
   readonly profile: CostProfile;
   readonly parcelMicro?: Micro;
   readonly cashBuffer?: Rational;
-  /** Slippage as bps of the parcel (default 10, spec section 5.1). */
+  /** Slippage as bps of the parcel (default: the market profile's `stall_floor_bps`, AU 10, spec section 5.1). */
   readonly slippageBps?: Rational;
+  /** The market whose stall floor this is (D-1118); absent = the home market. */
+  readonly marketProfile?: Pick<MarketProfile, "slippage" | "code">;
   /**
    * Optional reference price: slippage per share becomes max(slippage bps, one tick) rounded
    * adverse (decision 4, `stallFloorSlippageMicro`), scaled to the parcel as shares-equivalent.
    */
   readonly refPriceMicro?: Micro;
+  /** The market's tick grid for the per-share slippage above; absent = the home market's. */
+  readonly tickTable?: readonly TickBand[];
 };
 
 /**
@@ -224,15 +247,24 @@ export type StallFloorInput = {
 export function stallFloorMicro(input: StallFloorInput): Micro {
   const parcel = input.parcelMicro ?? MIN_MARKETABLE_PARCEL_MICRO;
   const buffer = input.cashBuffer ?? DEFAULT_CASH_BUFFER;
-  const fee = feeFor(input.profile, parcel, "buy");
+  const fee = feeFor(
+    input.profile,
+    parcel,
+    "buy",
+    input.refPriceMicro === undefined
+      ? undefined
+      : { quantity: quantityAt(parcel, input.refPriceMicro) },
+  );
+  const bps =
+    input.slippageBps ??
+    (input.marketProfile === undefined
+      ? STALL_FLOOR_SLIPPAGE_BPS
+      : stallFloorBpsOf(input.marketProfile));
   let slip: Rational;
   if (input.refPriceMicro === undefined) {
-    slip = mulRat(
-      makeRational(parcel),
-      mulRat(input.slippageBps ?? STALL_FLOOR_SLIPPAGE_BPS, makeRational(1n, 10_000n)),
-    );
+    slip = mulRat(makeRational(parcel), mulRat(bps, makeRational(1n, 10_000n)));
   } else {
-    const perShare = stallFloorSlippageMicro(input.refPriceMicro, input.slippageBps);
+    const perShare = stallFloorSlippageMicro(input.refPriceMicro, bps, input.tickTable);
     slip = mulRat(makeRational(parcel), makeRational(perShare, input.refPriceMicro));
   }
   const total = addRat(makeRational(parcel + fee), slip);
@@ -274,7 +306,9 @@ export function resizeEntryAtFill(input: FillResizeInput): FillResize {
   if (price <= 0n) throw new RangeError("fill price must be positive");
   const fits = (q: bigint): boolean => {
     const value = q * price;
-    return value + feeFor(input.profile, value, "buy", input.feeContext) <= cash;
+    return (
+      value + feeFor(input.profile, value, "buy", { ...input.feeContext, quantity: q }) <= cash
+    );
   };
   if (fits(plannedQty)) return { status: "keep", qty: plannedQty };
   // fits() is monotone in q (non-decreasing fee): binary search the largest q below plannedQty

@@ -28,7 +28,7 @@ import { controlStates } from "@/lib/agents/controls";
 import type { LimitFillOutcome } from "@/lib/arena/fills";
 import { cardIdOf } from "@/lib/agents/cards";
 import { assertBar } from "@/lib/arena/fills";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { COST_PROFILES, cohortCostProfile } from "@/lib/arena/costs";
 import { carriesSleeve, parseCohortParams, sha256Hex, type CohortParams } from "@/lib/arena/cohort";
 import { loadExecutions, loadUnresolvedCohorts } from "@/lib/arena/cohortWriter";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
@@ -62,7 +62,12 @@ import {
   type NightOutput,
   type StateRef,
 } from "./night";
+import { marketMoney } from "@/lib/arena/marketMoney";
+import { homeProfile, staticProfile } from "@/lib/market/staticProfile.mjs";
+import { groupOf } from "./gates/portfolio";
+import { stageTablesFor } from "./stageTables.mjs";
 import { runNight } from "./night";
+import { profileReaders } from "./profileReaders";
 import { buildAsOfView } from "./pit/asOfView";
 import type {
   AsOfView,
@@ -125,6 +130,7 @@ import {
   type PassportRow,
   type StateKind,
 } from "./store";
+import { runResearchNight } from "@/lib/research/night";
 
 // ---- constants --------------------------------------------------------------------------------------
 
@@ -139,7 +145,6 @@ export const MATCHED_CELL_KIND = "matched_cell";
 /** `signal.variant` of every Cortex signal (design 3 note). */
 export const CORTEX_VARIANT = "cortex";
 
-const INDEX_CODE_LIST: readonly IndexCode[] = ["AXJO", "GSPC", "VIX"];
 const V1_FAMILIES: readonly Family[] = ["F1", "F2", "F3", "F4", "F5", "F6"];
 /** The v1 live universe tiers of each family (rankScore.ts FAMILY_TIERS; F5 on U2/U3 with ARN-011). */
 export const DEFAULT_FAMILY_TIERS: Readonly<Record<Family, readonly Tier[]>> = {
@@ -328,7 +333,9 @@ const MIN_CALENDAR_SPAN_DAYS = 14; // threshold-ok: slack before the first sessi
 
 export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRows> {
   const { market, d } = o;
-  const cutoff = decisionCutoffUtc(d, o.params.decisionCutoff);
+  const profile = staticProfile(market);
+  const readers = profileReaders(profile); // CXA-002 e, f, g: an M20 rule set throws `not built (M20)` here
+  const cutoff = decisionCutoffUtc(d, o.params.decisionCutoff, profile.decisionCutoffZone!);
   const span = Math.ceil((STAGE_BAR_SESSIONS * 7) / 5) + MIN_CALENDAR_SPAN_DAYS; // threshold-ok: weekdays to days
   const all = sessionsBetween(addDays(d, -span), d, o.calendar);
   const sessions = all.slice(-STAGE_BAR_SESSIONS);
@@ -411,8 +418,8 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   const index: Partial<Record<IndexCode, IndexViewBar[]>> = {};
   for (const r of idxRs.rows) {
     const code = text(r.index_code) as IndexCode;
-    if (!INDEX_CODE_LIST.includes(code)) continue;
-    if (code === "AXJO" && !(text(r.published_at) < cutoff)) continue;
+    if (!profile.indexCodes.includes(code)) continue;
+    if (code === profile.benchmarkIndex && !(text(r.published_at) < cutoff)) continue;
     (index[code] ??= []).push({ d: text(r.d), close: toBig(r.c_micro) });
   }
 
@@ -540,13 +547,21 @@ export async function loadStageRows(db: Client, o: LoadOptions): Promise<StageRo
   });
   for (const r of groupRs.rows) {
     const code = text(r.code);
-    if (!industry.has(code)) industry.set(code, [{ asOf: first, industry: text(r.industry) }]);
+    // D-1182: the group is the market's scheme applied to the stored value (a US code's two-digit SIC group); the home
+    // scheme keeps the stored text byte for byte (AU)
+    const stored = text(r.industry);
+    const grouped =
+      readers.classification.scheme === homeProfile().classificationScheme
+        ? stored
+        : groupOf(readers.classification, { industry: stored });
+    if (grouped !== null && !industry.has(code))
+      industry.set(code, [{ asOf: first, industry: grouped }]);
   }
 
-  const names = await db.execute(
-    "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
-  );
-  const schemaSha = sha256Hex(names.rows.map((r) => text(r.name)).join(","));
+  // M20 (D-1116, closing D-1016): the schema hash covers a pinned table list, not a scan of the database, so a
+  // migration that adds a table does not move it. The base list is the schema-38 set without the ten tables of main's 0031 to 0033 (the AU manifests and the AT-32
+  // baseline stay byte-identical, D-1007); a market's rule-set tables are added for that market only.
+  const schemaSha = sha256Hex(stageTablesFor(profile).join(","));
 
   const sum = <T>(m: ReadonlyMap<string, readonly T[]>): number => {
     let n = 0;
@@ -650,9 +665,14 @@ export async function loadBookStates(
       executionId: exec.id,
       positions,
       settledCashMicro: balancesFromRows(rows, o.d).cash_settled,
-      pending: pendingSettlements(fills as LedgerFill[], settled, o.calendar),
+      pending: pendingSettlements(
+        fills as LedgerFill[],
+        settled,
+        o.calendar,
+        marketMoney(o.market).lagSessions, // D-1154: IN settles T+1; Cortex and the ledger must agree
+      ),
       navMicro: toBig(nav.rows[0]!.nav_micro),
-      costProfile: COST_PROFILES[params.costProfile],
+      costProfile: cohortCostProfile(params),
       sessionsSinceGoLive: Number(navDays.rows[0]?.n ?? 0),
     });
   }
@@ -1640,6 +1660,8 @@ export async function cortexStage(db: Client, o: StageOptions): Promise<StageRes
     createdAt: o.now(),
   });
   if (o.replay !== true) await recordMovers(db, o, view, t, moversNow);
+  // M23 (D-1613): the research night after the movers step; skipped on replay, fail-soft, an enabled market only
+  if (o.replay !== true) await runResearchNight(db, { market: o.market, d: o.d, now: o.now() });
   const allowed = allowedFamilies(
     store.status,
     o.killedArena === true,
@@ -1750,7 +1772,7 @@ export async function scoreOutcomes(
     barCache.set(code, list);
     return list;
   };
-  const profileCache = new Map<string, (typeof COST_PROFILES)[keyof typeof COST_PROFILES]>();
+  const profileCache = new Map<string, ReturnType<typeof cohortCostProfile>>();
   const profileOf = async (bookId: string) => {
     const hit = profileCache.get(bookId);
     if (hit !== undefined) return hit;
@@ -1762,7 +1784,7 @@ export async function scoreOutcomes(
     const profile =
       rs.rows.length === 0
         ? COST_PROFILES.P5
-        : COST_PROFILES[parseCohortParams(text(rs.rows[0]!.params_json)).costProfile];
+        : cohortCostProfile(parseCohortParams(text(rs.rows[0]!.params_json)));
     profileCache.set(bookId, profile);
     return profile;
   };

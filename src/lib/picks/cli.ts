@@ -10,7 +10,8 @@
 // why and writes nothing. Idempotent: a re-run of the same night writes nothing new.
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. Output: statuses and counts only.
 // Exit codes: 0 success or expected skip, 1 failed.
-import { createClient, type Client } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import { scriptDb } from "@/lib/db/scriptClient.mjs";
 import { reviewKey } from "@/lib/agents/batch3";
 import { loadAgentParams } from "@/lib/agents/params";
 import { loadCalendar } from "@/lib/arena/closeBooks";
@@ -20,10 +21,11 @@ import { runDailyLearning, type DailyLearningResult } from "@/lib/learning/daily
 import { candidateTally } from "./candidates";
 import { pickHooks } from "./dailyHooks";
 import { runPicksNight } from "./nightly";
+import { recordPicksNight } from "./noPicks";
 import { runPickPortfolio } from "./portfolioStore";
+import { resolveCliMarket } from "@/lib/arena/marketFlag";
+import { loadProfile } from "@/lib/market/profile";
 
-const MARKET = "AU";
-const MARKET_TZ = "Australia/Sydney";
 const PHASES_WITH_PICKS = ["all", "3", "picks"];
 
 export type PicksCliDeps = {
@@ -55,62 +57,89 @@ export async function picksMain(
   }
   let db: Client;
   try {
-    const open = deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t }));
+    const open = deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t }));
     db = open(url, has(env.TURSO_MAIN_TOKEN) ? env.TURSO_MAIN_TOKEN : undefined);
   } catch {
     out("arena-picks: failed (cannot open database)");
     return 1;
   }
   try {
-    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), MARKET_TZ);
+    const chosen = await resolveCliMarket(db, argv);
+    if (!chosen.ok) {
+      out(`arena-picks: ${chosen.line}`);
+      return 2;
+    }
+    const market = chosen.market;
+    const tz = (await loadProfile(db, market)).tz!;
+    const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
-      args: [MARKET],
+      args: [market],
     });
     // Not in full mode: batch 2b has already said so (data_only_guard); nothing to add.
     if (mode.rows.length === 0 || String(mode.rows[0].mode) !== "full") return 0;
     const reviewed = await db.execute({
       sql: `SELECT 1 FROM run_record WHERE concurrency_key = ? AND status IN ('success', 'degraded')`,
-      args: [reviewKey(MARKET, d)],
+      args: [reviewKey(market, d)],
     });
     if (reviewed.rows.length === 0) {
-      out(`arena-picks ${MARKET} ${d}: skipped (no reviewed night)`);
+      out(`arena-picks ${market} ${d}: skipped (no reviewed night)`);
       return 0;
     }
     const params = await loadAgentParams(db);
     const p = await runPicksNight(db, {
-      market: MARKET,
+      market: market,
       d,
       params,
-      calendar: await loadCalendar(db, MARKET),
+      calendar: await loadCalendar(db, market),
       now: new Date(nowMs()).toISOString(),
     });
     const t = p.tracking;
     out(
-      `arena-picks ${MARKET} ${d}: published=${p.published} candidates=${p.candidates}` +
+      `arena-picks ${market} ${d}: published=${p.published} candidates=${p.candidates}` +
         ` bought=${t.bought} missed=${t.missed} closed=${t.closed} open=${t.open}` +
         ` checked=${p.checks.checked} withdrawn=${p.checks.withdrawn} shortlist=${p.shortlist}` +
         ` candidate=${p.candidateMeasures}`,
     );
+    if (p.noPicksLine !== null) {
+      out(
+        `arena-picks ${market} ${d}: no_picks blocked=${JSON.stringify(p.blocked)} ${p.noPicksLine}`,
+      );
+    }
+    // OPS-110: the night's outcome and its plain-words reason, for Home and the Evening Review
+    try {
+      await recordPicksNight(db, {
+        market: market,
+        d,
+        now: new Date(nowMs()).toISOString(),
+        published: p.published,
+        candidates: p.candidates,
+        shortlist: p.shortlist,
+        blocked: p.blocked,
+        line: p.noPicksLine,
+      });
+    } catch {
+      out(`arena-picks ${market} ${d}: outcome row not stored`);
+    }
     // D-950: the three My portfolio practice portfolios, rebuilt after the picks; a failure never stops them
     try {
-      const f = await runPickPortfolio(db, { market: MARKET, d });
+      const f = await runPickPortfolio(db, { market, d });
       const each = Object.entries(f)
         .map(([p, r]) => `${p}=${r.trades}/${r.open}/${r.days}/${r.splits}/${r.skipped}`)
         .join(" ");
-      out(`arena-portfolio ${MARKET} ${d}: trades/open/days/splits/skipped ${each}`);
+      out(`arena-portfolio ${market} ${d}: trades/open/days/splits/skipped ${each}`);
     } catch (error) {
       out(
-        `arena-portfolio ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+        `arena-portfolio ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     // D-921: the daily learning loop, after the picks and the portfolio; a failure never stops them
     let night: DailyLearningResult["night"];
     let calendar: Awaited<ReturnType<typeof loadCalendar>> = [];
     try {
-      calendar = await loadCalendar(db, MARKET);
+      calendar = await loadCalendar(db, market);
       const l = await runDailyLearning(db, {
-        market: MARKET,
+        market: market,
         d,
         calendar,
         now: new Date(nowMs()).toISOString(),
@@ -118,11 +147,11 @@ export async function picksMain(
       });
       night = l.night;
       out(
-        `arena-learning ${MARKET} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
+        `arena-learning ${market} ${d}: movers=${l.movers} lessons=${l.lessons} improvements=${l.improvements} hypotheses=${l.hypotheses}`,
       );
     } catch (error) {
       out(
-        `arena-learning ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+        `arena-learning ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     // D-923: the learning Cortex's scorecard, on the daily loop's World; a failure never stops the picks
@@ -131,12 +160,12 @@ export async function picksMain(
       const candidatePicks =
         night === undefined
           ? undefined
-          : await candidateTally(db, MARKET, d).catch(() => undefined);
+          : await candidateTally(db, market, d).catch(() => undefined);
       const c =
         night === undefined
           ? null
           : await cortexLearnNight(db, {
-              market: MARKET,
+              market,
               d,
               calendar,
               world: night.world,
@@ -147,15 +176,15 @@ export async function picksMain(
             });
       out(
         c === null
-          ? `arena-cortex-learn ${MARKET} ${d}: skipped (no daily learning tonight)`
-          : `arena-cortex-learn ${MARKET} ${d}: angles=${c.numbers.angles} rows=${c.numbers.rows} next_day_right=${c.numbers.nextDayRight}/${c.numbers.nextDayOf} data_breaks=${c.numbers.dataBreaks}` +
+          ? `arena-cortex-learn ${market} ${d}: skipped (no daily learning tonight)`
+          : `arena-cortex-learn ${market} ${d}: angles=${c.numbers.angles} rows=${c.numbers.rows} next_day_right=${c.numbers.nextDayRight}/${c.numbers.nextDayOf} data_breaks=${c.numbers.dataBreaks}` +
               (c.numbers.learner === undefined
                 ? ""
                 : ` learner_generation=${c.numbers.learner.generation} leader=${c.numbers.learner.leader} checkpoint=${c.numbers.learner.checkpoint ? 1 : 0} actions=${c.numbers.learner.actions.length}`),
       );
     } catch (error) {
       out(
-        `arena-cortex-learn ${MARKET} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
+        `arena-cortex-learn ${market} ${d}: failed (${error instanceof Error ? error.name : "unknown"})`,
       );
     }
     return 0;

@@ -44,6 +44,9 @@
 //    the slot has passed and there is neither a success nor a running record for the key."
 //
 // How the rules apply here:
+//  - M19 C1 (D-1811): the slot table is built per ENABLED market row (schedule.ts `slotTable`, markets.ts); a
+//    market that is not enabled has no slot and nothing is dispatched for it. The rows are cached per isolate
+//    (idle minutes stay free) and re-read in the same request as the state whenever a window is open.
 //  - The decision (`candidateSlots`, `decide`) is pure arithmetic on the Sydney local minute
 //    (localtime.ts, no Intl). It runs in well under a millisecond.
 //  - Idle minute: if no enabled slot's window is open and today's rollup is already known to this
@@ -61,12 +64,21 @@
 //  - Errors never escape `runClock`; log lines carry slot ids and fixed words only.
 import { dbConfigured, pipeline, type Arg, type DbEnv, type Stmt, type StmtResult } from "./db";
 import { dispatchWorkflow, refFor, type DispatchEnv } from "./dispatch";
-import { isWeekend, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
-import { isTradingDayKind } from "../../src/lib/data/calendarCore.mjs";
-import { AU_SLOTS, type Slot } from "./schedule";
+import { isWeekend, localFor, MINUTE_MS, sydneyLocal, type Local } from "./localtime";
+import {
+  CALENDAR_SQL,
+  MARKETS_STMT,
+  cachedMarkets,
+  marketFacts,
+  parseMarketRows,
+  rememberMarkets,
+  resetMarketCache,
+  sameShape,
+  type MarketRow,
+} from "./markets";
+import { slotTable, type Slot } from "./schedule";
 
 export const CLOCK_JOB = "worker-clock";
-export const MARKET = "AU";
 export const MAX_ATTEMPTS = 3;
 /** A claim with no recorded result after this long is treated as a crashed attempt. */
 export const CLAIM_STALE_MS = 3 * MINUTE_MS;
@@ -78,7 +90,30 @@ export type ClockEnv = DbEnv &
   DispatchEnv & {
     BUILD_COMMIT?: string;
   };
-export type ClockDeps = { fetch: typeof fetch; nowMs: () => number };
+/**
+ * M18 TST-136 (D-968): an optional work counter. A test passes one to count the clock's work (a tick that had
+ * something to do, every subrequest it made, every workflow dispatch) and asserts the counts against the
+ * PLT-070 budgets, instead of measuring milliseconds on a shared runner. Production passes none.
+ */
+export type ClockWork = "tick" | "subrequest" | "dispatch";
+export type ClockDeps = {
+  fetch: typeof fetch;
+  nowMs: () => number;
+  count?: (kind: ClockWork) => void;
+};
+
+/** The deps with every subrequest counted; the same object when no counter is injected. */
+function counted(deps: ClockDeps): ClockDeps {
+  const count = deps.count;
+  if (count === undefined) return deps;
+  return {
+    ...deps,
+    fetch: ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+      count("subrequest");
+      return deps.fetch(input, init);
+    }) as typeof fetch,
+  };
+}
 
 export type SlotState = { s: "claimed" | "dispatched" | "failed"; n: number; at: string };
 /** `state` is null when the stored text is not a valid state (never dispatched over). */
@@ -95,9 +130,12 @@ export type Action = {
 
 export type Facts = {
   dispatchEnabled: boolean;
-  /** market.mode for AU, or null when unreadable (treated like "off" for market-bound slots). */
+  /** market.mode of the table's first market, or null when unreadable (treated like "off" for market-bound slots). */
   marketMode: string | null;
   tradingDay: boolean;
+  /** Mode and trading day by market code, for slots tagged with a market (D-1825); absent = none tagged. */
+  marketModes?: Readonly<Record<string, string>>;
+  tradingDays?: Readonly<Record<string, boolean>>;
   /** The runtime slot list (default: absent, i.e. today's behaviour). */
   slotsEnabled?: SlotList;
   /** Parsed workflow inputs by `worker_state` key; null = present but invalid (default: none). */
@@ -107,6 +145,11 @@ export type Facts = {
    * dispatched slot is never dispatched again (fail safe).
    */
   closedKeys?: ReadonlySet<string>;
+  /**
+   * M18 (D-1782): run-record keys with a success/degraded record, for `Slot.recheck.needsKeyPrefix`
+   * (2b is re-dispatched only after 2a settled). Absent = unknown, so such a slot is never re-dispatched.
+   */
+  settledKeys?: ReadonlySet<string>;
 };
 
 /** The runtime list `worker_state.slots_enabled`: absent, a valid list, or unreadable (fail safe). */
@@ -134,28 +177,63 @@ export const RECHECK_CLOSED_SQL =
   "OR (status = 'failed' AND json_extract(details_json, '$.navDays') IS NOT NULL) " +
   "OR (status = 'skipped' AND json_extract(details_json, '$.reason') IS NOT 'no_completion_marker' " +
   // R4-I3 (D-833): a capped catch-up leaves a `skipped` record that does NOT close the night
-  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped') " +
+  "AND json_extract(details_json, '$.reason') IS NOT 'catch_up_capped' " +
+  // M18 (D-1782): a 2b that gave up waiting for 2a did not decide the night, so the clock may run it again
+  // (only once 2a has settled: Slot.recheck.needsKeyPrefix)
+  "AND json_extract(details_json, '$.reason') IS NOT 'no_2a_success') " +
   // R2-I3 (D-808): a night REFUSED because the previous session is not closed is closed FOR THE RECHECK
   // only (the guard in closeBooks.ts does not count it): a second run the same day refuses the same way.
   "OR (status = 'failed' AND json_extract(details_json, '$.reason') = 'previous_session_not_closed'))";
-const rollupKey = (date: string): string => `${CLOCK_JOB}:${MARKET}:${date}`;
+const rollupKey = (market: string, date: string): string => `${CLOCK_JOB}:${market}:${date}`;
+
+/** Mode of the market a slot belongs to (null = unknown, which skips a market-bound slot). */
+export const modeOf = (
+  facts: Pick<Facts, "marketMode" | "marketModes">,
+  slot: Slot,
+): string | null =>
+  slot.market === undefined ? facts.marketMode : (facts.marketModes?.[slot.market] ?? null);
+/** Whether the market a slot belongs to trades today. */
+export const tradingOf = (facts: Pick<Facts, "tradingDay" | "tradingDays">, slot: Slot): boolean =>
+  slot.market === undefined ? facts.tradingDay : facts.tradingDays?.[slot.market] === true;
 
 // ---- pure decision ---------------------------------------------------------------------------
 
-/** Enabled, Worker-clock-dispatchable slots whose window is open at the local minute. */
-export function candidateSlots(local: Local, slots: readonly Slot[] = AU_SLOTS): Slot[] {
+/**
+ * The wall clock a slot is decided on (M20 A2, D-1117): its own zone when it has one (a market-bound slot of IN or
+ * US), else the home `local` (every AU slot and every ops slot). A slot with a zone needs the instant `local` was
+ * derived from; without it, or for a zone the Worker cannot compute, the slot has no clock and is never due.
+ */
+export function localOf(slot: Slot, local: Local, atMs: number | undefined): Local | null {
+  if (slot.tz === undefined) return local;
+  if (atMs === undefined) return null;
+  try {
+    return localFor(slot.tz, atMs);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Enabled, Worker-clock-dispatchable slots whose window is open at the local minute of the slot's own zone.
+ * `atMs` is the instant `local` is the home clock of; it is needed only by slots with a zone (`Slot.tz`).
+ */
+export function candidateSlots(local: Local, slots: readonly Slot[], atMs?: number): Slot[] {
   return slots
-    .filter(
-      (s) =>
+    .filter((s) => {
+      const l = localOf(s, local, atMs);
+      return (
+        l !== null &&
         s.enabled &&
         s.runner === "actions" &&
         s.workflow !== null &&
         s.everyMin === undefined &&
-        (!s.tradingDaysOnly || !isWeekend(local)) &&
-        (s.monthly !== "first-saturday" || isFirstSaturday(local)) &&
-        local.minute >= s.minute &&
-        local.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439),
-    )
+        (!s.tradingDaysOnly || !isWeekend(l)) &&
+        (s.monthly !== "first-saturday" || isFirstSaturday(l)) &&
+        (s.annual === undefined || isAnnualDay(l, s.annual)) &&
+        l.minute >= s.minute &&
+        l.minute <= Math.min(s.minute + (s.recheck?.untilMin ?? s.catchUpMin), 1439)
+      );
+    })
     .sort((a, b) => a.priority - b.priority);
 }
 
@@ -251,31 +329,43 @@ export function parseInputs(raw: string | undefined): Record<string, string> | n
 export const isFirstSaturday = (local: Local): boolean =>
   local.dow === 6 && Number(local.date.slice(8, 10)) <= 7;
 
+/** True on the given local month/day (M18 `annual` slots). */
+export const isAnnualDay = (local: Local, a: { month: number; day: number }): boolean =>
+  Number(local.date.slice(5, 7)) === a.month && Number(local.date.slice(8, 10)) === a.day;
+
 /** What to dispatch now, in dispatch order. Pure: no I/O. */
 export function decide(
   local: Local,
   facts: Facts,
   states: ReadonlyMap<string, StoredState>,
   nowMs: number,
-  slots: readonly Slot[] = AU_SLOTS,
+  slots: readonly Slot[],
+  atMs?: number,
 ): Action[] {
-  return decideWithSkips(local, facts, states, nowMs, slots).actions;
+  return decideWithSkips(local, facts, states, nowMs, slots, atMs).actions;
 }
 
 /** Like `decide`, plus every due slot that was held back by the runtime list or its inputs. */
 export function decideWithSkips(
-  local: Local,
+  home: Local,
   facts: Facts,
   states: ReadonlyMap<string, StoredState>,
   nowMs: number,
-  slots: readonly Slot[] = AU_SLOTS,
+  slots: readonly Slot[],
+  /** The instant `home` is the Sydney clock of (default `nowMs`): the zone of a slot with `Slot.tz` is read at it. */
+  atMs: number = nowMs,
 ): { actions: Action[]; skipped: Skipped[] } {
   const out: Action[] = [];
   const skipped: Skipped[] = [];
   if (!facts.dispatchEnabled) return { actions: out, skipped };
-  for (const slot of candidateSlots(local, slots)) {
-    if (slot.marketBound && (facts.marketMode === null || facts.marketMode === "off")) continue;
-    if (slot.tradingDaysOnly && !facts.tradingDay) continue;
+  for (const slot of candidateSlots(home, slots, atMs)) {
+    // D-1117: the slot's own clock (its market's zone), else the home one
+    const local = localOf(slot, home, atMs) as Local;
+    if (slot.marketBound) {
+      const mode = modeOf(facts, slot);
+      if (mode === null || mode === "off") continue;
+    }
+    if (slot.tradingDaysOnly && !tradingOf(facts, slot)) continue;
     const why = listSkip(slot, facts.slotsEnabled);
     if (why !== null) {
       skipped.push({ id: slot.id, reason: why });
@@ -308,7 +398,16 @@ export function decideWithSkips(
         facts.closedKeys !== undefined &&
         st.n < MAX_ATTEMPTS &&
         nowMs - Date.parse(st.at) >= rc.afterMin * MINUTE_MS &&
-        !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`)
+        !facts.closedKeys.has(`${rc.keyPrefix}${local.date}`) &&
+        // M18 (D-1782): a night that needs another job first (2b needs 2a) waits for its settled record
+        (rc.needsKeyPrefix === undefined ||
+          facts.settledKeys?.has(`${rc.needsKeyPrefix}${local.date}`) === true) &&
+        // M18 (D-1782) `once`: a dispatch at or after slot + afterMin was itself the recheck
+        (rc.once !== true ||
+          (slot.tz === undefined ? sydneyLocal : (ms: number) => localFor(slot.tz as string, ms))(
+            Date.parse(st.at),
+          ).minute <
+            slot.minute + rc.afterMin)
       ) {
         out.push({ slot, key, attempt: st.n + 1, prev: stored.raw, inputs });
       }
@@ -328,6 +427,7 @@ let rollupDate: string | null = null;
 /** Test hook: forget what this isolate knows. */
 export function resetClockCache(): void {
   rollupDate = null;
+  resetMarketCache();
 }
 
 export type TickSummary = {
@@ -342,17 +442,22 @@ const iso = (ms: number) => new Date(ms).toISOString();
 const COMMIT_RE = /^[0-9a-f]{40}$/;
 const errName = (e: unknown) => (e instanceof Error && e.name ? e.name.slice(0, 40) : "Error");
 
+/**
+ * The daily rollup record. It carries the first enabled market's code (read in the same statement, so the
+ * insert needs no earlier request); with no enabled market nothing is inserted. The partial unique index
+ * (status = 'success') makes a second daily record impossible.
+ */
 function rollupInsert(env: ClockEnv, local: Local, nowMs: number): Stmt {
   return {
-    // The partial unique index (status = 'success') makes a second daily record impossible.
     sql:
       "INSERT INTO run_record (job, market, concurrency_key, scheduled_for, started_at, status, " +
-      "details_json, commit_sha) VALUES (?, ?, ?, ?, ?, 'success', ?, ?) " +
+      "details_json, commit_sha) SELECT ?, code, ? || code || ':' || ?, ?, ?, 'success', ?, ? " +
+      "FROM market WHERE enabled = 1 ORDER BY code LIMIT 1 " +
       "ON CONFLICT (concurrency_key) WHERE status = 'success' DO NOTHING",
     args: [
       CLOCK_JOB,
-      MARKET,
-      rollupKey(local.date),
+      `${CLOCK_JOB}:`,
+      local.date,
       local.date,
       iso(nowMs),
       JSON.stringify({ kind: "daily-rollup", env: env.PRAXIS_ENV }),
@@ -368,6 +473,7 @@ function rollupInsert(env: ClockEnv, local: Local, nowMs: number): Stmt {
  */
 async function recordMalformed(
   env: ClockEnv,
+  market: string,
   local: Local,
   deps: ClockDeps,
   summary: TickSummary,
@@ -386,7 +492,7 @@ async function recordMalformed(
             "WHERE NOT EXISTS (SELECT 1 FROM run_record WHERE concurrency_key = ?)",
           args: [
             CLOCK_JOB,
-            MARKET,
+            market,
             key,
             local.date,
             at,
@@ -416,26 +522,70 @@ export function dispatchFailure(detail: string): { status: number | null; reason
 export async function runClock(
   env: ClockEnv,
   scheduledTime: number,
-  deps: ClockDeps,
-  slots: readonly Slot[] = AU_SLOTS,
+  rawDeps: ClockDeps,
+  /** A fixed slot table (tests). Production passes none: the table is built from the enabled market rows. */
+  fixedSlots?: readonly Slot[],
 ): Promise<TickSummary> {
+  const deps = counted(rawDeps);
   const summary: TickSummary = { requests: 0, dispatched: [], failed: [], skipped: [] };
   try {
     if (!dbConfigured(env) || refFor(env.PRAXIS_ENV) === null) return summary;
     const local = sydneyLocal(scheduledTime);
-    const cands = candidateSlots(local, slots);
-    const needRollup = rollupDate !== local.date;
+    let needRollup = rollupDate !== local.date;
+
+    // ---- the slot table: fixed (tests) or built from the enabled market rows (D-1811) ---------------
+    let rows: MarketRow[] | null = null;
+    let rowsFresh = false;
+    let slots: readonly Slot[];
+    if (fixedSlots !== undefined) {
+      slots = fixedSlots;
+    } else {
+      rows = cachedMarkets(deps.nowMs());
+      if (rows === null) {
+        // A cold or expired isolate: ONE request reads the enabled markets (with the rollup insert, which
+        // a cold isolate makes anyway), so an idle minute still costs at most one request.
+        const cold: Stmt[] = [];
+        if (needRollup) cold.push(rollupInsert(env, local, deps.nowMs()));
+        cold.push(MARKETS_STMT);
+        try {
+          summary.requests++;
+          const r0 = await pipeline(env, cold, deps.fetch);
+          rows = parseMarketRows(r0[cold.length - 1].rows);
+          rememberMarkets(rows, deps.nowMs());
+          rowsFresh = true;
+          if (needRollup) {
+            rollupDate = local.date;
+            needRollup = false;
+          }
+        } catch (e) {
+          console.log(`clock: db error ${errName(e)}`);
+          return summary;
+        }
+      }
+      const built = slotTable(rows);
+      for (const code of built.skipped) console.log(`clock: skipped market ${code} unusable`);
+      slots = built.slots;
+    }
+    const cands = candidateSlots(local, slots, scheduledTime);
     if (!needRollup && cands.length === 0) return summary; // idle minute: no request at all
+    // D-1117: the local date of a slot is the date of its own zone (a US evening is the next day in Sydney)
+    const dateOf = (sl: Slot): string => (localOf(sl, local, scheduledTime) ?? local).date;
+    deps.count?.("tick");
 
     // ---- request 1: rollup (once per day per isolate) + everything the decision needs --------
     const nowMs = deps.nowMs();
     const first: Stmt[] = [];
     if (needRollup) first.push(rollupInsert(env, local, nowMs));
-    const keys = cands.map((s) => slotKey(s.id, local.date));
+    const keys = cands.map((s) => slotKey(s.id, dateOf(s)));
     const inputKeys = [...new Set(cands.flatMap((s) => (s.inputsKey ? [s.inputsKey] : [])))];
     let iState = -1;
     let iMode = -1;
     let iCal = -1;
+    // the dates whose calendar the tick reads: the home date first, then the date of each other zone a candidate
+    // is decided in (one probe each, at most three)
+    const calDates: string[] = [local.date];
+    for (const c of cands)
+      if (c.tradingDaysOnly && !calDates.includes(dateOf(c))) calDates.push(dateOf(c));
     let iClosed = -1;
     if (cands.length > 0) {
       iState = first.length;
@@ -443,20 +593,19 @@ export async function runClock(
         sql: `SELECT key, value_json FROM worker_state WHERE key IN (${placeholders(keys.length + inputKeys.length + 2)})`,
         args: [DISPATCH_ENABLED_KEY, SLOTS_ENABLED_KEY, ...inputKeys, ...keys],
       });
-      if (cands.some((s) => s.marketBound)) {
+      // the enabled markets with their current mode (one statement, <= 3 rows; skipped when this very tick
+      // already read them), and the calendar kind of the day for each of them (one probe per market)
+      if (!rowsFresh) {
         iMode = first.length;
-        first.push({ sql: "SELECT mode FROM market WHERE code = ?", args: [MARKET] });
+        first.push(MARKETS_STMT);
       }
       if (cands.some((s) => s.tradingDaysOnly)) {
         iCal = first.length;
-        first.push({
-          sql: "SELECT kind FROM trading_calendar WHERE market = ? AND d = ?",
-          args: [MARKET, local.date],
-        });
+        for (const d of calDates) first.push({ sql: CALENDAR_SQL, args: [d] });
       }
     }
     const recheckKeys = [
-      ...new Set(cands.flatMap((s) => (s.recheck ? [`${s.recheck.keyPrefix}${local.date}`] : []))),
+      ...new Set(cands.flatMap((s) => (s.recheck ? [`${s.recheck.keyPrefix}${dateOf(s)}`] : []))),
     ];
     if (recheckKeys.length > 0) {
       iClosed = first.length;
@@ -465,6 +614,25 @@ export async function runClock(
           `SELECT DISTINCT concurrency_key FROM run_record WHERE concurrency_key IN (${placeholders(recheckKeys.length)}) ` +
           `AND (${RECHECK_CLOSED_SQL} OR (status = 'running' AND started_at > ?))`,
         args: [...recheckKeys, iso(nowMs - RECHECK_RUNNING_MAX_MS)],
+      });
+    }
+    // M18 (D-1782): the prerequisite night of a recheck (2a for 2b) must be success/degraded, the same
+    // predicate batch 2b's own `closedOk` uses, so a re-dispatch never lands on a skip again.
+    const settledKeysWanted = [
+      ...new Set(
+        cands.flatMap((s) =>
+          s.recheck?.needsKeyPrefix ? [`${s.recheck.needsKeyPrefix}${dateOf(s)}`] : [],
+        ),
+      ),
+    ];
+    let iSettled = -1;
+    if (settledKeysWanted.length > 0) {
+      iSettled = first.length;
+      first.push({
+        sql:
+          `SELECT DISTINCT concurrency_key FROM run_record WHERE concurrency_key IN (${placeholders(settledKeysWanted.length)}) ` +
+          "AND status IN ('success', 'degraded')",
+        args: settledKeysWanted,
       });
     }
     let r1: StmtResult[];
@@ -490,25 +658,61 @@ export async function runClock(
       else if (inputKeys.includes(k)) slotInputs[k] = parseInputs(raw);
       else states.set(k, { raw, state: parseState(raw) });
     }
-    const mode = iMode >= 0 ? r1[iMode].rows[0]?.[0] : undefined;
-    const calKind = iCal >= 0 ? r1[iCal].rows[0]?.[0] : undefined;
+    // the markets of this tick: read in request 1, or just now by the cold read
+    const current = iMode >= 0 ? parseMarketRows(r1[iMode].rows) : (rows ?? []);
+    if (fixedSlots === undefined && iMode >= 0) {
+      if (rows !== null && !sameShape(rows, current)) {
+        // a market was enabled, disabled or re-timed since the table was built: remember the rows and let
+        // the next minute decide with the right table (nothing was claimed from the old one)
+        rememberMarkets(current, deps.nowMs());
+        console.log("clock: markets changed");
+        return summary;
+      }
+      rememberMarkets(current, deps.nowMs());
+    }
+    const primary = current[0];
+    if (primary === undefined) {
+      console.log("clock: no enabled market");
+      return summary; // MKT-110 a: no enabled market, no dispatch
+    }
+    const mf = marketFacts(current, iCal >= 0 ? r1[iCal].rows : [], local.date);
+    // D-1117: a market of another zone trades on ITS date: its calendar probe, not the Sydney one
+    const tradingDays: Record<string, boolean> = { ...mf.tradingDays };
+    let tradingDay = mf.tradingDay;
+    if (iCal >= 0 && calDates.length > 1) {
+      for (const m of current) {
+        let md = local.date;
+        try {
+          md = localFor(m.tz, scheduledTime).date;
+        } catch {
+          // an unsupported zone has no slot; its day stays the home date
+        }
+        const at = calDates.indexOf(md);
+        if (md === local.date || at < 0) continue;
+        tradingDays[m.code] = marketFacts([m], r1[iCal + at].rows, md).tradingDays[m.code];
+      }
+      tradingDay = current[0] === undefined ? false : tradingDays[current[0].code];
+    }
     const facts: Facts = {
       dispatchEnabled: parseEnabled(enabledRaw),
-      marketMode: typeof mode === "string" ? mode : null,
-      // V1-S3 / D-711: fail safe, a weekday with no calendar row is NOT a trading day.
-      tradingDay: isTradingDayKind(local.date, typeof calKind === "string" ? calKind : null),
+      // V1-S3 / D-711 (inside marketFacts): fail safe, a weekday with no calendar row is NOT a trading day.
+      marketMode: mf.marketMode,
+      tradingDay,
+      marketModes: mf.marketModes,
+      tradingDays,
       slotsEnabled: parseSlotsEnabled(listRaw),
       slotInputs,
       closedKeys: iClosed >= 0 ? new Set(r1[iClosed].rows.map((r) => String(r[0]))) : undefined,
+      settledKeys: iSettled >= 0 ? new Set(r1[iSettled].rows.map((r) => String(r[0]))) : undefined,
     };
-    const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots);
+    const { actions, skipped } = decideWithSkips(local, facts, states, nowMs, slots, scheduledTime);
     summary.skipped = skipped;
     // "not-released" is the normal state before the Owner lists a slot: no log line for it.
     for (const sk of skipped) {
       if (sk.reason !== "not-released") console.log(`clock: skipped ${sk.id} ${sk.reason}`);
     }
     if (facts.dispatchEnabled && facts.slotsEnabled?.kind === "malformed") {
-      await recordMalformed(env, local, deps, summary);
+      await recordMalformed(env, primary.code, local, deps, summary);
     }
     if (actions.length === 0) return summary;
 
@@ -542,6 +746,7 @@ export async function runClock(
     const record: Stmt[] = [];
     for (const a of owned) {
       const res = await dispatchWorkflow(env, a.slot.workflow ?? "", deps.fetch, a.inputs);
+      deps.count?.("dispatch");
       const at = iso(deps.nowMs());
       const st: SlotState = { s: res.ok ? "dispatched" : "failed", n: a.attempt, at };
       record.push({
@@ -554,16 +759,16 @@ export async function runClock(
           sql:
             "UPDATE run_record SET items_processed = items_processed + 1, ended_at = ? " +
             "WHERE concurrency_key = ? AND status = 'success'",
-          args: [at, rollupKey(local.date)],
+          args: [at, rollupKey(primary.code, local.date)],
         });
         console.log(`clock: dispatched ${a.slot.id} attempt ${a.attempt}`);
       } else {
         summary.failed.push(a.slot.id);
         const args: Arg[] = [
           CLOCK_JOB,
-          MARKET,
-          `dispatch-failed:${a.slot.id}:${local.date}:${a.attempt}`,
-          local.date,
+          a.slot.market ?? primary.code,
+          `dispatch-failed:${a.slot.id}:${dateOf(a.slot)}:${a.attempt}`,
+          dateOf(a.slot),
           at,
           at,
           `dispatch ${a.slot.id} ${res.detail}`.slice(0, 120),

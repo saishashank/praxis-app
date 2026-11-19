@@ -14,6 +14,8 @@ import { DATAMARK } from "./datamark";
 import type { JsonSchema } from "./jsonSchema";
 import type { LlmProvider } from "./providers";
 import type { LlmRouter } from "./router";
+import type { NightLlm } from "./nightlyLlm";
+import type { RoutesStatus } from "./factory";
 import { enumLabel } from "./labels";
 import type { EventRow } from "@/lib/agents/schema";
 import type { AnnouncementRow } from "@/lib/agents/decisionView";
@@ -53,13 +55,40 @@ const OPINION_HEX = 12; // threshold-ok: length of the hash suffix in an opinion
 
 /**
  * The switch (reuses the existing PRAXIS_ENV staging switch; no new key or secret): labels are
- * produced in staging only. PRAXIS_TEXT_LABELS=off turns them off there too.
+ * produced in staging, and in production only as a shadow once the factory reports R2 live
+ * (M23 T1, D-1636). PRAXIS_TEXT_LABELS=off turns them off in both.
  */
-export function textLabelsEnabled(env: {
-  readonly PRAXIS_ENV?: string;
-  readonly PRAXIS_TEXT_LABELS?: string;
-}): boolean {
-  return env.PRAXIS_ENV === "staging" && env.PRAXIS_TEXT_LABELS !== "off";
+export function textLabelsEnabled(
+  env: {
+    readonly PRAXIS_ENV?: string;
+    readonly PRAXIS_TEXT_LABELS?: string;
+  },
+  opts: { readonly r2Live?: boolean } = {},
+): boolean {
+  if (env.PRAXIS_TEXT_LABELS === "off") return false;
+  return env.PRAXIS_ENV === "staging" || opts.r2Live === true;
+}
+
+/** True when the factory's decision lists R2 as live (a listed role with a passed bake-off and a key). */
+export function r2IsLive(status: Pick<RoutesStatus, "roles">): boolean {
+  return status.roles.some((r) => r.role === "R2" && r.live);
+}
+
+/**
+ * Deps for the production shadow, from the night seam: the R2 router of `nightlyLlm`/`loadNightLlm` (rules-only unless
+ * R2 is live) and the switch above. With no live R2 the switch is off, so nothing is called and nothing is written.
+ */
+export function shadowLabelDeps(
+  night: Pick<NightLlm, "routerFor" | "providers" | "status">,
+  env: { readonly PRAXIS_ENV?: string; readonly PRAXIS_TEXT_LABELS?: string },
+  now: () => Date,
+): LabelDeps {
+  return {
+    router: night.routerFor("R2"),
+    providers: night.providers,
+    enabled: textLabelsEnabled(env, { r2Live: r2IsLive(night.status) }),
+    now,
+  };
 }
 
 // ---- request ----
@@ -300,6 +329,35 @@ export function makeLabelHook(
       // shadow only: swallow, the event row is already built
     }
   };
+}
+
+// ---- one answer, no rows (the paraphrase harness; M23 T1) ----
+
+export type AskedLabels =
+  | { readonly status: "done"; readonly values: Readonly<Record<LabelKind, string>> }
+  | { readonly status: "budget_exhausted" | "no_llm" | "invalid_answer" };
+
+/**
+ * One router call for the three labels of a text, checked against the enumerations only (no spans, no rows). Used by the
+ * paraphrase harness, which compares values between texts; the production path above also checks spans.
+ */
+export async function askLabels(
+  router: Pick<LlmRouter, "route">,
+  i: LabelInput,
+): Promise<AskedLabels> {
+  const res = await router.route(buildLabelRequest(i));
+  if (res.budgetExhausted) return { status: "budget_exhausted" };
+  const unusable = !res.llmUsed && res.call.tokensIn > 0;
+  if (!res.llmUsed && !unusable) return { status: "no_llm" };
+  const raw = res.value;
+  if (raw === null || unusable) return { status: "invalid_answer" };
+  const values = {} as Record<LabelKind, string>;
+  for (const kind of LABEL_KIND_ORDER) {
+    const v = enumLabel(raw[kind].value, LABEL_ENUMS[kind]);
+    if (v === null) return { status: "invalid_answer" };
+    values[kind] = v;
+  }
+  return { status: "done", values };
 }
 
 // ---- CTX-041 opinion tracking (hook only; never an input to scoring) ----

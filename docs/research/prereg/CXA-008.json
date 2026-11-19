@@ -1,0 +1,30 @@
+{
+  "item": "CXA-008",
+  "decision": "D-1636, D-1722",
+  "hypothesis": "A text label of an announcement (guidance, event confirmation, tone), read as an ordered value, ranks announcements in the same order as their 20-session market-adjusted outcome within each sign of the announcement-day abnormal return, and the machine label agrees with the Owner's golden label often enough. Each label is its own lineage per market with one look. A pass is recorded for the sentiment-cluster import path only; no status changes.",
+  "market_rule": "each market is counted and tested on its own announcements and golden labels; a lineage and its plan are per market",
+  "lineages": [
+    "text_label_guidance",
+    "text_label_event_confirm",
+    "text_label_tone"
+  ],
+  "counter": "the number of distinct items with at least one golden answer 'labelled', counted from the golden table before any outcome is read; the look needs the count to reach label_golden_min (500)",
+  "floor_golden_items": 500,
+  "below_floor": "INCONCLUSIVE: no look is taken and no outcome is read; the plan stays frozen and the one look waits for the night the count reaches the floor",
+  "label_value": "ordered value of the newest accepted machine label of the announcement: guidance down -1, same 0, up +1 (none left out); event confirmation contradicted -1, confirmed +1 (unclear left out); tone negative -1, neutral 0, positive +1",
+  "sample": "announcements of the archive that carry a machine label of that kind and whose 20-session horizon has fully elapsed on the night of the look, with both prices known",
+  "ar_stratum": "the sign of the announcement session's close-to-close return minus the benchmark index return; zero is left out; two strata, positive and negative",
+  "outcome": "market-adjusted close-to-close return from the close of the announcement session to the close of the twentieth session after it, minus the benchmark index return over the same sessions",
+  "horizon_sessions": 20,
+  "stratum_floor": 30,
+  "stratum_floor_note": "a stratum with fewer than 30 announcements is left out; with no stratum left the result is INCONCLUSIVE and no look is taken",
+  "statistic": "the mean over the strata kept of the Spearman rank correlation of the label value and the outcome",
+  "interval": "one-sided 90 % lower bound: the 0.10 quantile of 2000 stationary block-bootstrap replicates of the statistic, resampling announcement sessions with expected block 20 sessions, the ranks recomputed in every replicate, seeded per lineage",
+  "replicates": 2000,
+  "level": 0.1,
+  "agreement": "per label, the one-sided 90 % Wilson lower bound of the share of golden items whose machine label equals the Owner's newest labelled answer (an item without a machine label counts as a disagreement), at least 0.70",
+  "agreement_threshold": 0.7,
+  "pass_rule": "PASS when the lower bound of the statistic is above zero and the agreement bound reaches 0.70; NULL when the statistic is computed and either fails; INCONCLUSIVE and spent when the statistic cannot be computed (an undefined bootstrap)",
+  "late_labels_look": "the family look of the announcement-calibration plan (lineage ann_labels) that waited for label coverage is taken by this evaluation on the first night the archive count is at its floor and at least 70 % of the holdout announcements carry a label, under that plan's own rules",
+  "consequence": "a PASS is recorded; entry into the sentiment cluster goes through the passport import, which is a later reviewed step"
+}

@@ -13,7 +13,7 @@ import {
 } from "../src/clock";
 import { routeSlotsDue, runRoutes, type RouteEnv } from "../src/routes";
 import { sydneyLocal } from "../src/localtime";
-import { AU_SLOTS } from "../src/schedule";
+import { AU_SLOTS, warmMarkets } from "./auRow";
 import { TOKEN, TURSO_TOKEN, TURSO_URL, makeDb, makeNet, rows } from "./fakeTurso";
 
 const ENV: ClockEnv = {
@@ -191,6 +191,7 @@ describe("the clock with the runtime list", () => {
     on();
     list(["backup"]);
     // a tick that dispatches nothing (slot not listed): exactly one pipeline call
+    warmMarkets();
     const before = net.pipelines;
     await tick(T_ARCHIVE);
     expect(net.pipelines - before).toBe(1);
@@ -199,7 +200,8 @@ describe("the clock with the runtime list", () => {
     const reqs = JSON.parse(read.body).requests as {
       stmt?: { sql: string; args?: { value: string }[] };
     }[];
-    const selects = reqs.filter((r) => /^\s*select/i.test(r.stmt?.sql ?? ""));
+    // one SELECT on worker_state; the enabled-markets read (<= 3 rows, M19 C1) rides in the same request
+    const selects = reqs.filter((r) => /^\s*select .* from worker_state/i.test(r.stmt?.sql ?? ""));
     expect(selects).toHaveLength(1);
     const keys = selects[0]!.stmt!.args!.map((a) => a.value);
     expect(keys).toEqual(
@@ -207,6 +209,7 @@ describe("the clock with the runtime list", () => {
     );
     // and a dispatching tick still costs read + claim + record = 3
     resetClockCache();
+    warmMarkets();
     const b2 = net.pipelines;
     await tick(T_BACKUP);
     expect(net.pipelines - b2).toBe(3);
@@ -310,7 +313,7 @@ describe("the route runner with the runtime list", () => {
 
   it("the shipped route slots are available but held (absent list = off)", async () => {
     on();
-    expect(routeSlotsDue(sydneyLocal(T_MORNING)).map((s) => s.id)).toContain("morning");
+    expect(routeSlotsDue(sydneyLocal(T_MORNING), AU_SLOTS).map((s) => s.id)).toContain("morning");
     await run(T_MORNING);
     expect(posts).toEqual([]);
   });
@@ -331,6 +334,7 @@ describe("the route runner with the runtime list", () => {
   it("still ONE read per tick: the list rides in the existing single SELECT", async () => {
     on();
     list(["evening-review"]);
+    warmMarkets();
     const before = net.pipelines;
     await run(T_MORNING);
     expect(net.pipelines - before).toBe(1);

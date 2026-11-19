@@ -186,9 +186,10 @@ export const ALERT_SETTING_WORDS = {
   pickAlerts: "Buy-price alerts",
   cleared: "E-mail when a pick's alert is cleared",
   candidates: "E-mail for new intraday candidates",
+  stopHit: "E-mail me when a pick I was alerted on trades under its stop (delayed)",
   cap: "Most alert e-mails a day",
   quiet:
-    "Alerts that arrive in this window are held and sent as one digest afterwards. Nothing here is urgent (P0); those always arrive.",
+    "Alerts that arrive in this window are held and sent as one digest afterwards. Urgent alerts are never held; those always arrive.",
 } as const;
 
 export const CLEAR_WORDS: Record<string, string> = {

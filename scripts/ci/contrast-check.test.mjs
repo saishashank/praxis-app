@@ -52,3 +52,29 @@ test("a missing theme block and a drifting system dark block are reported", () =
   const drift = REAL.replace(/(@media[\s\S]*?--color-accent:\s*)#8fd3ff/, "$1#8fd4ff");
   assert.ok(check(drift).failures.some((f) => f.includes("system dark block differs")));
 });
+
+// M21 C5 (UXN-320 d, D-1205, D-1315): the four muted status bands, text >= 4.5:1 (7:1 in High contrast).
+const BANDS = ["info", "warn", "stale", "neutral"];
+const SIX = ["dark", "light", "midnight", "dim", "high_contrast", "system-light", "system-dark"];
+
+test("every band token is declared in every theme and passes AA text on it", () => {
+  const { themes, results, failures } = check(REAL);
+  assert.deepEqual(failures, []);
+  for (const name of SIX) {
+    for (const b of BANDS) {
+      assert.match(themes[name][`band-${b}`] ?? "", /^#[0-9a-f]{6}$/i, `${name} band-${b}`);
+      for (const fg of ["text", "text-muted"]) {
+        const r = results.find((x) => x.theme === name && x.fg === fg && x.bg === `band-${b}`);
+        assert.ok(r, `${name}: ${fg} on band-${b} is checked`);
+        assert.ok(r.ratio >= (name === "high_contrast" ? 7 : 4.5), `${name} ${fg}/band-${b}`);
+      }
+    }
+    assert.ok(results.some((x) => x.theme === name && x.fg === "warning" && x.bg === "band-warn"));
+  }
+});
+
+test("a band that is too bright for its text fails the check", () => {
+  const bad = REAL.replace(/(\[data-theme="dark"\][^}]*--band-warn:\s*)#[0-9a-f]{6}/i, "$1#d8c070");
+  const { failures } = check(bad);
+  assert.ok(failures.some((f) => f.startsWith("dark: text on band-warn")));
+});

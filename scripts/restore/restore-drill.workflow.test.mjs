@@ -57,14 +57,28 @@ test("every action is pinned to a full commit SHA", () => {
   for (const s of steps.filter((x) => x.uses)) assert.match(s.uses, SHA_USES);
 });
 
-test("secrets appear only in env of the guard, run and final-check steps, never at job level", () => {
+test("secrets appear only in env of the guard, run, record and final-check steps, never at job level", () => {
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
   const withSecrets = steps.filter((s) => JSON.stringify(s).includes("secrets."));
   assert.deepEqual(
     withSecrets.map((s) => s.name),
-    ["Guard (temporary secrets present)", "Drill or restore", "Fail while temporary secrets exist"],
+    [
+      "Guard (temporary secrets present)",
+      "Drill or restore",
+      "Record the result",
+      "Fail while temporary secrets exist",
+    ],
   );
+  // OPS-105 (D-962): the record step writes one run record to the production database
+  assert.deepEqual(secretKeys(byName("Record the result")), [
+    "BACKUP_PRIVATE_KEY",
+    "TURSO_MAIN_TOKEN",
+    "TURSO_MAIN_URL",
+    "TURSO_PLATFORM_TOKEN_TEMP",
+  ]);
+  assert.equal(byName("Record the result").run, "node scripts/restore/drill-turso.mjs record");
+  assert.equal(byName("Record the result").if, "success() && inputs.environment == 'production'");
   assert.deepEqual(secretKeys(byName("Guard (temporary secrets present)")), [
     "BACKUP_PRIVATE_KEY",
     "TURSO_PLATFORM_TOKEN_TEMP",
@@ -80,7 +94,7 @@ test("secrets appear only in env of the guard, run and final-check steps, never 
   ]);
   // The approved-commit step sees github.token only.
   assert.equal(steps.find((s) => s.id === "approved").env.GITHUB_TOKEN, "${{ github.token }}");
-  assert.equal(src.match(/secrets\./g).length, 7);
+  assert.equal(src.match(/secrets\./g).length, 11);
 });
 
 test("no run: script contains any ${{ }} expression, so no secret or input is echoed", () => {
@@ -138,6 +152,7 @@ test("the private key is never written by the workflow: not as a file, not in ru
   assert.deepEqual(keyUsers, [
     "Guard (temporary secrets present)",
     "Drill or restore",
+    "Record the result",
     "Fail while temporary secrets exist",
   ]);
 });

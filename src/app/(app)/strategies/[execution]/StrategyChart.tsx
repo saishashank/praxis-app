@@ -9,7 +9,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChartTable } from "@/components/charts/ChartTable";
-import { formatCents, formatDay, gainLossGlyph } from "@/lib/view/format";
+import { currencyFormatFor, formatCents, formatDay, gainLossGlyph } from "@/lib/view/format";
 import { regimeLabel } from "@/lib/view/terms";
 
 export type ChartPoint = { time: string; value: number };
@@ -20,15 +20,20 @@ export type ChartTrade = {
   exitDate: string | null;
   entryDay: string | null;
   exitDay: string | null;
-  qty: number;
+  /** Shares; null for a masked viewer (UXN-320 b: no row has a value, so the Size column is not drawn). */
+  qty: number | null;
   open: boolean;
   returnText: string | null;
   pnlText: string | null;
   entryPriceText: string | null;
   exitPriceText: string | null;
-  /** D-885: stop in force, indicative target (shown only) and the latest close of an open trade. */
+  /** D-885: stop in force; FAM-010 (D-1225) the real target of the rule version; the latest close of an open trade. */
   stopText: string | null;
   targetText: string | null;
+  /** The viewer sees the row but its rule version has no target: the cell says "No target". */
+  noTarget: boolean;
+  /** The delayed price reached the target today (display only). */
+  targetReached: boolean;
   lastPriceText: string | null;
   /** D-900: "delayed, 11:35" when the last price is an intraday quote; null when it is the close. */
   lastPriceAtText: string | null;
@@ -76,8 +81,6 @@ function timeKey(t: unknown): string | null {
   return null;
 }
 
-const dollars = (v: number): string => formatCents(Math.round(v * 100));
-
 /** Re-reads the chart tokens when the theme attribute of <html> changes. */
 function useThemeTick(): number {
   const [tick, setTick] = useState(0);
@@ -93,6 +96,7 @@ function useThemeTick(): number {
 }
 
 export function StrategyChart({
+  currency,
   name,
   nav,
   regimes,
@@ -103,7 +107,10 @@ export function StrategyChart({
   showMarkers,
   drawdown,
   maxDropText,
+  noTargetNote = false,
 }: {
+  /** ISO 4217 code of the chart amounts (D-1815). */
+  currency: string;
   name: string;
   nav: ChartPoint[];
   regimes: Array<string | null>;
@@ -114,7 +121,11 @@ export function StrategyChart({
   showMarkers: boolean;
   drawdown: ChartPoint[];
   maxDropText: string;
+  /** D-1225: the rule version has no target rule. */
+  noTargetNote?: boolean;
 }) {
+  const fmt = currencyFormatFor(currency);
+  const dollars = (v: number): string => formatCents(Math.round(v * 100), fmt);
   const host = useRef<HTMLDivElement>(null);
   const ddHost = useRef<HTMLDivElement>(null);
   const [compare, setCompare] = useState(false);
@@ -377,7 +388,7 @@ export function StrategyChart({
           <ChartTable
             visible
             caption={summary}
-            headers={["Date", "Value (A$)", "Market mood"]}
+            headers={["Date", `Value (${fmt.symbol})`, "Market mood"]}
             rows={nav.map((p, i) => [p.time, p.value.toFixed(2), regimes[i] ?? "n/a"])}
           />
         ) : (
@@ -395,7 +406,7 @@ export function StrategyChart({
           {at
             ? `${/^\d{4}-\d{2}-\d{2}$/.test(at.time) ? formatDay(at.time) : at.time}: ${dollars(at.value)}${
                 dayChange !== null
-                  ? `, ${gainLossGlyph(dayChange)} ${formatCents(dayChange, { sign: "always" })} on the day`
+                  ? `, ${gainLossGlyph(dayChange)} ${formatCents(dayChange, fmt, { sign: "always" })} on the day`
                   : ""
               }${mood ? `, market mood ${regimeLabel(mood).shown}` : ""} (arrow keys move along the line)`
             : "No values yet"}
@@ -469,7 +480,12 @@ export function StrategyChart({
         {trades.length === 0 ? (
           <p className="m-0 mt-2 text-sm text-text-muted">No trades in this round yet.</p>
         ) : (
-          <TradesTable trades={trades} selected={selected} onPick={pick} />
+          <TradesTable
+            trades={trades}
+            selected={selected}
+            onPick={pick}
+            noTargetNote={noTargetNote}
+          />
         )}
       </section>
     </div>
@@ -480,7 +496,7 @@ type TradeView = "open" | "closed" | "all";
 
 /**
  * D-884/D-885 ("trades need to be understood at a glance, not click to understand more"): one table
- * of the round's trades, Open first, with size, buy price, stop, indicative target, price now or
+ * of the round's trades, Open first, with size (when shown), buy price, stop, target (or "No target"), price now or
  * sell price and the result. A row click also lights the trade on the chart; "Why" opens the
  * Decision Card as a popup, so the page stays where it is.
  */
@@ -488,10 +504,13 @@ export function TradesTable({
   trades,
   selected,
   onPick,
+  noTargetNote = false,
 }: {
   trades: ChartTrade[];
   selected: string | null;
   onPick: (key: string) => void;
+  /** The rule version has no target: state once, under the table, how this strategy exits (D-943 words). */
+  noTargetNote?: boolean;
 }) {
   const [view, setView] = useState<TradeView>("open");
   const counts = {
@@ -506,6 +525,8 @@ export function TradesTable({
     { id: "all", label: "All" },
   ];
   const cell = "px-2 py-2 text-right font-mono whitespace-nowrap";
+  // UXN-320 (b), D-1204: the Size column is drawn only when at least one trade has a value.
+  const hasSize = trades.some((t) => t.qty !== null);
   return (
     <div className="mt-2 flex min-w-0 flex-col gap-2">
       <div role="group" aria-label="Which trades" className="flex gap-2">
@@ -526,7 +547,14 @@ export function TradesTable({
           {view === "open" ? "No open trades right now." : "No closed trades in this round yet."}
         </p>
       ) : (
-        <div className="ui-scroll-x min-w-0 overflow-x-auto rounded-lg border border-border">
+        // a scrolling table with nothing focusable inside: the box itself takes focus so a keyboard can scroll it (axe
+        // scrollable-region-focusable, D-1332)
+        <div
+          className="ui-scroll-x min-w-0 overflow-x-auto rounded-lg border border-border"
+          tabIndex={0}
+          role="region"
+          aria-label={`Trades in this round, ${view}`}
+        >
           <table className="w-full min-w-[44rem] border-collapse text-sm">
             <caption className="sr-only">Trades in this round, {view}</caption>
             <thead>
@@ -537,9 +565,11 @@ export function TradesTable({
                 <th scope="col" className="px-2 py-2 text-left">
                   Bought
                 </th>
-                <th scope="col" className="px-2 py-2 text-right">
-                  Size
-                </th>
+                {hasSize ? (
+                  <th scope="col" className="px-2 py-2 text-right">
+                    Size
+                  </th>
+                ) : null}
                 <th scope="col" className="px-2 py-2 text-right">
                   Buy price
                 </th>
@@ -547,7 +577,7 @@ export function TradesTable({
                   Stop loss
                 </th>
                 <th scope="col" className="px-2 py-2 text-right">
-                  <abbr title="Shown only: the buy price plus twice the distance to the first stop. No strategy sells on it.">
+                  <abbr title="The price at which this rule version sells at the next open, when it has a target rule.">
                     Target
                   </abbr>
                 </th>
@@ -585,10 +615,17 @@ export function TradesTable({
                       </span>
                     )}
                   </td>
-                  <td className={cell}>{t.qty}</td>
+                  {hasSize ? <td className={cell}>{t.qty ?? ""}</td> : null}
                   <td className={cell}>{t.entryPriceText ?? "Hidden"}</td>
                   <td className={cell}>{t.stopText ?? "Hidden"}</td>
-                  <td className={cell}>{t.targetText ?? "Hidden"}</td>
+                  <td className={cell}>
+                    {t.targetText ?? (t.noTarget ? "No target" : "Hidden")}
+                    {t.open && t.targetReached ? (
+                      <span className="block text-xs text-text-muted">
+                        Target reached today (delayed), exits at the next open
+                      </span>
+                    ) : null}
+                  </td>
                   <td className={cell}>
                     {(t.open ? t.lastPriceText : t.exitPriceText) ?? (t.open ? "n/a" : "Hidden")}
                     {t.open && t.lastPriceAtText ? (
@@ -623,10 +660,14 @@ export function TradesTable({
         </div>
       )}
       <p className="m-0 text-xs text-text-muted">
-        Every trade has a stop loss. The target is shown only: the buy price plus twice the distance
-        to the first stop. The strategies sell on their own rules (the stop, a time limit, news or a
-        cross of the average), not at the target.
+        Every trade has a stop loss. The strategies sell on their own rules (the stop, a time limit,
+        news, a cross of the average or a target when the rule has one).
       </p>
+      {noTargetNote && trades.length > 0 ? (
+        <p className="m-0 text-xs text-text-muted">
+          No target: this strategy exits by its stop, trail or time rule.
+        </p>
+      ) : null}
     </div>
   );
 }

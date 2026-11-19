@@ -14,6 +14,9 @@
 import type { Client } from "@libsql/client";
 import type { Exec } from "@/lib/cortex/store/common";
 import { getConfig } from "@/lib/config/store";
+import { enabledMarkets, loadProfile } from "@/lib/market/profile";
+import { HOME_SLOTS } from "@/lib/market/homeMarket.mjs";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { localToUtc, marketDate, sessionsBetween, sessionTimes } from "@/lib/data/calendar";
 import { readQuoteSourceState } from "@/lib/data/controls";
 import {
@@ -30,7 +33,7 @@ import {
   type QuoteFetchDeps,
 } from "@/lib/data/quotes/fetch";
 import type { DelayedQuote, QuoteRefusal } from "@/lib/data/quotes/types";
-import { storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
+import { LATEST_READ_MAX, storeLatestQuotesSoft } from "@/lib/data/quotes/latest";
 import { MARKET_INDEX_CODE } from "@/lib/data/quotes/parse";
 import { displayHeldCodes, heldCodes } from "@/lib/intraday/universe";
 import {
@@ -41,9 +44,12 @@ import {
 } from "@/lib/intraday/run";
 import { signed, type MachineDeps } from "@/lib/alerts/machine";
 import type { AlertCtx } from "@/lib/alerts/deliver";
+import { notifyIncident, type NotifyCtx } from "@/lib/incidents/notify";
 import { armForSession } from "./arm";
 import { extrasCadence, remainingPollTicks } from "./reserve";
 import { evaluateAlert } from "./evaluate";
+import { stopHitDue, type StopHitItem } from "./stopHit";
+import { STARVATION_MINUTES, starved, type StarvationWindow } from "./starvation";
 import {
   activeAlerts,
   alertRecipients,
@@ -60,11 +66,16 @@ import {
   type PickAlertMailer,
 } from "./types";
 
-export const POLL_MARKET = "AU";
+/** The market a poll or a health line is about when the caller names none: the first enabled one (D-1812). */
+async function pollMarket(db: Exec): Promise<string> {
+  const [first] = await enabledMarkets(db);
+  if (first === undefined) throw new Error("no market is enabled");
+  return first;
+}
 export const PICK_ALERTS_PURPOSE = "pick-alerts";
 /** The slot grid of `quote-poll` (worker/src/schedule.ts); early close is enforced below. */
-export const POLL_START = "10:00"; // threshold-ok: slot window, D-397
-export const POLL_END = "16:00"; // threshold-ok: slot window, D-397
+export const POLL_START = HOME_SLOTS.quote_from; // threshold-ok: slot window, D-397
+export const POLL_END = HOME_SLOTS.quote_until; // threshold-ok: slot window, D-397
 const MS_PER_MIN = 60_000; // threshold-ok: unit
 
 export type PollSkipReason =
@@ -92,6 +103,11 @@ export type PollRunDeps = {
   /** WP4 hook; defaults to none (no mail leaves). */
   mailer?: PickAlertMailer;
   market?: string;
+  /**
+   * OPS-109 c (D-1788): with this set the tick checks quote starvation and raises the S2
+   * `quote_starvation` incident once a day (the env is the incident email's; `{}` records only).
+   */
+  notify?: Omit<NotifyCtx, "db" | "now">;
 };
 
 export type PollRunResult =
@@ -117,9 +133,62 @@ const num = async (db: Exec, key: Parameters<typeof getConfig>[1]): Promise<numb
 const hm = (m: number): string =>
   `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; // threshold-ok: time format
 
+/** Newest stored quote time per code (`quote_latest.fetched_at`), for the starvation check. */
+async function latestFetched(
+  db: Exec,
+  market: string,
+  codes: readonly string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const uniq = [...new Set(codes)].slice(0, LATEST_READ_MAX);
+  if (uniq.length === 0) return out;
+  // rows-ok: at most the held codes (a few dozen), one primary-key lookup each
+  const r = await db.execute({
+    sql:
+      "SELECT code, fetched_at FROM quote_latest " +
+      `WHERE market = ? AND code IN (${uniq.map(() => "?").join(",")})`,
+    args: [market, ...uniq],
+  });
+  for (const row of r.rows) out.set(String(row.code), String(row.fetched_at));
+  return out;
+}
+
+/**
+ * OPS-109 c (D-1788): raise S2 `quote_starvation` (at most once a day) when a held position has had no
+ * fresh quote for STARVATION_MINUTES inside the poll window of a trading day. The incident carries
+ * counts only, never a code. Never fails the tick: an error here leaves the poll's result alone.
+ */
+async function checkStarvation(
+  deps: PollRunDeps,
+  market: string,
+  sessionD: string,
+  window: StarvationWindow,
+  now: Date,
+): Promise<void> {
+  if (deps.notify === undefined) return;
+  try {
+    const held = await heldCodes(deps.db, market);
+    if (held.size === 0) return;
+    const latest = await latestFetched(deps.db, market, [...held]);
+    const codes = starved(held, latest, now, { minutes: STARVATION_MINUTES, window });
+    if (codes.length === 0) return;
+    const today = await deps.db.execute({
+      sql: "SELECT 1 FROM incident WHERE kind = 'quote_starvation' AND at >= ? LIMIT 1",
+      args: [window.start.toISOString()],
+    });
+    if (today.rows.length > 0) return; // once per day, also after the first one was resolved
+    await notifyIncident({ ...deps.notify, db: deps.db, now: deps.now }, "quote_starvation", "S2", {
+      summary: `Held positions have had no fresh price for ${STARVATION_MINUTES} minutes during market hours`,
+      detail: { sessionD, held: held.size, starved: codes.length },
+    });
+  } catch {
+    // the starvation check never changes what the tick did
+  }
+}
+
 export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult> {
   const { db } = deps;
-  const market = deps.market ?? POLL_MARKET;
+  const market = deps.market ?? (await pollMarket(db));
   const mailer = deps.mailer ?? NO_MAILER;
   const now = deps.now();
   const sessionD = marketDate(now, SESSION_TZ);
@@ -164,11 +233,20 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   const arm = await armForSession(db, market, sessionD, recipients, now);
   const mailCtx = { db, now, market, sessionD, slot: slot.replace(":", "") };
   await mailer.digest(mailCtx);
+  // OPS-109 c: the starvation window is the poll window, cut at the session close.
+  const starveWindow: StarvationWindow = {
+    start,
+    end: end.getTime() < session.close.getTime() ? end : session.close,
+  };
+  const skipChecked = async (reason: PollSkipReason): Promise<PollRunResult> => {
+    await checkStarvation(deps, market, sessionD, starveWindow, now);
+    return skip(reason, arm.armed);
+  };
 
   // 4. Cool-down and budget.
   const cooldown = await num(db, "quote_pause_cooldown_min");
   const since = await minutesSincePause(db, market, sessionD, now);
-  if (since !== null && since < cooldown) return skip("cooldown", arm.armed);
+  if (since !== null && since < cooldown) return skipChecked("cooldown");
   const usedToday = await quoteRequestsToday(db, market, sessionD);
   const dayBudget = { dayMax: QUOTE_REQUESTS_PER_DAY, usedToday };
   const band = budgetBand(dayBudget);
@@ -176,9 +254,9 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   // D-502 re-budget (V2-S5, D-694): armed picks keep their requests to 16:00. The 95 % stop only
   // ends the watch/held polling; an armed pick is polled until the day's budget itself is spent.
   const armedCodes = [...new Set(active.map((a) => a.latest.code))];
-  if (band === "stop" && armedCodes.length === 0) return skip("budget_stop", arm.armed);
+  if (band === "stop" && armedCodes.length === 0) return skipChecked("budget_stop");
   const allowed = requestsAllowed({ perRunMax: await num(db, "intraday_codes_max"), ...dayBudget });
-  if (allowed <= 0) return skip("budget_stop", arm.armed);
+  if (allowed <= 0) return skipChecked("budget_stop");
 
   // 5. Plan: armed picks first (every tick), then watch-listed and held codes at the cadence the
   // remaining budget sustains (every tick, or every k-th tick instead of stopping, D-695).
@@ -192,16 +270,27 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   };
   for (const c of armedCodes) add(c);
   const extraCodes = new Set<string>();
+  const heldKind = new Set<string>(); // OPS-109 c: held codes that are not watch-listed (plan counts)
   // D-907: the ASX 200 first among the extras, one request a tick, for the live line on Home.
-  if (market === "AU") extraCodes.add(MARKET_INDEX_CODE);
+  if ((await loadProfile(db, market)).benchmarkIndex === MARKET_INDEX_CODE) {
+    extraCodes.add(MARKET_INDEX_CODE);
+  }
   for (const c of await watchCodes(db, market, sessionD)) if (!seen.has(c)) extraCodes.add(c);
-  for (const c of [...(await heldCodes(db, market))].sort()) if (!seen.has(c)) extraCodes.add(c);
+  for (const c of [...(await heldCodes(db, market))].sort()) {
+    if (seen.has(c)) continue;
+    if (!extraCodes.has(c)) heldKind.add(c);
+    extraCodes.add(c);
+  }
   // Display only (ARN-021): the practice portfolios' holdings, then the users' Home watchlists, for the
   // site's delayed prices. Held before watchlist, after the book's own codes; the per-run cap below
   // (`allowed`) and the cadence apply to them like any extra. A failed read leaves the plan as it was.
   try {
     const shown = await displayHeldCodes(db, market, deps.auth);
-    for (const c of shown.held) if (!seen.has(c)) extraCodes.add(c);
+    for (const c of shown.held) {
+      if (seen.has(c)) continue;
+      if (!extraCodes.has(c)) heldKind.add(c);
+      extraCodes.add(c);
+    }
     for (const c of shown.watchlist) if (!seen.has(c)) extraCodes.add(c);
   } catch {
     // keep the plan without them
@@ -218,13 +307,21 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   if (extrasDue) for (const c of extraCodes) add(c);
   const planned = codes.slice(0, allowed);
   const narrowed = (extraCodes.size > 0 && !extrasDue) || codes.length > planned.length;
+  // OPS-109 c (D-1788): what the budget left out, and the plan's make-up (counts only).
+  const skippedCodes = armedCodes.length + extraCodes.size - planned.length;
+  const armedSet = new Set(armedCodes);
+  const plan = {
+    armed: planned.filter((c) => armedSet.has(c)).length,
+    watch: planned.filter((c) => !armedSet.has(c) && !heldKind.has(c)).length,
+    held: planned.filter((c) => !armedSet.has(c) && heldKind.has(c)).length,
+  };
 
   // 6. Claim first: the row exists before any request (D-442). The reserved count is what this run may
   // request (never more than it plans), so 73 ticks stay inside the daily budget.
   const claim = await db.execute({
     sql:
-      "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests, narrowed, codes) " +
-      "VALUES (?, ?, ?, 'poll', ?, ?, ?, ?) ON CONFLICT DO NOTHING",
+      "INSERT INTO quote_run (market, session_d, slot_minute, purpose, started_at, requests, narrowed, codes, skipped, plan) " +
+      "VALUES (?, ?, ?, 'poll', ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING",
     args: [
       market,
       sessionD,
@@ -233,6 +330,8 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
       planned.length,
       narrowed ? 1 : 0,
       planned.length,
+      skippedCodes,
+      JSON.stringify(plan),
     ],
   });
   if (claim.rowsAffected === 0) return skip("already_done", arm.armed);
@@ -300,6 +399,7 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
   );
   const users = new Set(recipients);
   const mailable: MailableTransition[] = [];
+  const stopHits: StopHitItem[] = [];
   let hits = 0;
   let cleared = 0;
   for (const a of active) {
@@ -325,7 +425,28 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
         params,
       },
     );
-    if (t === null) continue;
+    if (t === null) {
+      // EML-043 (D-1226): a hit alert that stayed hit and whose usable delayed price is under its stop.
+      if (
+        q !== null &&
+        stopHitDue(row, q, { now, maxAgeMin: params.maxAgeMin, delayMin: params.delayMin })
+      ) {
+        stopHits.push({
+          alertId: row.alertId,
+          userId: row.userId,
+          market: row.market,
+          pickD: row.pickD,
+          profile: row.profile,
+          rank: row.rank,
+          code: row.code,
+          limitMicro: row.limitMicro,
+          stopMicro: row.stopMicro,
+          lastMicro: q.lastMicro,
+          quoteAt: q.quoteAt,
+        });
+      }
+      continue;
+    }
     const next: MailableTransition = {
       ...row,
       seq: row.seq + 1,
@@ -348,6 +469,11 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
 
   // Mail second (WP4 hook).
   if (mailable.length > 0) await mailer.notify(mailCtx, mailable);
+  // Stop-hit mail (opt-in, default off): after the hit and clear mail, so those keep their place under the caps.
+  if (stopHits.length > 0 && mailer.stopHit) await mailer.stopHit(mailCtx, stopHits);
+
+  // OPS-109 c: after the fetch, so this tick's fresh quotes count.
+  await checkStarvation(deps, market, sessionD, starveWindow, deps.now());
 
   return {
     status: "ok",
@@ -365,10 +491,11 @@ export async function runPickAlertPoll(deps: PollRunDeps): Promise<PollRunResult
 }
 
 /** System Health lines of the "pick alerts" series, derived on read. */
+/** The health lines read the home market unless a market is named (no extra query: DAT-141 budget). */
 export async function pickAlertsHealth(
   db: Exec,
   now: Date,
-  market: string = POLL_MARKET,
+  market: string = HOME_MARKET,
 ): Promise<string[]> {
   let refusal: QuoteRefusal | null;
   try {
@@ -395,6 +522,47 @@ export async function pickAlertsHealth(
         endText: POLL_END,
         stepMin: await num(db, "intraday_refresh_min"),
       })),
+    );
+  }
+  return lines;
+}
+
+/** Poll slots shown on System Health (the newest ones that carry a plan). */
+export const QUOTE_LINES_MAX = 3; // threshold-ok: display cap
+
+/**
+ * OPS-109 c (D-1788): one fixed-word line per recent poll slot of the day,
+ * "Quotes HH:MM: used n, skipped m (armed a, watch w, held h)". Counts only: no code is named (D-580).
+ * `used` is the reservation, replaced by the `+done` row's actual count when one exists (D-697).
+ */
+export async function quoteBudgetLines(
+  db: Exec,
+  now: Date,
+  market: string = HOME_MARKET,
+): Promise<string[]> {
+  const d = marketDate(now, SESSION_TZ);
+  // rows-ok: one session's poll slots, at most 73 claim rows
+  const r = await db.execute({
+    sql:
+      "SELECT q.slot_minute AS slot, q.skipped AS skipped, q.plan AS plan, " +
+      "COALESCE((SELECT x.requests FROM quote_run x WHERE x.market = q.market AND x.session_d = q.session_d " +
+      "AND x.purpose = q.purpose AND x.slot_minute = q.slot_minute || ?), q.requests) AS used " +
+      "FROM quote_run q WHERE q.market = ? AND q.session_d = ? AND q.purpose = 'poll' " +
+      "AND q.plan IS NOT NULL AND q.slot_minute NOT LIKE '%+%' ORDER BY q.slot_minute DESC LIMIT ?",
+    args: [DONE_SUFFIX, market, d, QUOTE_LINES_MAX],
+  });
+  const lines: string[] = [];
+  for (const row of [...r.rows].reverse()) {
+    let p: { armed?: unknown; watch?: unknown; held?: unknown } = {};
+    try {
+      p = JSON.parse(String(row.plan)) as typeof p;
+    } catch {
+      continue;
+    }
+    const n = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+    lines.push(
+      `Quotes ${String(row.slot)}: used ${Number(row.used)}, skipped ${Number(row.skipped)} ` +
+        `(armed ${n(p.armed)}, watch ${n(p.watch)}, held ${n(p.held)})`,
     );
   }
   return lines;
@@ -432,6 +600,7 @@ export function createPickAlertsHandler(deps: PickAlertsHandlerDeps) {
         recipients: () => deps.recipients(db),
         auth: deps.auth?.(),
         mailer: deps.mailer,
+        notify: { env: deps.env as AlertCtx["env"] },
       });
       const body =
         r.status === "skipped"

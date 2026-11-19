@@ -51,6 +51,17 @@ export default async function AlertSettingsPage() {
           value={s.candidateEmails}
           options={ON_OFF}
         />
+        <Select
+          name="stop_hit_emails"
+          label={ALERT_SETTING_WORDS.stopHit}
+          value={s.stopHitEmails}
+          options={ON_OFF}
+          hint={
+            s.stopHitIsDefault
+              ? "You have not chosen yet, so the standard setting applies. It is information only: you manage your own stop with your broker."
+              : "Information only: you manage your own stop with your broker."
+          }
+        />
         <p data-testid="daily-cap" className="m-0 text-sm">
           {ALERT_SETTING_WORDS.cap}:{" "}
           <strong>{s.dailyCap === null ? "not available" : s.dailyCap}</strong> (set by the Owner in

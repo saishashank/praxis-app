@@ -14,6 +14,7 @@
 import type { Client } from "@libsql/client";
 import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
+import { HOME_TZ } from "@/lib/market/homeMarket.mjs";
 import { marketDate } from "./calendar";
 
 export const ASX_SOURCE = "asx_announcements";
@@ -79,7 +80,7 @@ export async function loadAsxTokenView(
   now: Date = new Date(),
 ): Promise<AsxTokenView> {
   const nowIso = now.toISOString();
-  const today = marketDate(now, "Australia/Sydney");
+  const today = marketDate(now, HOME_TZ);
   const since = OUTCOME_PREFIX + new Date(now.getTime() - ASX_TRIP_WINDOW_MS).toISOString();
   const res = await db.execute({
     sql:

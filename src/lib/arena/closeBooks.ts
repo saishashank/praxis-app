@@ -51,6 +51,7 @@ import type { Micro } from "@/lib/money/micro";
 import { makeRational, mulRat, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
 import {
+  ARENA_MARKET,
   parseCohortParams,
   resolveCohortParams,
   roundOverridesFor,
@@ -75,8 +76,10 @@ import {
 import { suspensionMark } from "./corpActions";
 import { exDividendOn, toExDividendActions, type ExDividendAction } from "./exDividend";
 import { decisionCutoffUtc } from "@/lib/agents/decisionView";
+import { marketMoney } from "./marketMoney";
+import { staticProfile } from "@/lib/market/staticProfile.mjs";
 import { getConfig } from "@/lib/config/store";
-import { COST_PROFILES, type CostProfile, type CostProfileCode } from "./costs";
+import { costProfileByCode, costProfilesOfMarket, type CostProfile } from "./costs";
 import {
   fillCloseSignalExit,
   fillEntryLimit,
@@ -268,8 +271,15 @@ type CohortCtx = {
   readonly cohort: StoredCohort;
   readonly params: CohortParams;
   readonly profile: CostProfile;
+  /** The market's `settlement_days`, threaded to every settlement call (D-1113); AU 2. */
+  readonly lagSessions: number;
   readonly cfg: SleeveConfig | null;
 };
+
+/** The settlement lag in sessions of a market's seed profile (never defaulted at a call site, D-1113). */
+function lagSessionsOf(market: string): number {
+  return staticProfile(market).settlementDays!;
+}
 
 // ---- small readers ---------------------------------------------------------------------------------
 
@@ -303,7 +313,7 @@ export function sleeveConfigFrom(json: string): SleeveConfig {
     financingBasis: BigInt(j.financing_basis),
     recoveryMode: text(j.recovery_mode) as RecoveryMode,
     rec4Sessions: Number.parseInt(text(j.rec4_sessions), 10),
-    profile: COST_PROFILES[text(j.profile) as CostProfileCode],
+    profile: costProfileByCode(text(j.profile)),
   };
 }
 
@@ -392,7 +402,7 @@ async function settleDue(ctx: DayCtx, cc: CohortCtx): Promise<void> {
   const settled = new Set(
     rows.filter((r) => r.kind === "settle" && r.refType === "fill").map((r) => text(r.refId)),
   );
-  const pending = pendingSettlements(fills, settled, ctx.calendar);
+  const pending = pendingSettlements(fills, settled, ctx.calendar, cc.lagSessions);
   for (const txn of settlementsDue(pending, ctx.d)) {
     if ((await writeLedgerTxn(ctx.db, id, txn)).written) ctx.stats.ledgerTxns += 1;
   }
@@ -531,7 +541,15 @@ async function gateFor(ctx: DayCtx, code: string): Promise<EntryDecision> {
 }
 
 function fillEnvOf(cc: CohortCtx, bar: FillEnv["bar"], advMicro: Micro): FillEnv {
-  return { bar, advMicro, profile: cc.profile, tickCrossFactor: cc.params.tickCrossFactor };
+  const money = marketMoney(cc.params.market); // D-1154: the market's tick grid and buckets (AU = the defaults)
+  return {
+    bar,
+    advMicro,
+    profile: cc.profile,
+    tickCrossFactor: cc.params.tickCrossFactor,
+    buckets: money.buckets,
+    tickTable: money.tickTable,
+  };
 }
 
 /** The cohort's available cash right now (ARN-025, by settlement mode). */
@@ -545,7 +563,7 @@ async function availableCashNow(ctx: DayCtx, cc: CohortCtx): Promise<Micro> {
   const available = availableCash({
     mode: cc.params.settlementMode,
     balances: balancesFromRows(rows, ctx.d),
-    pending: pendingSettlements(fills, settled, ctx.calendar),
+    pending: pendingSettlements(fills, settled, ctx.calendar, cc.lagSessions),
     sessionD: ctx.d,
   });
   return available;
@@ -583,6 +601,8 @@ function fillEntry(
     return { status: "cancelled", reason: "gate", detail };
   }
   if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
+  if (env.bandLocked === true)
+    return { status: "cancelled", reason: "band_locked", detail: "band_locked" }; // D-1163
   const limit = fillEntryLimit(env, order.qty, limitMicro);
   if (limit.status === "unfilled") return { status: "unfilled", reason: "limit_not_reached" };
   if (order.stopFrom === undefined) throw new RangeError("a limit order needs a stop rule");
@@ -646,6 +666,9 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     const bar = await ctx.data.bar(code, ctx.d);
     const advMicro = await ctx.data.adv(code, ctx.priorD);
     const halted = await ctx.data.halted(code, ctx.d);
+    // D-1109/D-1163: a session closed at a price-band limit (IN) refuses every fill: an entry is cancelled, an exit
+    // stays pending, exactly like a halt below (the port is absent for a market with no bands)
+    const bandLocked = bar !== null && (await ctx.data.bandLocked?.(code, ctx.d)) === true;
     if (text(o.kind) === "entry") {
       if (bar === null) {
         await cancelOrder(ctx, orderId, "no_bar");
@@ -704,6 +727,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
             ...fillEnvOf(cc, bar, advMicro),
             feeContext: { code, firstBuyOfSecurityToday: first },
             halted,
+            bandLocked,
             gate,
           },
           limitMicro,
@@ -735,6 +759,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
           availableCashMicro: await availableCashNow(ctx, cc),
           profile: cc.profile,
           feeContext: { code, firstBuyOfSecurityToday: first },
+          minParcelMicro: cc.params.minParcelMicro, // the market's parcel floor (AU A$500, IN Rs 25,000; D-1154)
         });
         if (sized.status === "cancel") {
           await cancelOrder(ctx, orderId, sized.reason);
@@ -753,6 +778,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
               ...fillEnvOf(cc, bar, advMicro),
               feeContext: { code, firstBuyOfSecurityToday: first },
               halted,
+              bandLocked,
               gate,
             },
             limitMicro,
@@ -800,7 +826,7 @@ async function fillPending(ctx: DayCtx, cc: CohortCtx): Promise<void> {
       continue;
     }
     // exit_cs (including the liquidation orders): wait when the code cannot trade today
-    if (bar === null || halted) continue;
+    if (bar === null || halted || bandLocked) continue;
     const trade = (await openTrades(ctx, id)).find((t) => t.code === code);
     const { positions, adjustments } = await holdingsOf(ctx, cc);
     const holding = positions.get(code) ?? 0n;
@@ -852,6 +878,7 @@ async function isStops(ctx: DayCtx, cc: CohortCtx): Promise<void> {
     if (qty === undefined) continue;
     const bar = await ctx.data.bar(t.code, ctx.d);
     if (bar === null || (await ctx.data.halted(t.code, ctx.d))) continue;
+    if ((await ctx.data.bandLocked?.(t.code, ctx.d)) === true) continue; // D-1163: the stop waits, like a halt
     const env = fillEnvOf(cc, bar, await ctx.data.adv(t.code, ctx.priorD));
     const fill = fillIntradayStop(env, qty, effectiveStop(t, ctx.d, adjustments), {
       afterOpen: t.entryD === ctx.d,
@@ -954,7 +981,7 @@ async function sleeveEntries(ctx: DayCtx, cc: CohortCtx, cfg: SleeveConfig): Pro
     const available = availableCash({
       mode: cc.params.settlementMode,
       balances,
-      pending: pendingSettlements(fills, settled, ctx.calendar),
+      pending: pendingSettlements(fills, settled, ctx.calendar, cc.lagSessions),
       sessionD: ctx.d,
     });
     if (balances.cash_settled < need || available < need) continue;
@@ -1005,6 +1032,7 @@ async function sleeveExits(ctx: DayCtx, cc: CohortCtx, cfg: SleeveConfig): Promi
     if ((await ctx.data.halted(t.code, ctx.d)) || t.openD > ctx.d) continue;
     const bar = await ctx.data.bar(t.code, ctx.d);
     if (bar === null) continue;
+    if ((await ctx.data.bandLocked?.(t.code, ctx.d)) === true) continue; // D-1163
     const env: FillEnv = {
       bar,
       advMicro: await ctx.data.adv(t.code, ctx.priorD),
@@ -1202,6 +1230,7 @@ async function navStage(ctx: DayCtx, cc: CohortCtx): Promise<NavOutcome> {
   const violations = checkCohortBooks(books, {
     mode: cc.params.settlementMode,
     calendar: ctx.calendar,
+    lagSessions: cc.lagSessions,
     dates: [d],
     stored: [day],
     seedMicro: cc.cohort.seedMicro,
@@ -1300,7 +1329,8 @@ async function closeCohortDay(ctx: DayCtx, cohortId: string): Promise<CohortResu
     cache: {},
     cohort,
     params,
-    profile: COST_PROFILES[params.costProfile],
+    profile: costProfilesOfMarket(ctx.market)[params.costProfile]!,
+    lagSessions: lagSessionsOf(ctx.market),
     cfg: act.sleeveJson === null ? null : sleeveConfigFrom(act.sleeveJson),
   };
   const fillsBefore = ctx.stats.fills;
@@ -1619,9 +1649,11 @@ export async function closeBooksDay(
       if (last !== null) lastCloses.set(a.code, last);
     }
     const cutoffHm = await getConfig(db, "decision_cutoff").catch(() => undefined);
+    const cutoffProfile = staticProfile(opts.market);
     const exDivCutoff = decisionCutoffUtc(
       priorD,
-      typeof cutoffHm === "string" ? cutoffHm : "18:10",
+      typeof cutoffHm === "string" ? cutoffHm : cutoffProfile.decisionCutoff!,
+      cutoffProfile.decisionCutoffZone!,
     );
     const ctx: DayCtx = {
       db,
@@ -1663,8 +1695,10 @@ export async function closeBooksDay(
       },
       paramsFor: (e, startD) =>
         resolveCohortParams({
-          costProfile: e.cost_profile as CostProfileCode,
-          ...roundOverridesFor(startD),
+          market: e.market,
+          costProfile: e.cost_profile,
+          // D-1020..D-1022: the round-2 seed is the home market's (AU); other markets seed from their own profile
+          ...(e.market === ARENA_MARKET ? roundOverridesFor(startD) : {}),
           ...(opts.restartParams?.(e.id) ?? {}),
         }),
       masterSeed: opts.masterSeed ?? ARENA_MASTER_SEED,

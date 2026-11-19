@@ -5,7 +5,7 @@ import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { addUser, auditRows, KEY } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
-import { AU_SLOTS } from "../../worker/src/schedule";
+import { AU_SLOTS } from "../../worker/test/auRow";
 import { parseSlotsEnabled } from "../../worker/src/clock";
 import {
   ALWAYS_ON_SLOTS,

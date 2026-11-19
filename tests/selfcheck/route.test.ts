@@ -6,6 +6,8 @@ import { createSelfCheckHandler } from "@/lib/selfcheck/handler";
 import type { NonceStore } from "@/lib/security/replay";
 import * as route from "@/app/api/internal/self-check/route";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/self-check" };
+
 const SECRET = "9".repeat(64);
 const BODY = '{"purpose":"self-check"}';
 const NOW = 1_700_000_000;
@@ -46,7 +48,7 @@ const post = (body = BODY, headers?: Record<string, string>, nonce = nextNonce()
   new Request("https://praxis-host.vercel.app/api/internal/self-check", {
     method: "POST",
     body,
-    headers: headers ?? (sign(SECRET, body, NOW, nonce) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, body, NOW, nonce, SIGN_TARGET) as Record<string, string>),
   });
 
 describe("self-check handler", () => {
@@ -65,8 +67,14 @@ describe("self-check handler", () => {
   });
   it("401 generic body for bad signature, missing headers, replay, stale timestamp", async () => {
     const h = make();
-    const bad = sign("8".repeat(64), BODY, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, BODY, NOW - 301, "b".repeat(32)) as Record<string, string>;
+    const bad = sign("8".repeat(64), BODY, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, BODY, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
     const nonce = "c".repeat(32);
     expect((await h(post(BODY, undefined, nonce))).status).toBe(200);
     for (const req of [
@@ -79,6 +87,28 @@ describe("self-check handler", () => {
       expect(r.status).toBe(401);
       expect(await r.json()).toEqual({ error: "unauthorized" });
     }
+  });
+  it("SEC-115: 401 for a v1 signature, a signature bound to another path or method (nonce not burnt)", async () => {
+    const h = make();
+    const nonce = "d".repeat(32);
+    const otherPath = sign(SECRET, BODY, NOW, nonce, {
+      method: "POST",
+      path: "/api/internal/maintenance",
+    }) as Record<string, string>;
+    const otherMethod = sign(SECRET, BODY, NOW, nonce, {
+      method: "GET",
+      path: SIGN_TARGET.path,
+    }) as Record<string, string>;
+    const v1 = { ...otherPath };
+    delete v1["X-Praxis-Version"];
+    for (const headers of [otherPath, otherMethod, v1]) {
+      const r = await h(post(BODY, headers));
+      expect(r.status).toBe(401);
+      expect(await r.json()).toEqual({ error: "unauthorized" });
+    }
+    // the nonce was never claimed, so the correctly bound v2 request with it still passes once
+    expect((await h(post(BODY, undefined, nonce))).status).toBe(200);
+    expect((await h(post(BODY, undefined, nonce))).status).toBe(401);
   });
   it("503 generic when secret is missing or malformed (signature not evaluated)", async () => {
     for (const secret of [undefined, "", "zz"]) {
@@ -131,7 +161,7 @@ describe("route module", () => {
     delete process.env.TURSO_MAIN_URL;
     delete process.env.TURSO_MAIN_TOKEN;
     try {
-      const headers = sign(SECRET, BODY, Math.floor(Date.now() / 1000), nextNonce());
+      const headers = sign(SECRET, BODY, Math.floor(Date.now() / 1000), nextNonce(), SIGN_TARGET);
       const r = await route.POST(post(BODY, headers as Record<string, string>));
       expect(r.status).toBe(503);
     } finally {

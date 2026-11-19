@@ -12,7 +12,7 @@
 // (floor, and parcel: a window with entry opportunities that never met the marketable parcel) and
 // timeout. Floats are used inside the simulation (price paths are float by design, 2.1); the seed
 // scope is `zeroedge:<family>:<rule version>` (2.8). Same input, same seed -> same numbers.
-import { feeFor, getCostProfile } from "@/lib/arena/costs";
+import { feeFor, getCostProfile, quantityAt } from "@/lib/arena/costs";
 import type { CohortParams } from "@/lib/arena/cohort";
 import { scopedPrng, uniform01 } from "@/lib/stats";
 
@@ -32,6 +32,8 @@ export type ZeroEdgeInput = {
   readonly trials: number;
   /** `zero_edge_seed`. */
   readonly seed: number;
+  /** A reference close (micro) for a per-share fee item (the US TAF): the quantity is value / price, at least 1 (D-1181). */
+  readonly refPriceMicro?: bigint;
 };
 
 export type ZeroEdgeResult = {
@@ -82,7 +84,18 @@ export function zeroEdge(input: ZeroEdgeInput): ZeroEdgeResult {
   const profile = getCostProfile(params.costProfile);
   const fee = (valueAud: number, side: "buy" | "sell"): number => {
     const micro = Math.round(valueAud * MICRO);
-    return micro > 0 ? Number(feeFor(profile, BigInt(micro), side)) / MICRO : 0;
+    return micro > 0
+      ? Number(
+          feeFor(
+            profile,
+            BigInt(micro),
+            side,
+            input.refPriceMicro === undefined
+              ? undefined
+              : { quantity: quantityAt(BigInt(micro), input.refPriceMicro) },
+          ),
+        ) / MICRO
+      : 0;
   };
   const slip = input.slippageBps / BPS_PER_UNIT;
   const seed = Number(params.seedMicro) / MICRO;

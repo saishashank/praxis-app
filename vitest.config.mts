@@ -1,5 +1,5 @@
 import react from "@vitejs/plugin-react";
-import { coverageConfigDefaults, defineConfig } from "vitest/config";
+import { configDefaults, coverageConfigDefaults, defineConfig } from "vitest/config";
 import path from "node:path";
 
 export default defineConfig({
@@ -15,6 +15,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     include: ["tests/**/*.test.{ts,tsx}", "src/**/*.test.{ts,tsx}"],
+    // M18 TST-136 (D-968): the wall-clock variants run only from vitest.timing.config.mts (non-blocking report).
+    exclude: [...configDefaults.exclude, "tests/timing/**"],
     setupFiles: ["./vitest.setup.ts"],
     // One Temp folder per run, removed at the end (Owner 2026-10-30: no leftovers in Temp).
     globalSetup: ["./vitest.global-setup.mts"],

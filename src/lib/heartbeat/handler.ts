@@ -6,6 +6,8 @@
 //   4. idempotent per Melbourne date: a finished check for `<job>:<date>` is not repeated;
 //   5. runs the checks, writes a run record, and opens an S2 incident once per problem kind.
 // Every failure body is generic: no secret, URL or upstream text is returned or logged.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { Client } from "@libsql/client";
 import { finishRun, startRun } from "@/lib/runs/runRecord";
 import { bearerMatches, isProduction, melbourneDate, type Env } from "@/lib/watchdog/handler";
@@ -55,7 +57,7 @@ const CRON_AGENT = /^vercel-cron\//i;
 /** Melbourne's UTC offset in minutes at `now` (660 in AEDT, 600 in AEST). */
 export function melbourneOffsetMinutes(now: Date): number {
   const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     timeZoneName: "shortOffset",
   }).formatToParts(now);
   const name = parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT+10";
@@ -170,7 +172,7 @@ export function createHeartbeatHandler(kind: HeartbeatKind, deps: Deps) {
 
       const runId = await startRun(db, {
         job,
-        market: "AU",
+        market: HOME_MARKET,
         concurrencyKey: key,
         scheduledFor: date,
         now: now.toISOString(),

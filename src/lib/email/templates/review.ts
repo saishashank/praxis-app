@@ -22,6 +22,7 @@ import {
   withEnvPrefix,
 } from "./core";
 import { dateLabel, plural, toneOf, truncate } from "./format";
+import { reviewMarketBlocks, type MarketSectionFact } from "./marketSections";
 import { formatDay } from "@/lib/view/format";
 import { displayTitle } from "@/lib/view/displayText";
 import type { DailyLearning } from "@/lib/learning/daily";
@@ -30,6 +31,7 @@ import {
   type ClosedTradeFact,
   aud,
   audWithPct,
+  MONEY_SYMBOL,
   BRAIN_HEADING,
   TOP5_HEADING,
   companyLabel,
@@ -157,6 +159,13 @@ export interface MissedMoversReviewFacts {
   losers: MoverFactRow[];
 }
 
+/** M22 C3 (D-1425): the first review of a month lists last month's AI-written pick reflections. */
+export interface UnprovenNotesReviewFacts {
+  title: string;
+  caption: string;
+  lines: { code: string; text: string }[];
+}
+
 export interface StatsFacts {
   headline: string;
   rows: StatRow[];
@@ -209,6 +218,13 @@ export interface ReviewFacts {
   pickAlerts?: PickReviewFacts;
   /** D-909: shown only when `learning` is null. */
   missedMovers?: MissedMoversReviewFacts;
+  /** D-1425: present only in the first review of a month, and only when reflections were written last month. */
+  unprovenNotes?: UnprovenNotesReviewFacts;
+  /**
+   * UXN-313, D-1124: one section per further enabled market that trades on the date, in its own currency. Absent with one
+   * market, so a single-market review is exactly what it was (the M19 snapshot tests).
+   */
+  marketSections?: MarketSectionFact[];
   /** D-957: one plain line per My portfolio profile (section 3). */
   myPortfolios?: { lines: string[] };
 }
@@ -330,7 +346,7 @@ function section1(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
   } else {
     out.push({
       t: "table",
-      head: ["Strategy", "Today (A$)", "Today (%)", "Value now"],
+      head: ["Strategy", `Today (${MONEY_SYMBOL})`, "Today (%)", "Value now"],
       rows: live(f.executions).map((e) => [
         { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
         { text: aud(e.dayPlCents, true), tone: tone(e.dayPlCents) },
@@ -563,7 +579,19 @@ function section6(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     });
   }
   out.push(...moversBlocks(f));
+  out.push(...unprovenNotesBlocks(f));
   return out;
+}
+
+/** D-1425: the monthly "Unproven notes", each line a code and the AI-written note, under the fixed words. */
+function unprovenNotesBlocks(f: ReviewFacts): Block[] {
+  const u = f.unprovenNotes;
+  if (!u || u.lines.length === 0) return [];
+  return [
+    { t: "p", text: u.title, bold: true },
+    { t: "p", text: u.caption },
+    { t: "ul", items: u.lines.map((l) => `${l.code}: ${l.text}`) },
+  ];
 }
 
 /** Biggest gainers and losers: the daily learning's explanations, else the descriptive fallback. */
@@ -798,6 +826,9 @@ function buildDoc(f: ReviewFacts, level: number): Doc {
       blocks.push(...alerts);
       next += 1;
     }
+  }
+  if (f.variant !== "minimal" && f.marketSections !== undefined && f.marketSections.length > 0) {
+    blocks.push(...reviewMarketBlocks(f.marketSections));
   }
   blocks.push({
     t: "link",

@@ -142,7 +142,12 @@ export async function cardBody(user: CurrentUser, id: string) {
       </Card>
 
       <Card title="Rules that fired">
-        <div className="overflow-x-auto">
+        <div
+          className="overflow-x-auto"
+          tabIndex={0}
+          role="region"
+          aria-label="Table (scrolls sideways)"
+        >
           <table className="w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border">

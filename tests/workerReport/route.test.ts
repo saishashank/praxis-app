@@ -9,6 +9,8 @@ import { recordWorkerReport, WORKER_SELFCHECK_JOB } from "@/lib/workerReport/rec
 import type { NonceStore } from "@/lib/security/replay";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/worker-report" };
+
 const SECRET = "7".repeat(64);
 const NOW = 1_700_000_000;
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
@@ -55,7 +57,7 @@ const post = (
   return new Request("https://praxis-host.vercel.app/api/internal/worker-report", {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(SECRET, raw, NOW, nonce) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, raw, NOW, nonce, SIGN_TARGET) as Record<string, string>),
   });
 };
 
@@ -87,10 +89,19 @@ describe("worker-report handler", () => {
   it("401 generic body: wrong secret, no headers, stale, future, tampered body, replay", async () => {
     const h = make();
     const raw = JSON.stringify(good());
-    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32)) as Record<string, string>;
-    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32)) as Record<string, string>;
+    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32), SIGN_TARGET) as Record<string, string>;
     const nonce = "c".repeat(32);
     expect((await h(post(raw, undefined, nonce))).status).toBe(200);
     const tampered = JSON.stringify(good({ commit: "unknown" }));
@@ -345,7 +356,7 @@ describe("route module", () => {
     delete process.env.TURSO_MAIN_TOKEN;
     try {
       const raw = JSON.stringify(good());
-      const headers = sign(SECRET, raw, Math.floor(Date.now() / 1000), nextNonce());
+      const headers = sign(SECRET, raw, Math.floor(Date.now() / 1000), nextNonce(), SIGN_TARGET);
       const r = await route.POST(post(raw, headers as Record<string, string>));
       expect(r.status).toBe(503);
     } finally {

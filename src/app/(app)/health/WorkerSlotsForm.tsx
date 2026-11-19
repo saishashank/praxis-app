@@ -13,9 +13,11 @@ type Props = {
   initial: string[];
   /** Slots that always run (shown as locked tiles, not part of the form). */
   alwaysOn?: readonly string[];
+  /** The zone the slot times are written in (the home market's exchange zone, from its profile). */
+  zone?: string;
 };
 
-export function WorkerSlotsForm({ action, slots, initial, alwaysOn = [] }: Props) {
+export function WorkerSlotsForm({ action, slots, initial, alwaysOn = [], zone }: Props) {
   const [ticked, setTicked] = useState(false);
   const [state, run, pending] = useActionState<Result | null, FormData>(async (_prev, fd) => {
     const result = await action(fd);
@@ -25,7 +27,9 @@ export function WorkerSlotsForm({ action, slots, initial, alwaysOn = [] }: Props
   return (
     <form action={run} className="flex flex-col gap-3">
       <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-        <legend className="mb-1 text-sm font-medium">Go-live slots (Australia/Sydney time)</legend>
+        <legend className="mb-1 text-sm font-medium">
+          {zone === undefined ? "Go-live slots" : `Go-live slots (${zone} time)`}
+        </legend>
         {/* D-174: a grid of slot tiles; a ticked tile is filled, edged and says "On". */}
         <div className="grid grid-cols-1 gap-2 min-[480px]:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
           {slots.map((s) => (

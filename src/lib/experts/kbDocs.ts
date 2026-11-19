@@ -427,3 +427,63 @@ export async function buildExpertDocuments(db: Client): Promise<RenderedDoc[]> {
   });
   return docs.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
+
+// ---- manual paste (AT-39 "X item metadata only after Owner paste", TST-135 (b), D-967) -----------------
+
+/** Hosts of the manual-only platforms (register rows `expert_x` and the like stay disabled: nothing is fetched). */
+const MANUAL_HOSTS: Readonly<Record<string, string>> = {
+  "x.com": "expert_x",
+  "twitter.com": "expert_x",
+};
+
+export type ManualItem = {
+  readonly source: string;
+  readonly url: string;
+  readonly title: string;
+  readonly publishedAt: string | null;
+  readonly summary: string;
+  readonly origin: "manual";
+  readonly recordedBy: string;
+};
+
+/**
+ * A link the Owner pasted for a manual-only platform, as an item with metadata only (link, a title the Owner
+ * typed or none, the paste time). Pure and fetch-free: the page is never requested, no text is read, and a
+ * link on any other host, a non-https link or a link with credentials is refused. `null` = refused.
+ */
+export function recordManualItem(input: {
+  readonly url: unknown;
+  readonly title?: unknown;
+  readonly pastedAt: string;
+  readonly ownerId: string;
+}): ManualItem | null {
+  if (
+    typeof input.url !== "string" ||
+    input.url.length > 2000 ||
+    /[\s\u0000-\u001f]/.test(input.url)
+  ) {
+    return null;
+  }
+  let u: URL;
+  try {
+    u = new URL(input.url);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:" || u.username !== "" || u.password !== "" || u.port !== "")
+    return null;
+  const host = u.hostname.toLowerCase().replace(/^www\./, "");
+  const source = MANUAL_HOSTS[host];
+  if (source === undefined) return null;
+  const title =
+    typeof input.title === "string" ? input.title.replace(/\s+/g, " ").trim().slice(0, 300) : ""; // threshold-ok: title cap, as the feed rules
+  return {
+    source,
+    url: u.toString(),
+    title,
+    publishedAt: null,
+    summary: `${source}: link pasted by the Owner (${host})`,
+    origin: "manual",
+    recordedBy: input.ownerId,
+  };
+}

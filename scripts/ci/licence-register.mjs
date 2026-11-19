@@ -8,10 +8,14 @@
 // The document shows the SEEDED status. The live status is on System Health, Data controls. An
 // Owner risk acceptance (O-23 ASX, O-26 Yahoo) is shown as "pending Owner" because this document
 // is generated from code and holds no Owner date. No person's name, no email, no secret (SEC-110).
+// M20 A3 (D-1096, D-1128): the India and US sources are listed too, from src/lib/market/seed/{in,us}/sources.mjs (the one
+// definition; the rows are written to the register when a market is enabled, never by a migration), in a section of
+// their own so the AU rows and their tests are unchanged. A date is shown as year and month only.
 // Zero dependencies.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { MARKET_SOURCES } from "../../src/lib/market/seed/sourceSites.mjs";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const DOC_PATH = "docs/source-licence-register.md";
@@ -125,18 +129,21 @@ export const SOURCE_FACTS = {
   },
   rba: {
     label: "Reserve Bank of Australia",
-    provides: "Public interest-rate and macro data.",
-    code: [],
-    hosts: [],
+    provides:
+      "Public interest-rate and macro data: the cash rate target and the interbank overnight cash rate from statistical table F1.",
+    code: ["scripts/macro/rba.mjs"],
+    hosts: ["www.rba.gov.au"],
     terms:
-      "Copyrighted by the RBA. Only derived numbers may be shown, with the source named. The register row exists; no fetcher is built in this release.",
+      'Copyrighted by the RBA. Only derived numbers may be shown, with the source named ("Source: RBA"). Its copyright notice allows reuse of financial data with attribution but does not address automated download (checked in M18, see the exit evidence; [VERIFY]). The weekly fetcher is built and ships OFF: it runs only when the Owner sets the repository variable MACRO_FETCH.',
   },
   abs: {
     label: "Australian Bureau of Statistics",
-    provides: "Public economic statistics.",
-    code: [],
-    hosts: [],
-    terms: "Public data. The register row exists; no fetcher is built in this release.",
+    provides:
+      "Public economic statistics: the quarterly Consumer Price Index from the ABS Data API.",
+    code: ["scripts/macro/abs.mjs"],
+    hosts: ["data.api.abs.gov.au"],
+    terms:
+      "ABS material is generally available under CC BY 4.0 with credit to the ABS (checked in M18, see the exit evidence). The weekly fetcher is built and ships OFF: it runs only when the Owner sets the repository variable MACRO_FETCH.",
   },
   asic_short: {
     label: "ASIC daily aggregate short positions",
@@ -148,11 +155,11 @@ export const SOURCE_FACTS = {
   // M14 (DAT-236, D-239): disabled alternatives and manual uploads.
   wikidata_asx: {
     label: "Wikidata ASX companies (alternative, disabled)",
-    provides: "Company names and industry for ASX codes, as a universe alternative.",
-    code: [],
-    hosts: [],
+    provides: "Company names and industry for ASX codes, as a universe fallback.",
+    code: ["scripts/asx/fetch.mjs", "scripts/data/universe-from-wikidata.mjs"],
+    hosts: ["query.wikidata.org"],
     terms:
-      "Wikidata structured data is CC0 (no conditions). No fetcher is built; a downloaded export can be turned into the listed-companies CSV offline (scripts/data/universe-from-wikidata.mjs) and uploaded by the Owner. The source stays disabled.",
+      "Wikidata structured data is CC0 (no conditions); the endpoint asks for an identifying User-Agent and no bulk requests (Wikidata data-access page, checked in M18). One fixed query is sent only after the ASX company list failed three runs in a row AND the Owner enabled this row; while it is disabled (as seeded) nothing is fetched. A downloaded export can also be turned into the listed-companies CSV offline and uploaded by the Owner.",
   },
   wikipedia_asx200: {
     label: "Wikipedia S&P/ASX 200 list (alternative, disabled)",
@@ -179,6 +186,23 @@ export const SOURCE_FACTS = {
     terms:
       "Each FRED series carries its own terms, checked per series before any use. No fetcher is built and the row stays pending.",
   },
+  asic_documents: {
+    label: "ASIC public documents (pending)",
+    provides:
+      "Links to public regulator documents and our own short summary; no document text is stored.",
+    code: ["src/lib/http/safeLink.ts"],
+    hosts: [],
+    terms:
+      "Public regulator documents: links and our own summary only (DAT-253, D-1792). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the knowledge-base fetch rules (robots, conditional requests, daily cap) apply when polling is built (KB-082). The row stays pending.",
+  },
+  ssrn_papers: {
+    label: "SSRN papers (pending)",
+    provides: "Links to abstract pages only; no PDF is fetched and no text is stored.",
+    code: ["src/lib/http/safeLink.ts"],
+    hosts: [],
+    terms:
+      "Abstract page links only (DAT-253, D-1792). Terms are not yet checked [VERIFY]. Nothing is fetched in this release; the row stays pending.",
+  },
   industry_map_manual: {
     label: "Industry classes (manual CSV)",
     provides: "Finer industry classes for the second-position limit, uploaded by the Owner.",
@@ -188,6 +212,70 @@ export const SOURCE_FACTS = {
       "A file the Owner prepares and uploads (for example classes taken from a Wikidata export, which is CC0). No automated fetch.",
   },
 };
+
+/**
+ * M22 A1 (D-1439, D-1443, D-1444): three register rows that are pending and off, defined here and written to no migration
+ * (the AT-32 baseline hashes the register tables, so a seeded row would move AU's own hashes, D-1128). They are written to
+ * the live register, with a status row of `off`, only when the Owner accepts a source. Terms are [VERIFY]: no fetcher and
+ * no host exists yet, so nothing contacts any of them. Ids are declared in src/lib/data/schema.ts (M22_PENDING_SOURCES).
+ */
+export const PENDING_SOURCE_ROWS = [
+  {
+    id: "polymarket_public",
+    label: "Polymarket public odds (pending)",
+    provides:
+      "One probability per public event and day, used only as an input to the shadow regime reading (DAT-248, D-1439).",
+    terms:
+      "Public read, free, no account (DAT-248). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner accepts the terms.",
+    permitted_use: "Public read of event probabilities; derived numbers only. [VERIFY]",
+    risk: "medium",
+    status: "pending",
+    source_status: "off",
+    owner_ref: null,
+    summarisation_permitted: 0,
+    terms_url: null,
+    last_checked: null,
+    code: [],
+    hosts: [],
+  },
+  {
+    id: "kalshi_public",
+    label: "Kalshi public odds (pending)",
+    provides:
+      "One probability per public event and day, used only as an input to the shadow regime reading (DAT-248, D-1439).",
+    terms:
+      "Public read, free, no account (DAT-248). Terms are not yet checked [VERIFY]. No fetcher is built in this release, so nothing is requested; the row stays pending until the Owner accepts the terms.",
+    permitted_use: "Public read of event probabilities; derived numbers only. [VERIFY]",
+    risk: "medium",
+    status: "pending",
+    source_status: "off",
+    owner_ref: null,
+    summarisation_permitted: 0,
+    terms_url: null,
+    last_checked: null,
+    code: [],
+    hosts: [],
+  },
+  {
+    id: "yahoo_delayed_batch",
+    label: "Yahoo Finance delayed quotes, batch endpoint (pending)",
+    provides:
+      "Delayed quotes for many codes in one request, for the whole-market intraday sweep (AGT-147, D-1443).",
+    terms:
+      "The accepted delayed-quote basis (O-26) may not cover the batch endpoint [VERIFY]. The sweep stays off and no request is made until this row is accepted by the Owner and `intraday_sweep_enabled` is on.",
+    permitted_use:
+      "Delayed quotes for personal use under O-26; batch use not yet confirmed. [VERIFY]",
+    risk: "high",
+    status: "pending",
+    source_status: "off",
+    owner_ref: "O-26",
+    summarisation_permitted: 0,
+    terms_url: null,
+    last_checked: null,
+    code: [],
+    hosts: [],
+  },
+];
 
 /** DAT-124 display rule for personal-use-only content (spec 06). */
 const PERSONAL_USE_RULE =
@@ -370,6 +458,14 @@ export function loadSeed(root = ROOT) {
   return [...bySource.values()];
 }
 
+/** The M22 pending source ids declared in src/lib/data/schema.ts (M22_PENDING_SOURCES). */
+export function declaredPendingSources(root = ROOT) {
+  const text = fs.readFileSync(path.join(root, SCHEMA_PATH), "utf8");
+  const m = /M22_PENDING_SOURCES\s*=\s*\[([^\]]*)\]/.exec(text);
+  if (!m) return null; // absent in an older tree (the fake roots of the generator tests)
+  return [...m[1].matchAll(/"([^"]+)"/g)].map((x) => x[1]);
+}
+
 /** The source ids the code declares: AU_SOURCES, UNIVERSE_SOURCE and REFERENCE_SOURCES (src/lib/data/schema.ts). */
 export function declaredSources(root = ROOT) {
   const text = fs.readFileSync(path.join(root, SCHEMA_PATH), "utf8");
@@ -400,11 +496,115 @@ const code = (s) => `\`${s}\``;
 const STATUS = { pending: "pending", enabled: "enabled", disabled: "disabled" };
 const RISK = { low: "low", medium: "medium", high: "high" };
 
+/** The year and month of an ISO date (the document shows no day). @param {string | null} d */
+const monthOf = (d) => (typeof d === "string" && d.length >= 7 ? d.slice(0, 7) : "not recorded");
+
+/** The India and US section: one summary and one detail table over the market source rows (M20 A3, D-1096). */
+function marketSection(marketRows) {
+  if (marketRows.length === 0) return [];
+  const summary = table(
+    [
+      "Source id",
+      "Source",
+      "Permitted use",
+      "Risk",
+      "Status when written",
+      "Owner reference",
+      "Acceptance date",
+      "AI summaries allowed",
+    ],
+    marketRows.map((r) => [
+      code(r.source ?? r.id),
+      r.label,
+      r.permitted_use,
+      RISK[r.risk] ?? r.risk,
+      STATUS[r.status] ?? r.status,
+      r.owner_ref ?? "none",
+      acceptanceOf(r),
+      r.summarisation_permitted === 1 ? "yes" : "no",
+    ]),
+  );
+  const detail = table(
+    ["Source id", "What we take", "Licence or terms reference", "Display rule", "Code", "Contacts"],
+    marketRows.map((r) => {
+      const personal = /personal use only/i.test(r.permitted_use ?? "");
+      return [
+        code(r.id),
+        r.provides,
+        `${r.terms} Terms URL: ${r.terms_url ?? "none (a file the Owner uploads)"}. Last checked: ${monthOf(r.last_checked)}.`,
+        personal ? PERSONAL_USE_RULE : PUBLIC_RULE,
+        r.code.length ? r.code.map(code).join(", ") : "no fetcher yet",
+        r.hosts.length ? r.hosts.join(", ") : "none",
+      ];
+    }),
+  );
+  return [
+    "## India and US sources (written when a market is enabled)",
+    "",
+    "- These rows are defined in `src/lib/market/seed/in/sources.mjs` and `src/lib/market/seed/us/sources.mjs` and are written to the register, with their status rows, when the Owner switches the market out of off (D-1128). No migration inserts them, so production holds none while India and the US are off.",
+    "- `enabled` = public statistics, the public holiday lists, EDGAR (free, fair-access terms, a declared contact required) and the manual files. `pending` = a fetched source whose terms are checked and which the Owner turns on. `disabled` = NSE and BSE announcements until the Owner accepts the terms risk (headline and link only, never a body, D-1125).",
+    "- A source whose robots.txt disallows automated clients is never requested; the polite client refuses it (D-1093, D-1132).",
+    "",
+    summary,
+    "",
+    detail,
+    "",
+  ];
+}
+
+/** The pending-source section (M22 A1): one summary and one detail table over `PENDING_SOURCE_ROWS`. */
+function pendingSection(rows) {
+  const summary = table(
+    [
+      "Source id",
+      "Source",
+      "Permitted use",
+      "Risk",
+      "Status",
+      "Owner reference",
+      "Acceptance date",
+      "AI summaries allowed",
+    ],
+    rows.map((r) => [
+      code(r.id),
+      r.label,
+      r.permitted_use,
+      RISK[r.risk] ?? r.risk,
+      STATUS[r.status] ?? r.status,
+      r.owner_ref ?? "none",
+      acceptanceOf(r),
+      r.summarisation_permitted === 1 ? "yes" : "no",
+    ]),
+  );
+  const detail = table(
+    ["Source id", "What we take", "Licence or terms reference", "Display rule", "Code", "Contacts"],
+    rows.map((r) => [
+      code(r.id),
+      r.provides,
+      `${r.terms} Terms URL: ${r.terms_url ?? "not recorded yet"}. Last checked: ${r.last_checked ?? "not recorded"}.`,
+      PUBLIC_RULE,
+      r.code.length ? r.code.map(code).join(", ") : "no fetcher yet",
+      r.hosts.length ? r.hosts.join(", ") : "none",
+    ]),
+  );
+  return [
+    "## Pending sources for the LLM and expert milestone (written when accepted)",
+    "",
+    "- These rows are defined in `scripts/ci/licence-register.mjs` and are written to the live register, with a status row of `off`, only when the Owner accepts the source (D-1439, D-1443). No migration inserts them, so production holds none until then.",
+    "- No fetcher and no host exists for any of them yet, so nothing contacts these sources. Every term is marked [VERIFY].",
+    "",
+    summary,
+    "",
+    detail,
+    "",
+  ];
+}
+
 /** Acceptance: an Owner reference means the source needs a risk acceptance this file cannot show. */
 export const acceptanceOf = (row) =>
   row.owner_ref ? `pending Owner (${row.owner_ref})` : "not needed";
 
-export function render(rows) {
+export function render(rows, marketRows = []) {
   const facts = (r) => {
     const f = SOURCE_FACTS[r.source];
     if (!f) throw new Error(`no SOURCE_FACTS entry for registered source ${r.source}`);
@@ -447,7 +647,11 @@ export function render(rows) {
       ];
     }),
   );
-  const pending = rows.filter((r) => r.owner_ref && r.status === "pending");
+  const pending = [
+    ...rows,
+    ...marketRows,
+    ...PENDING_SOURCE_ROWS.map((r) => ({ ...r, source: r.id })),
+  ].filter((r) => r.owner_ref && r.status === "pending");
   const lines = [
     "# Source-licence register",
     "",
@@ -476,11 +680,13 @@ export function render(rows) {
     ...(pending.length
       ? pending.map(
           (r) =>
-            `- ${facts(r).label} (${r.owner_ref}): the risk acceptance date is pending Owner. Until you accept, the source stays ${r.status} and nothing contacts it.`,
+            `- ${r.label ?? facts(r).label} (${r.owner_ref}): the risk acceptance date is pending Owner. Until you accept, the source stays ${r.status} and nothing contacts it.`,
         )
       : ["- None."]),
     "- Terms URLs and last-checked dates are not recorded in the seed. The source evaluation and the monthly re-check fill them in the live register.",
     "",
+    ...marketSection(marketRows),
+    ...pendingSection(PENDING_SOURCE_ROWS),
     "## Delayed-quote endpoint: facts and fallback (V2-I3, D-792)",
     "",
     "- Request pattern (one per code): `GET https://query1.finance.yahoo.com/v8/finance/chart/{CODE}.AX?interval=1m&range=1d`. The same host and path family as the end-of-day fetch (`scripts/fixtures/record-day.mjs` uses `/v8/finance/chart/` with `interval=1d`). The two scripts share the host but not the code; the fixture recorder is the reference for the payload shape.",
@@ -499,7 +705,16 @@ export function build(root = ROOT) {
   const declared = declaredSources(root).sort();
   const missing = declared.filter((d) => !seedIds.includes(d));
   if (missing.length) throw new Error(`declared in code but not seeded: ${missing.join(", ")}`);
-  return render(rows);
+  const pendingIds = declaredPendingSources(root)?.sort() ?? null;
+  if (
+    pendingIds &&
+    JSON.stringify(pendingIds) !== JSON.stringify(PENDING_SOURCE_ROWS.map((r) => r.id).sort())
+  )
+    throw new Error("M22_PENDING_SOURCES in schema.ts differs from PENDING_SOURCE_ROWS");
+  const marketRows = Object.values(MARKET_SOURCES)
+    .flat()
+    .map((r) => ({ ...r, source: r.id }));
+  return render(rows, marketRows);
 }
 
 export function main(argv = process.argv.slice(2), root = ROOT, out = console.log) {

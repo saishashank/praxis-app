@@ -6,7 +6,9 @@ import { CHECK_TIMEOUT_MS, CODE_REPO } from "./config";
 
 export type Env = Record<string, string | undefined>;
 export type CheckResult = { name: string; ok: boolean; detail: string; pending?: boolean };
-export type Check = (env: Env, fetchImpl: typeof fetch) => Promise<CheckResult>;
+/** Run context (M21 P1, D-1230): the Owner's `app_public_domain` confirmation; empty or absent means none is set. */
+export type CheckContext = { publicDomain?: string };
+export type Check = (env: Env, fetchImpl: typeof fetch, ctx?: CheckContext) => Promise<CheckResult>;
 
 const result = (name: string, ok: boolean, detail: string): CheckResult => ({ name, ok, detail });
 const has = (v: string | undefined): v is string => typeof v === "string" && v.trim() !== "";
@@ -63,7 +65,7 @@ export const authSecret: Check = async (env) => {
   return result(name, false, "malformed");
 };
 
-export const appBaseUrl: Check = async (env) => {
+export const appBaseUrl: Check = async (env, _f, ctx) => {
   const name = "APP_BASE_URL format";
   const v = env.APP_BASE_URL;
   if (!has(v)) return result(name, false, "missing");
@@ -73,6 +75,9 @@ export const appBaseUrl: Check = async (env) => {
   } catch {
     return result(name, false, "malformed");
   }
+  // D-1230: with a public domain set the host must equal it (and a .vercel.app host no longer passes);
+  // while it is empty nothing changes.
+  const domain = (ctx?.publicDomain ?? "").trim().toLowerCase();
   const ok =
     u.protocol === "https:" &&
     u.pathname === "/" &&
@@ -81,10 +86,14 @@ export const appBaseUrl: Check = async (env) => {
     u.username === "" &&
     u.password === "" &&
     u.port === "" &&
-    u.hostname.endsWith(".vercel.app");
-  return ok
-    ? result(name, true, "https, no path, vercel.app host")
-    : result(name, false, "malformed");
+    (domain ? true : u.hostname.endsWith(".vercel.app"));
+  if (!ok) return result(name, false, "malformed");
+  if (domain) {
+    return u.hostname.toLowerCase() === domain
+      ? result(name, true, "https, no path, host matches the public domain")
+      : result(name, false, "host differs from the public domain");
+  }
+  return result(name, true, "https, no path, vercel.app host");
 };
 
 export const backupPublicKey: Check = async (env) => {
@@ -322,9 +331,13 @@ export type SelfCheckReport = {
   pending: number;
 };
 
-export async function runSelfChecks(env: Env, fetchImpl: typeof fetch): Promise<SelfCheckReport> {
+export async function runSelfChecks(
+  env: Env,
+  fetchImpl: typeof fetch,
+  ctx?: CheckContext,
+): Promise<SelfCheckReport> {
   const derived = deriveEnv(env);
-  const settled = await Promise.allSettled(checksFor(derived).map((c) => c(env, fetchImpl)));
+  const settled = await Promise.allSettled(checksFor(derived).map((c) => c(env, fetchImpl, ctx)));
   const results: CheckResult[] = settled.map((s) =>
     s.status === "fulfilled" ? s.value : result("check", false, "Error"),
   );

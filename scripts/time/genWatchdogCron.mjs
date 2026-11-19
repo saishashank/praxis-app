@@ -7,9 +7,10 @@
 // GL-07 (O-52): the output is now pasted into watchdog.yml (20:40, 21:50) and ingest-batch1.yml
 // (Batch-1 fallback, 18:15); `scheduleGate.mjs` is the no-op guard for the other regime's line.
 import { fileURLToPath } from "node:url";
+import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
 
 export const DEFAULT_TIMES = ["20:40", "21:50"];
-const TZ = "Australia/Melbourne";
+const TZ = OWNER_TZ;
 // One date in each regime (2026): AEST in July, AEDT in January.
 const STANDARD_REF = "2026-07-15";
 const DAYLIGHT_REF = "2026-01-15";

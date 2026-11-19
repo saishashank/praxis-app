@@ -6,7 +6,7 @@
 //      body or a repeated item changes nothing and `items_new` counts only the rows really added);
 //      (M14 DAT-237) each row carries `content_hash`; an item whose hash an earlier row of the same
 //      code already holds is an exact repeat and is assessed at materiality 0: no alert, no breaker;
-//   3. take at most `maxItems` (<= 40, `sentinel_max_items_per_run`) UNASSESSED announcements of
+//   3. take at most `maxItems` (<= 200; `news_assess_per_run` bounded by src/lib/sentinel/cap.ts) UNASSESSED announcements of
 //      the carry window, OLDEST FIRST, so nothing starves; the `announcement` table is the queue,
 //      the rest are "carried" and are picked up by the next call (or by alert-flush, T6);
 //   4. classify them (membership sets read once, rule materiality, polarity) and write the
@@ -15,6 +15,7 @@
 //      and a sink call for a red one (`breakers.ts`).
 // No order is written here (AGT-012: the Sentinel never changes orders); the alert and e-mail path
 // is T6. Nothing the feed says reaches a log or a response body.
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { createHash } from "node:crypto";
 import type { Client, InStatement } from "@libsql/client";
 import { normaliseTitle } from "@/lib/agents/announcementDedup";
@@ -30,7 +31,10 @@ import { AU_TIME_ZONE } from "@/lib/agents/decisionView";
 import { loadMembership, membershipOf } from "./membership";
 import { archiveStatements, DEFAULT_HOURS, type MarketHoursLocal } from "./archive";
 
-export const MAX_ITEMS_PER_RUN = 40; // AGT-010, PLT-075: a hard ceiling whatever the config says
+/** DAT-251 b (D-1783): the hard ceiling of the key `news_assess_per_run` (20 to 200); it supersedes the AGT-010 / PLT-075 ceiling of 40. */
+export const MAX_ITEMS_PER_RUN = 200;
+/** The default of the key, and what an unusable value falls back to. */
+export const DEFAULT_ITEMS_PER_RUN = 40;
 /** Only announcements first seen and published within this window are assessed (not the backfill). */
 export const CARRY_WINDOW_H = 48;
 const ROWS_PER_STATEMENT = 50;
@@ -54,13 +58,22 @@ export type IngestInput = {
 };
 
 export type IngestResult =
-  | { ok: true; seen: number; skipped: number; new: number; assessed: number; carried: number }
+  | {
+      ok: true;
+      seen: number;
+      skipped: number;
+      new: number;
+      assessed: number;
+      carried: number;
+      /** DAT-251 b: queue length minus taken (the same number as `carried`, named for System Health). */
+      unassessed: number;
+    }
   | { ok: false; error: "unrecognised_format" | "unavailable" };
 
 const clampItems = (n: number | undefined): number =>
   typeof n === "number" && Number.isInteger(n) && n >= 1
     ? Math.min(n, MAX_ITEMS_PER_RUN)
-    : MAX_ITEMS_PER_RUN;
+    : DEFAULT_ITEMS_PER_RUN;
 
 /** DAT-237 (D-240): sha256(market | code | normalised title | published date), lower-case hex. */
 export function announcementContentHash(
@@ -107,8 +120,28 @@ function insertAnnouncements(
   return stmts;
 }
 
+/**
+ * The unassessed announcements of the carry window (DAT-251 b): what System Health shows as "waiting".
+ * rows-ok: the carry window is 48 hours, a few hundred announcements, read through the source/market index.
+ */
+export async function countUnassessed(
+  db: Pick<Client, "execute">,
+  nowIso: string,
+  market = HOME_MARKET,
+): Promise<number> {
+  const since = new Date(Date.parse(nowIso) - CARRY_WINDOW_H * HOUR_MS).toISOString();
+  const r = await db.execute({
+    sql:
+      "SELECT COUNT(*) AS n FROM announcement a WHERE a.source = ? AND a.market = ? AND a.ingested_at >= ? " +
+      "AND a.published_at >= ? AND NOT EXISTS (SELECT 1 FROM item_assessment s " +
+      "WHERE s.source = a.source AND s.ann_id = a.ann_id)",
+    args: [ASX_SOURCE, market, since, since],
+  });
+  return Number(r.rows[0]?.n ?? 0);
+}
+
 export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
-  const market = i.market ?? "AU";
+  const market = i.market ?? HOME_MARKET;
   const max = clampItems(i.maxItems);
   const parsed = (i.parser ?? ACTIVE_FEED_PARSER).parse(i.feed);
   if (parsed === null) return { ok: false, error: "unrecognised_format" };
@@ -275,6 +308,7 @@ export async function ingestFeed(i: IngestInput): Promise<IngestResult> {
       new: added,
       assessed,
       carried,
+      unassessed: carried,
     };
   } catch {
     return { ok: false, error: "unavailable" };

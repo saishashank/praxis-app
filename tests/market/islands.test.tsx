@@ -99,7 +99,7 @@ describe("OverviewSheet", () => {
     name: "Zed Upward Holdings",
     sector: "Technology",
     d: "2026-10-19",
-    close: { micro: "10500000" },
+    close: { micro: "10500000", currency: "AUD" },
     changePpm: 50_000,
     volume: 1200,
     announcements: [
@@ -390,9 +390,14 @@ describe("OverviewSheet live quote", () => {
     name: "Zed Upward Holdings",
     sector: "Technology",
     d: "2026-10-19",
-    close: { micro: "10500000" },
+    close: { micro: "10500000", currency: "AUD" },
     changePpm: 50_000,
-    live: null as { priceMicro: string | null; changePpm: number; at: string } | null,
+    live: null as {
+      priceMicro: string | null;
+      currency: string;
+      changePpm: number;
+      at: string;
+    } | null,
     volume: 1200,
     announcements: [],
     summary: "Summary.",
@@ -410,7 +415,7 @@ describe("OverviewSheet live quote", () => {
 
   it("a live quote shows the delayed price and the change on the close, beside the end-of-day price", async () => {
     const dialog = await open({
-      live: { priceMicro: "10800000", changePpm: 28_571, at: "Wed 4 Nov, 13:05" },
+      live: { priceMicro: "10800000", currency: "AUD", changePpm: 28_571, at: "Wed 4 Nov, 13:05" },
     });
     await within(dialog).findByText("Zed Upward Holdings");
     expect(within(dialog).getByTestId("overview-live")).toHaveTextContent("A$10.80");
@@ -431,7 +436,7 @@ describe("OverviewSheet live quote", () => {
         name: null,
         sector: null,
         close: null,
-        live: { priceMicro: null, changePpm: -12_000, at: "Wed 4 Nov, 13:05" },
+        live: { priceMicro: null, currency: "AUD", changePpm: -12_000, at: "Wed 4 Nov, 13:05" },
       },
       "stock-b",
       "Stock B",

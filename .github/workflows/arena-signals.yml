@@ -20,7 +20,14 @@
 # record `arena-3:AU:<date>` (M4 T15, D-093); `--phase 3` would re-run it alone.
 name: Arena signals and orders (batch 2b)
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      market:
+        description: Market code (empty = the single enabled market; the Worker sets it when more than one market is enabled)
+        type: string
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -65,8 +72,9 @@ jobs:
       # The only step with database secrets. It waits (up to 20 minutes) for batch 2a of the same
       # session, then decides it.
       - name: Decide the session
-        run: node scripts/arena/signals.mjs
+        run: node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}
@@ -107,8 +115,9 @@ jobs:
       - run: npm ci
       # The only step with secrets: database and the email variables.
       - name: Decide the session
-        run: node scripts/arena/signals.mjs
+        run: node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}
         env:
+          MARKET_INPUT: ${{ inputs.market }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_STAGING }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_STAGING }}
           COMMIT_SHA: ${{ github.sha }}

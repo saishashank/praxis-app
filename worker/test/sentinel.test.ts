@@ -2,6 +2,7 @@
 // Real SQLite via node:sqlite; no network anywhere (ASX and the app are local fakes). Covers the
 // signed hand-off, the unchanged-hash skip, the NFR-002 counters, delivery retries, blind
 // detection across both DST changes, and that nothing is contacted unless every switch is on.
+import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -229,7 +230,17 @@ describe("runAsx: the Sentinel hand-off", () => {
     expect(h["X-Praxis-Timestamp"]).toBe(String(Math.floor(T0 / 1000)));
     expect(h["X-Praxis-Nonce"]).toMatch(/^[0-9a-f]{32}$/);
     expect(h["X-Praxis-Signature"]).toBe(
-      await hmacHex(SECRET, `${h["X-Praxis-Timestamp"]}.${h["X-Praxis-Nonce"]}.${raw}`),
+      await hmacHex(
+        SECRET,
+        [
+          "v2",
+          "POST",
+          "/api/internal/sentinel-ingest",
+          h["X-Praxis-Timestamp"],
+          h["X-Praxis-Nonce"],
+          createHash("sha256").update(raw).digest("hex"),
+        ].join("\n"),
+      ),
     );
     expect(JSON.stringify(h)).not.toContain(SECRET);
     expect(state("sentinel:last_sha")).toEqual([JSON.stringify(await sha256Hex(body))]);
@@ -438,7 +449,17 @@ describe("runAsx: blind state for the incident path", () => {
     });
     const h = call.init.headers as Record<string, string>;
     expect(h["X-Praxis-Signature"]).toBe(
-      await hmacHex(SECRET, `${h["X-Praxis-Timestamp"]}.${h["X-Praxis-Nonce"]}.${raw}`),
+      await hmacHex(
+        SECRET,
+        [
+          "v2",
+          "POST",
+          "/api/internal/incident",
+          h["X-Praxis-Timestamp"],
+          h["X-Praxis-Nonce"],
+          createHash("sha256").update(raw).digest("hex"),
+        ].join("\n"),
+      ),
     );
     expect(JSON.stringify(h)).not.toContain(SECRET);
     expect(incidents()).toHaveLength(1); // one open incident, whatever the number of asks

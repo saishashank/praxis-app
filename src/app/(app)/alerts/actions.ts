@@ -11,6 +11,9 @@ import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
 import { updatePreferences } from "@/lib/preferences/service";
 import { insertTransition } from "@/lib/alerts/pick/store";
+import { unmuteAlert } from "@/lib/alerts/pick/unmute";
+import { marketDate } from "@/lib/data/calendar";
+import { SESSION_TZ } from "@/lib/intraday/run";
 import type { AlertRow } from "@/lib/alerts/pick/types";
 import type { ActionResult } from "@/lib/users/messages";
 
@@ -50,6 +53,29 @@ export async function muteAlertAction(fd: FormData): Promise<ActionResult> {
       clearReason: "muted",
     };
     await insertTransition(mainDb(), row); // false = a tick cleared it first: the end state is the same
+  } catch {
+    return { error: "unavailable" };
+  }
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+/**
+ * Unmute one alert the user muted (UXN-322, D-1207; reverses D-473 for `muted` only). One append-only
+ * `armed` row at seq + 1, and only while "Alerts for all picks" is on and the pick is still listed.
+ */
+export async function unmuteAlertAction(fd: FormData): Promise<ActionResult> {
+  const user = await requireUser("own_preferences", PATH);
+  const id = fd.get("alert_id");
+  if (typeof id !== "string" || !ID_RE.test(id)) return { error: "invalid" };
+  try {
+    const now = () => new Date();
+    const r = await unmuteAlert(
+      { main: mainDb(), auth: authDb(), now, sessionD: marketDate(now(), SESSION_TZ) },
+      String(user.id),
+      id,
+    );
+    if ("error" in r) return { error: r.error };
   } catch {
     return { error: "unavailable" };
   }

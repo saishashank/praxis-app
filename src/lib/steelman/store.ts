@@ -4,6 +4,7 @@
 // `inserted: false` = already there). A suggestion moves once, open to dismissed or expired.
 import type { Exec, WriteResult } from "@/lib/cortex/store/common";
 import { jsonText, num, parseJson, str, strOrNull } from "@/lib/cortex/store/common";
+import { sha256Hex } from "@/lib/llm/providers";
 
 export type { Exec, WriteResult };
 
@@ -55,6 +56,8 @@ export type NightRow = {
   notWrittenBudget: number;
   notWrittenNoModel: number;
   notWrittenCritic: number;
+  /** OPS-111 (6): an unexpected error stopped the note (counted apart from no_model). */
+  notWrittenError: number;
   claimsTotal: number;
   claimsValid: number;
   validityPpm: number;
@@ -81,11 +84,29 @@ export const pointIdOf = (packId: string, side: Side, n: number): string =>
 
 type Row = Record<string, unknown>;
 
+/**
+ * D-1310: the pack id of a subject cut by the daily limit. Domain-separated ("limit_cut|"), so it can
+ * never equal an items hash (a hash of canonical JSON); the reader recognises a cut subject by it.
+ */
+export const limitCutPackId = (
+  market: string,
+  d: string,
+  kind: SubjectKind,
+  subjectId: string,
+): string => sha256Hex(`limit_cut|${market}|${d}|${kind}|${subjectId}`);
+
+/** True when the pack is the zero-item pack stored for a subject cut by the daily limit. */
+export const isLimitCutPack = (
+  p: Pick<PackRow, "packId" | "market" | "d" | "subjectKind" | "subjectId" | "itemCount">,
+): boolean =>
+  p.itemCount === 0 && p.packId === limitCutPackId(p.market, p.d, p.subjectKind, p.subjectId);
+
 const inserted = (r: { rowsAffected: number }): WriteResult => ({ inserted: r.rowsAffected > 0 });
 
 // ---- pack ---------------------------------------------------------------------------------------
 
 export async function insertPack(db: Exec, p: PackRow): Promise<WriteResult> {
+  // rows-ok: one keyed insert; a night inserts at most one pack per subject of the night
   return inserted(
     await db.execute({
       sql: `INSERT INTO steelman_pack (pack_id, market, d, subject_kind, subject_id, code,
@@ -240,9 +261,9 @@ export async function insertNight(db: Exec, n: NightRow): Promise<WriteResult> {
   return inserted(
     await db.execute({
       sql: `INSERT INTO steelman_night (market, d, requested, written, not_written_limit,
-              not_written_budget, not_written_no_model, not_written_critic, claims_total, claims_valid,
-              validity_ppm, critic_hidden, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              not_written_budget, not_written_no_model, not_written_critic, not_written_error, claims_total,
+              claims_valid, validity_ppm, critic_hidden, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING`,
       args: [
         n.market,
@@ -253,6 +274,7 @@ export async function insertNight(db: Exec, n: NightRow): Promise<WriteResult> {
         n.notWrittenBudget,
         n.notWrittenNoModel,
         n.notWrittenCritic,
+        n.notWrittenError,
         n.claimsTotal,
         n.claimsValid,
         n.validityPpm,
@@ -272,6 +294,7 @@ const nightOf = (r: Row): NightRow => ({
   notWrittenBudget: num(r.not_written_budget),
   notWrittenNoModel: num(r.not_written_no_model),
   notWrittenCritic: num(r.not_written_critic),
+  notWrittenError: num(r.not_written_error),
   claimsTotal: num(r.claims_total),
   claimsValid: num(r.claims_valid),
   validityPpm: num(r.validity_ppm),

@@ -61,6 +61,7 @@ const deps = (over: Partial<MachineDeps> = {}): MachineDeps => ({
   ctx: () => ({ db: main, env: ENV }),
   ...over,
 });
+const SIGN_TARGET = { method: "POST", path: "/api/internal/preopen" };
 let n = 0;
 const nonce = () => (++n).toString(16).padStart(32, "0");
 const body = (over: Record<string, unknown> = {}) => ({
@@ -75,7 +76,7 @@ const post = (b: string | object, headers?: Record<string, string>, nc = nonce()
   return new Request(URL_PRE, {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(SECRET, raw, NOW, nc) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, raw, NOW, nc, SIGN_TARGET) as Record<string, string>),
   });
 };
 
@@ -112,10 +113,19 @@ describe("POST /api/internal/preopen: signed-route refusal", () => {
   it("401 generic body: wrong secret, no headers, stale, future, tampered body, replay", async () => {
     const h = createPreopenHandler(deps());
     const raw = JSON.stringify(body());
-    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32)) as Record<string, string>;
-    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32)) as Record<string, string>;
+    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const future = sign(SECRET, raw, NOW + 301, "d".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const okHeaders = sign(SECRET, raw, NOW, "e".repeat(32), SIGN_TARGET) as Record<string, string>;
     const once = "c".repeat(32);
     expect((await h(post(raw, undefined, once))).status).toBe(200);
     const tampered = JSON.stringify(body({ attempt: 2 }));

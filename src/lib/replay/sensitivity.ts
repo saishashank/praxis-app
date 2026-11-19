@@ -12,7 +12,7 @@ import { feeFor } from "@/lib/arena/costs";
 import { bootstrapSeries } from "@/lib/stats/bootstrap";
 import { scopedPrng } from "@/lib/stats/rng";
 import { absoluteGatePasses } from "@/lib/stats/gates";
-import { MIN_PRICE_MICRO, tickFor } from "@/lib/money/tick";
+import { TICK_TABLE, tickFor, type TickBand } from "@/lib/money/tick";
 import type { StatsParams } from "@/lib/agents/params";
 import type { LedgerEntry } from "./ledger";
 import type { Fraction } from "./returns";
@@ -27,20 +27,21 @@ export function repricedNet(
   e: LedgerEntry,
   profile: CostProfile,
   ticks: number = 1, // threshold-ok: ARN-107 is one tick per side
+  tickTable: readonly TickBand[] = TICK_TABLE,
 ): Fraction | null {
   const r = e.row;
   if (r.fill_out_micro === null || r.brok_out_micro === null || r.qty_out === null) return null;
   const t = BigInt(ticks);
   const qty = BigInt(r.qty);
   const qtyOut = BigInt(r.qty_out);
-  const fillIn = r.fill_in_micro + t * tickFor(r.fill_in_micro);
+  const fillIn = r.fill_in_micro + t * tickFor(r.fill_in_micro, tickTable);
   const brokIn = feeFor(profile, qty * fillIn, "buy");
   const corp = e.exitRule?.startsWith(CORP_ACTION_EXIT) === true;
   let fillOut = r.fill_out_micro;
   let proceeds = qtyOut * fillOut - r.brok_out_micro;
   if (!corp) {
-    fillOut = r.fill_out_micro - t * tickFor(r.fill_out_micro);
-    if (fillOut < MIN_PRICE_MICRO) fillOut = MIN_PRICE_MICRO; // D-184: the lowest price on the grid
+    fillOut = r.fill_out_micro - t * tickFor(r.fill_out_micro, tickTable);
+    if (fillOut < tickTable[0]!.tickMicro) fillOut = tickTable[0]!.tickMicro; // D-184: the lowest price on the grid
     proceeds = qtyOut * fillOut - feeFor(profile, qtyOut * fillOut, "sell");
   }
   const cost = qty * fillIn + brokIn;
@@ -50,10 +51,14 @@ export function repricedNet(
 export type SlipRow = { readonly id: string; readonly net: Fraction };
 
 /** ARN-107: the closed rows with one more adverse tick per side, in the input order. */
-export function oneTickAdverse(entries: readonly LedgerEntry[], profile: CostProfile): SlipRow[] {
+export function oneTickAdverse(
+  entries: readonly LedgerEntry[],
+  profile: CostProfile,
+  tickTable: readonly TickBand[] = TICK_TABLE,
+): SlipRow[] {
   const out: SlipRow[] = [];
   for (const e of entries) {
-    const net = repricedNet(e, profile, 1);
+    const net = repricedNet(e, profile, 1, tickTable);
     if (net !== null) out.push({ id: e.row.id, net });
   }
   return out;

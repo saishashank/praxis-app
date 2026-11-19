@@ -6,6 +6,7 @@
 import { redirect } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import { readStrategySort } from "@/lib/preferences/strategySort";
 import { strategyNames } from "@/lib/ui/loaders/common";
 import {
@@ -24,6 +25,7 @@ import { Banner, EmptyState } from "@/components/ui/States";
 import { SimulatedLabel } from "@/components/ui/Values";
 import { buttonClass } from "@/components/ui/Button";
 import { setSortPreferenceAction } from "./actions";
+import { FamilyGroups } from "./FamilyGroups";
 import { StrategyTabs } from "./StrategyTabs";
 import { StrategyTile } from "./StrategyTile";
 
@@ -53,7 +55,14 @@ export default async function StrategiesPage({
   const stored = await readStrategySort(authDb(), user.id);
   const sort: StrategySort = asked !== null ? parseSort(asked) : (stored ?? "best");
 
-  const deps = { mainDb: mainDb(), authDb: authDb(), user: { id: user.id, role: user.role } };
+  const market =
+    sp.market === undefined ? undefined : await resolveMarketOrNotFound(mainDb(), sp.market, null);
+  const deps = {
+    mainDb: mainDb(),
+    authDb: authDb(),
+    user: { id: user.id, role: user.role },
+    market,
+  };
   const list = await loadStrategies(deps, { sort });
   const tiles = sortTiles(list.data.tiles, sort);
   const attention = attentionOrder(list.data.tiles);
@@ -99,6 +108,15 @@ export default async function StrategiesPage({
           {list.state !== "empty" && list.data.pendingRound ? (
             <Banner>{list.data.pendingRound}</Banner>
           ) : null}
+
+          <FamilyGroups
+            tiles={tiles.map((t) => ({
+              execution: t.execution,
+              family: t.family,
+              name: names[t.family]?.name ?? t.name,
+              moneyType: t.moneyType,
+            }))}
+          />
 
           <section aria-labelledby="attention-h" className="flex min-w-0 flex-col gap-3">
             <h2 id="attention-h" className="m-0 text-xl font-semibold">

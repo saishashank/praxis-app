@@ -2,6 +2,7 @@
 // builds every document of a market as a pure function of the stored records, and writes a new
 // `document` version only when the rendered content changes. The database is authoritative; nothing
 // here reads the network or the clock (the caller passes `d` and `now`).
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import { CONFIG_KEYS, type ConfigKey } from "@/lib/config/keys";
 import { FAMILY_ORDER } from "@/lib/agents/families/constants";
@@ -23,7 +24,7 @@ import {
 } from "./render";
 
 /** Evening Reviews carry no market column; the build has one live market (MKT-102). */
-export const REVIEW_MARKET = "AU";
+export const REVIEW_MARKET = HOME_MARKET;
 
 type Row = Record<string, unknown>;
 const str = (v: unknown): string => String(v ?? "");

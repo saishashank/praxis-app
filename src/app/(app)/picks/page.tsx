@@ -3,6 +3,7 @@
 // (DAT-124), decided in the loader. At most `picks_max_per_family` picks per family are shown.
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth/guard";
+import { ownerToolsVisibleTo } from "@/lib/auth/ownerToolsGuard";
 import { envFor } from "@/lib/ui/loaders/shell";
 import {
   historyFilterOf,
@@ -43,7 +44,7 @@ type SP = Record<string, string | string[] | undefined>;
 export default async function PicksPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/picks");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") q.set(k, v);
   const query = await parsePicksQuery(env, q);
@@ -68,6 +69,18 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
   const intraday = await loadIntraday(env);
   const portfolio = await loadMyPortfolios(env);
+  // M21 D-1214, D-1219: the Owner's tier label and broker links ride on the tile through its `extra` slot, computed only
+  // when the one hidden-route predicate says the tools are visible to this user; the module is loaded then and only then.
+  const extras = (await ownerToolsVisibleTo(user))
+    ? await (
+        await import("@/lib/ownerTools/pickExtras")
+      ).pickExtras({
+        user,
+        market: env.market,
+        profile: model.profile,
+        picks: picks.map((p) => ({ id: p.id, code: p.stock })),
+      })
+    : null;
 
   return (
     <main className="mx-auto flex w-full max-w-4xl min-w-0 flex-col gap-4 px-4 py-6">
@@ -123,6 +136,7 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
                 masked={model.masked}
                 beatsLuck={model.success?.beatsLuck ?? false}
                 chip={chips.get(`${model.realD}.${model.profile}.${p.rank}`) ?? null}
+                extra={extras?.get(p.id) ?? null}
               />
             </li>
           ))}
@@ -171,8 +185,7 @@ async function TrackView({
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Picks</h1>
         <p className="m-0 text-sm text-text-muted">
-          Price only — dividends not included. Nothing shown here can be changed afterwards.{" "}
-          {NOT_REAL_ORDERS}
+          Nothing shown here can be changed afterwards. {NOT_REAL_ORDERS}
         </p>
       </header>
       <ViewTabs current="track" profile={profile} />

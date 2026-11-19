@@ -2,7 +2,9 @@
 // replay and the regime gate know the market mood on past dates. Without them every family is
 // blocked on "unknown" (REGIME_BLOCKS) and a full replay records no signal at all.
 //   node scripts/backfill/index.mjs request --from YYYY-MM-DD --out request.json [--to YYYY-MM-DD]
-//   node scripts/backfill/index.mjs commit --index index.json --from YYYY-MM-DD [--to YYYY-MM-DD]
+//   node scripts/backfill/index.mjs commit [--market CODE] --index index.json --from YYYY-MM-DD [--to YYYY-MM-DD]
+// --market (M19 C2, MKT-110 a): omitted = the single enabled market, else exit 2; a market that is not enabled, or one
+//   this job has no index source for (the ASX 200 is the home market's), exits 2 and writes nothing.
 // `request` writes the fetcher's request (scripts/ingest/yahoo_fetch.py; no secrets, no database).
 // `commit` validates index.json with parseIndexText and inserts first-seen rows (writeIndexBars:
 // ON CONFLICT DO NOTHING, so a re-run writes 0 and the nightly rows are never touched).
@@ -10,8 +12,11 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createClient } from "@libsql/client";
+import { scriptDb } from "../../src/lib/db/scriptClient.mjs";
 import { isRealDate } from "../../src/lib/data/backfill/rules.mjs";
+import { HOME_MARKET } from "../../src/lib/market/profileCore.mjs";
+import { resolveScriptMarket, takeMarketFlag } from "../../src/lib/market/scriptMarket.mjs";
+import { HOME_CURRENCY, HOME_TZ, HOME_YAHOO_SUFFIX } from "../../src/lib/market/homeMarket.mjs";
 import {
   INDEX_YAHOO_SYMBOL,
   parseIndexText,
@@ -28,11 +33,19 @@ const flag = (args, name) => {
 
 /** Today's date in Sydney (the market's calendar day). */
 export const sydneyToday = (nowMs) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Australia/Sydney" }).format(new Date(nowMs));
+  new Intl.DateTimeFormat("en-CA", { timeZone: HOME_TZ }).format(new Date(nowMs));
 
 /** The fetcher request for [from, to]: one anchor code plus the index symbol. */
 export function buildRequest(from, to) {
-  return { codes: [ANCHOR_CODE], start: from, end: to, indices: [INDEX_YAHOO_SYMBOL] };
+  // the fetch step has no market default (M20 A2, D-1090): the request carries the home profile's suffix and currency
+  return {
+    codes: [ANCHOR_CODE],
+    start: from,
+    end: to,
+    suffix: HOME_YAHOO_SUFFIX,
+    currency: HOME_CURRENCY,
+    indices: [INDEX_YAHOO_SYMBOL],
+  };
 }
 
 /**
@@ -44,7 +57,12 @@ export function buildRequest(from, to) {
 export async function run(argv, env, deps = {}) {
   const out = deps.out ?? ((s) => console.log(s));
   const nowMs = deps.nowMs ?? (() => Date.now());
-  const [cmd, ...rest] = argv;
+  const mk = takeMarketFlag(argv);
+  if (mk.error) {
+    out(`index backfill: failed (${mk.error})`);
+    return 2;
+  }
+  const [cmd, ...rest] = mk.argv;
   const from = flag(rest, "--from");
   const to = flag(rest, "--to") ?? sydneyToday(nowMs());
   if (
@@ -82,11 +100,13 @@ export async function run(argv, env, deps = {}) {
     out("index backfill commit: failed (database not configured)");
     return 1;
   }
-  const db = (deps.openDb ?? ((u, t) => createClient({ url: u, authToken: t })))(
-    url,
-    token || undefined,
-  );
+  const db = (deps.openDb ?? ((u, t) => scriptDb({ url: u, token: t })))(url, token || undefined);
   try {
+    const m = await resolveScriptMarket(db, mk.market, { supported: [HOME_MARKET] });
+    if (!m.ok) {
+      out(`index backfill commit: ${m.line}`);
+      return m.exit;
+    }
     const written = await writeIndexBars(db, {
       rows: parsed.rows,
       ingestedAt: new Date(nowMs()).toISOString(),

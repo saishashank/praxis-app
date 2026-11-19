@@ -1,6 +1,7 @@
 // The Owner review queue read model (UX-114): unresolved corporate action conflicts on held or
 // candidate codes, as plain-language cards. Read-only.
 import type { Client } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import {
   DEFAULT_AUTO_APPLY_SESSIONS,
   autoApplyDate,
@@ -33,7 +34,7 @@ export type ReviewCard = {
 
 export type ReviewQueue = { cards: ReviewCard[]; blockedOnly: number };
 
-export async function loadReviewQueue(db: Client, market = "AU"): Promise<ReviewQueue> {
+export async function loadReviewQueue(db: Client, market = HOME_MARKET): Promise<ReviewQueue> {
   const io = { read: 0, written: 0 };
   const actions = await loadActions(db, io, market);
   const sessions = (await readCaConfig(db, io)).autoApplySessions ?? DEFAULT_AUTO_APPLY_SESSIONS;

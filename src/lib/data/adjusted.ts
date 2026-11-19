@@ -20,6 +20,7 @@
 import { listingFloor } from "@/lib/data/listing";
 import type { Client } from "@libsql/client";
 import { boundedKnownAt } from "@/lib/arena/corpActions";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { isRealDate } from "./pipeline/rules.mjs";
 import { factorKindOf, isEffective, stateOf } from "./corporateActions/rules.mjs";
 
@@ -117,7 +118,7 @@ export async function adjustedBars(
   to: string,
   opts: { market?: string; asOf?: string; knownBy: KnownBy },
 ): Promise<AdjustedBar[]> {
-  const market = opts.market ?? "AU";
+  const market = opts.market ?? HOME_MARKET;
   if (!/^[A-Z0-9]{2,6}$/.test(code)) throw new RangeError("invalid code");
   if (!isRealDate(from) || !isRealDate(to) || from > to) throw new RangeError("invalid range");
   if (opts.asOf !== undefined && !isRealDate(opts.asOf)) throw new RangeError("invalid asOf");

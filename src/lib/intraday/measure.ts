@@ -7,10 +7,11 @@
 // each only while it is still NULL, so a second run writes nothing.
 import type { Client } from "@libsql/client";
 import { addDays } from "@/lib/data/calendar";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import { loadTotalReturnSeries } from "@/lib/picks/benchmark";
 
 /** Index code of the market benchmark series (D-462: no sector index is stored). */
-export const BENCH_INDEX_CODE = "AXJO";
+export const BENCH_INDEX_CODE: string = homeProfile().benchmarkIndex!;
 const HORIZONS = [1, 3, 5] as const;
 const PPM = 1_000_000; // threshold-ok: parts per million
 /** Candidates older than this many days are not re-looked at (a 5-session horizon is 7 days). */

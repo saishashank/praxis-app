@@ -11,9 +11,19 @@
 import type { Client } from "@libsql/client";
 import { audit, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
-import { summariseCalendar, type CalendarRow, type CalendarSummary } from "./calendar";
+import {
+  CALENDAR_MARKETS,
+  calendarMarkets,
+  calendarRuleMarkets,
+  summariseCalendar,
+  type CalendarRow,
+  type CalendarSummary,
+} from "./calendar";
 
-export const CALENDAR_MARKETS = ["AU"] as const;
+export { CALENDAR_MARKETS, calendarMarkets, calendarRuleMarkets };
+// M20 A3 (D-1097): calendar rows are written when a market is enabled (rules are code, rows are data); the core is
+// plain ESM so the e2e states and the Actions scripts can call it too.
+export { ensureCalendarYears, defaultCalendarYears } from "./calendarEnable.mjs";
 
 export type ConfirmError = "invalid" | "forbidden" | "not_found" | "unavailable";
 export type ConfirmResult = { ok: true; rows: number } | { ok: false; error: ConfirmError };
@@ -74,7 +84,7 @@ export async function confirmCalendar(p: ConfirmInput): Promise<ConfirmResult> {
     return fail("unavailable");
   }
 
-  if (typeof p.market !== "string" || !(CALENDAR_MARKETS as readonly string[]).includes(p.market)) {
+  if (typeof p.market !== "string" || !calendarRuleMarkets().includes(p.market)) {
     return fail("invalid");
   }
   const market = p.market;
@@ -139,4 +149,21 @@ export async function confirmCalendar(p: ConfirmInput): Promise<ConfirmResult> {
     }
     return fail("unavailable");
   }
+}
+
+/**
+ * M20 S1 (D-1146, D-1190): the markets whose next-year calendar the health snapshot and the heartbeat watch: the
+ * enabled members of `calendarRuleMarkets()`. A market that is off has no calendar rows, so nothing is listed for it
+ * and production (AU only) reads exactly what `CALENDAR_MARKETS` gave.
+ */
+export async function enabledCalendarMarkets(
+  db: Pick<Client, "execute">,
+): Promise<readonly string[]> {
+  // rows-ok: the market table holds one row per built market (3)
+  const r = await db.execute({
+    sql: "SELECT code FROM market WHERE enabled = 1 ORDER BY code",
+    args: [],
+  });
+  const on = new Set(r.rows.map((x) => String(x.code)));
+  return calendarRuleMarkets().filter((m) => on.has(m));
 }

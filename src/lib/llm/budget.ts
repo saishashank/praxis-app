@@ -4,8 +4,29 @@
 // threshold comes from LlmParams; nothing here is a literal rule value.
 import type { LlmParams } from "@/lib/agents/params";
 
-export type Role = "R1" | "R2" | "R3" | "R5" | "R6";
-export const ROLES: readonly Role[] = ["R1", "R2", "R3", "R5", "R6"];
+export type Role = "R1" | "R2" | "R3" | "R5" | "R6" | "R7";
+export const ROLES: readonly Role[] = ["R1", "R2", "R3", "R5", "R6", "R7"];
+
+/**
+ * M22 (D-1410): the key a call's tokens are charged to and logged under (`llm_call.role`). A role is its own bucket, except R7
+ * (the Committee judge), which spends the Committee bucket; the two named buckets are shared by several roles: Committee
+ * debaters and the judge, and expert triage and extraction. The roles' caps and the two buckets partition the daily total.
+ */
+export type BudgetKey = Role | "committee" | "experts";
+
+/** The keys that carry their own daily cap (R7 reads the Committee cap and is never charged directly). */
+export const BUDGET_KEYS: readonly BudgetKey[] = [
+  "R1",
+  "R2",
+  "R3",
+  "R5",
+  "R6",
+  "committee",
+  "experts",
+];
+
+/** The bucket a key is charged to: R7 spends the Committee bucket, every other key is its own bucket. */
+export const bucketOf = (key: BudgetKey): BudgetKey => (key === "R7" ? "committee" : key);
 
 /** Rough token estimate (characters per token) used only to size the pre-call reservation. */
 const CHARS_PER_TOKEN = 4; // threshold-ok: estimation heuristic, not a rule threshold
@@ -15,7 +36,7 @@ export function estimateTokens(text: string): number {
 }
 
 export type BudgetUsage = {
-  /** Tokens already spent today by this role in this market. */
+  /** Tokens already spent today by this budget key (role or bucket) in this market. */
   roleDay: number;
   /** Tokens already spent today by all roles in this market. */
   totalDay: number;
@@ -35,14 +56,14 @@ export function scaledCap(cap: number, share: { num: bigint; den: bigint } | und
 
 export function allowance(
   params: LlmParams,
-  role: Role,
+  key: BudgetKey,
   market: string,
   nightly: boolean,
   usage: BudgetUsage,
 ): Allowance {
   const share = params.marketShare[market];
   const candidates: Allowance[] = [
-    { allowed: scaledCap(params.roleDailyTokens[role], share) - usage.roleDay, binding: "role" },
+    { allowed: scaledCap(params.roleDailyTokens[key], share) - usage.roleDay, binding: "role" },
     { allowed: scaledCap(params.dailyTotal, share) - usage.totalDay, binding: "total" },
   ];
   if (nightly) {

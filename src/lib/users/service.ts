@@ -4,6 +4,8 @@
 // (NFR-030): the target is identified by user id, and refused/added addresses by HMAC only.
 // The caller (server action) has already passed requireUser("admin"); each mutation here
 // re-checks that the actor row is an active Owner as defence in depth.
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { builtMarkets } from "@/lib/market/seed/index.mjs";
 import type { Client, Transaction } from "@libsql/client";
 import { auditTx, hmacEmail, NO_META, requireKey, type RequestMeta } from "@/lib/auth/audit";
 import { isOwnerEmail, type AuthEnv } from "@/lib/auth/env";
@@ -28,11 +30,9 @@ export type Ctx = {
   actorId: number;
   meta?: RequestMeta;
   now?: Date;
+  /** The market the sharing acknowledgement is for; absent = the home market (the only one in production, D-1015). */
+  market?: string;
 };
-
-// The only market there is until a second one activates (ROL-107).
-export const MARKETS = ["AU"] as const;
-export const DEFAULT_MARKET = "AU";
 
 const fail = (error: ErrorCode): Fail => ({ ok: false, error });
 const iso = (c: Ctx) => (c.now ?? new Date()).toISOString();
@@ -183,9 +183,9 @@ export async function recordSharingAck(
   market: unknown,
   textVersion: unknown,
 ): Promise<Done> {
-  if (!MARKETS.includes(market as (typeof MARKETS)[number])) return fail("invalid");
+  if (typeof market !== "string" || !builtMarkets().includes(market)) return fail("invalid");
   if (typeof textVersion !== "string" || !TEXT_VERSION_RE.test(textVersion)) return fail("invalid");
-  const m = market as string;
+  const m = market;
   return atomically(c, async (tx) => {
     if (!(await actorIsOwner(tx, c.actorId))) return fail("forbidden");
     if (await hasSharingAck(tx, m)) return { ok: true as const }; // already recorded; no duplicate
@@ -235,7 +235,7 @@ export async function addUser(
   if (email === null || role === null) return fail("invalid");
   return atomically(c, async (tx) => {
     if (!(await actorIsOwner(tx, c.actorId))) return fail("forbidden");
-    if (!(await hasSharingAck(tx, DEFAULT_MARKET))) return fail("ack_required");
+    if (!(await hasSharingAck(tx, c.market ?? HOME_MARKET))) return fail("ack_required");
     if (isOwnerEmail(c.env, email)) return fail("exists"); // the pinned Owner is never an entry
     const now = iso(c);
     const ehmac = hmacEmail(requireKey(c.env), email);

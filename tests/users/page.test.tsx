@@ -20,7 +20,11 @@ const svc = vi.hoisted(() => ({
   listGrants: vi.fn(),
 }));
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
-vi.mock("@/lib/db/client", () => ({ authDb: () => ({}) }));
+vi.mock("@/lib/db/client", () => ({ authDb: () => ({}), mainDb: () => ({}) }));
+vi.mock("@/lib/market/resolve", () => ({
+  resolveMarketOrNotFound: async () => "AU",
+  resolveMarket: async () => ({ ok: true, market: "AU" }),
+}));
 vi.mock("@/lib/users/service", async (orig) => ({
   ...(await orig<typeof import("@/lib/users/service")>()),
   ...svc,

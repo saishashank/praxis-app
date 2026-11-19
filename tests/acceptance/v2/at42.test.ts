@@ -48,7 +48,7 @@ import {
   readCutoffPoll,
   waitForCutoffPoll,
 } from "@/lib/sentinel/cutoffPoll";
-import { AU_SLOTS } from "../../../worker/src/schedule";
+import { AU_SLOTS } from "../../../worker/test/auRow";
 import { runClock, type ClockEnv } from "../../../worker/src/clock";
 import {
   announced,

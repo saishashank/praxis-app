@@ -1,3 +1,6 @@
+# Disabled 2026-11-09 (D-906, OPS-107): staging is retired; kept for history and the rollback runbook.
+# Dispatch only, as before. Its gate condition is replaced by the CI job `recorded-day` (D-964, D-965).
+#
 # Staging E2E day (M8 T12; docs/M8_design.md 2.2, decision 45; TST-106, TST-115, AT-28, PLT-073).
 # Dispatched by the Owner on `main` AFTER the 20:45 email window of a staging trading day (the
 # Worker's staging slots run the day itself with `ref: main`). Two read-only checks, neither of

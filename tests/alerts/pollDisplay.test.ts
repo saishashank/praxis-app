@@ -144,7 +144,10 @@ describe("POST /api/internal/pick-alerts wires the auth database", () => {
       new Request("https://praxis-host.vercel.app/api/internal/pick-alerts", {
         method: "POST",
         body: raw,
-        headers: sign(SECRET, raw, nowS, "ab".repeat(16)) as Record<string, string>,
+        headers: sign(SECRET, raw, nowS, "ab".repeat(16), {
+          method: "POST",
+          path: "/api/internal/pick-alerts",
+        }) as Record<string, string>,
       }),
     );
     expect(res.status).toBe(200);

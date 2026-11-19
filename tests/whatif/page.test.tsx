@@ -11,6 +11,14 @@ vi.mock("@/lib/auth/guard", () => guard);
 const svc = vi.hoisted(() => ({ loadOptions: vi.fn(), budgetFor: vi.fn() }));
 vi.mock("@/lib/whatif/service", () => svc);
 vi.mock("@/lib/db/client", () => ({ mainDb: () => ({}), authDb: () => ({}) }));
+vi.mock("@/lib/market/resolve", () => ({
+  resolveMarketOrNotFound: async () => "AU",
+  resolveMarket: async () => ({ ok: true, market: "AU" }),
+}));
+vi.mock("@/lib/market/profile", () => ({
+  loadProfile: async () => ({ currency: "AUD" }),
+  enabledMarkets: async () => ["AU"],
+}));
 vi.mock("@/app/(app)/what-if/actions", () => ({ runWhatIfAction: vi.fn() }));
 
 afterEach(() => {
@@ -73,7 +81,7 @@ describe("what-if form", () => {
       },
       budget: { limit: 5, used: 3, remaining: 2 },
     });
-    render(<WhatIfForm options={options} remaining={3} limit={5} action={action} />);
+    render(<WhatIfForm currency="AUD" options={options} remaining={3} limit={5} action={action} />);
     expect(screen.getByRole("status")).toHaveTextContent("5 what-ifs a day; 3 left");
     fireEvent.click(screen.getByRole("button", { name: "Run what-if" }));
     await waitFor(() =>
@@ -89,7 +97,7 @@ describe("what-if form", () => {
 
   it("shows the plain refusal text for a question the stored tables cannot answer", async () => {
     const action = vi.fn().mockResolvedValue({ error: "not_available" });
-    render(<WhatIfForm options={options} remaining={3} limit={5} action={action} />);
+    render(<WhatIfForm currency="AUD" options={options} remaining={3} limit={5} action={action} />);
     fireEvent.change(screen.getByLabelText("What do you want to ask?"), {
       target: { value: "custom" },
     });
@@ -101,7 +109,9 @@ describe("what-if form", () => {
   });
 
   it("disables the button and says when the count restarts once the day's runs are used", () => {
-    render(<WhatIfForm options={options} remaining={0} limit={5} action={vi.fn()} />);
+    render(
+      <WhatIfForm currency="AUD" options={options} remaining={0} limit={5} action={vi.fn()} />,
+    );
     expect(screen.getByRole("button", { name: "Run what-if" })).toBeDisabled();
     expect(screen.getByRole("status")).toHaveTextContent("midnight in Melbourne");
   });

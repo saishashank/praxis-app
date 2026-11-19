@@ -12,6 +12,8 @@
 // keeps the first row. Malformed rows, bad codes and duplicates are skipped and counted; more
 // than 5 % of the data records being skipped means the file is not the expected one.
 
+import { AU_UNIVERSE_HEADER } from "../../market/seed/au/universeFile.mjs";
+
 export const MAX_CSV_CHARS = 1_000_000;
 export const MAX_RECORDS = 20_000;
 export const MAX_NAME = 200;
@@ -23,7 +25,7 @@ export const MAX_SKIPPED_RATIO = 0.05;
 
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;
-const HEADER = ["company name", "asx code", "gics industry group"];
+const HEADER = AU_UNIVERSE_HEADER;
 
 /**
  * RFC 4180 style records: commas, double-quoted fields with "" escapes, CRLF or LF.

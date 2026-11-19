@@ -96,7 +96,11 @@
       "--color-chart-6": "#82b2ff",
       "--color-chart-7": "#71ca5d",
       "--color-chart-8": "#f482d6",
-      "--color-grid": "#66758c"
+      "--color-grid": "#66758c",
+      "--band-info": "#192e3e",
+      "--band-warn": "#2e2d24",
+      "--band-stale": "#1e2b35",
+      "--band-neutral": "#1c232f"
     },
     "midnight": {
       "--color-bg": "#000000",
@@ -161,7 +165,11 @@
       "--color-chart-6": "#8db8ff",
       "--color-chart-7": "#73d25e",
       "--color-chart-8": "#fe86df",
-      "--color-grid": "#5f6d83"
+      "--color-grid": "#5f6d83",
+      "--band-info": "#14232e",
+      "--band-warn": "#272215",
+      "--band-stale": "#162025",
+      "--band-neutral": "#12161d"
     },
     "dim": {
       "--color-bg": "#1a2230",
@@ -226,7 +234,11 @@
       "--color-chart-6": "#98bfff",
       "--color-chart-7": "#89d479",
       "--color-chart-8": "#f998de",
-      "--color-grid": "#8693a9"
+      "--color-grid": "#8693a9",
+      "--band-info": "#2c4056",
+      "--band-warn": "#3d4043",
+      "--band-stale": "#2f4050",
+      "--band-neutral": "#2c3649"
     },
     "light": {
       "--color-bg": "#f5f7fb",
@@ -291,7 +303,11 @@
       "--color-chart-6": "#2761c1",
       "--color-chart-7": "#207400",
       "--color-chart-8": "#a23d8a",
-      "--color-grid": "#788296"
+      "--color-grid": "#788296",
+      "--band-info": "#ebeef0",
+      "--band-warn": "#f4f2eb",
+      "--band-stale": "#edf2f3",
+      "--band-neutral": "#f4f5f7"
     },
     "high_contrast": {
       "--color-bg": "#000000",
@@ -356,7 +372,11 @@
       "--color-chart-6": "#adccff",
       "--color-chart-7": "#8be577",
       "--color-chart-8": "#ffabe7",
-      "--color-grid": "#9a9a9a"
+      "--color-grid": "#9a9a9a",
+      "--band-info": "#192024",
+      "--band-warn": "#242019",
+      "--band-stale": "#181f1f",
+      "--band-neutral": "#242424"
     }
   }
 }

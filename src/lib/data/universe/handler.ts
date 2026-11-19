@@ -53,6 +53,8 @@ export function createUniverseImportHandler(deps: Deps) {
         secret,
         headers: req.headers,
         rawBody,
+        method: req.method,
+        path: new URL(req.url).pathname,
         nowSec: deps.nowSec(),
         store: deps.store,
       });

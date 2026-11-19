@@ -2,7 +2,7 @@
 // LLM usage on the Usage page (LLM-051, UX-100; M7 T19b): the loader reads our own call log, is
 // Owner-only, and the page shows it. Counts, tokens, cache hit rate, fallback rate and failures.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { allowMarket, cleanupTempDbs, freshDb } from "../db/helpers";
 import { loadLlmUsage, pct } from "@/lib/ui/loaders/usageLlm";
 
 afterEach(cleanupTempDbs);
@@ -47,13 +47,13 @@ describe("loadLlmUsage", () => {
   it("is Owner-only: every other role gets nothing and no query runs", async () => {
     const db = { execute: vi.fn() };
     for (const role of ["editor", "viewer", null, undefined])
-      expect(await loadLlmUsage(db, role, NOW)).toBeNull();
+      expect(await loadLlmUsage(db, role, NOW, "AU")).toBeNull();
     expect(db.execute).not.toHaveBeenCalled();
   });
 
   it("is empty before any call is logged (data-only mode)", async () => {
     const db = await freshDb("main");
-    expect(await loadLlmUsage(db, "owner", NOW)).toEqual({
+    expect(await loadLlmUsage(db, "owner", NOW, "AU")).toEqual({
       sinceD: "2026-09-20",
       byRole: [],
       byDay: [],
@@ -86,7 +86,7 @@ describe("loadLlmUsage", () => {
       d: "2026-10-19",
     });
     await insert(db, { ...base, role: "critic", provider: "rules", d: "2026-10-19" }); // no model
-    const out = await loadLlmUsage(db, "owner", NOW);
+    const out = await loadLlmUsage(db, "owner", NOW, "AU");
     expect(out?.models).toEqual([
       {
         role: "critic",
@@ -164,6 +164,7 @@ describe("loadLlmUsage", () => {
       outcome: "ok",
       d: "2026-08-01",
     });
+    await allowMarket(db, "US"); // M19 0038: an llm_call row of another market needs that market enabled
     await insert(db, {
       ...base,
       role: "narrator",
@@ -174,7 +175,7 @@ describe("loadLlmUsage", () => {
       market: "US",
     });
 
-    const u = (await loadLlmUsage(db, "owner", NOW))!;
+    const u = (await loadLlmUsage(db, "owner", NOW, "AU"))!;
     expect(u.sinceD).toBe("2026-09-20");
     const gem = u.byRole.find((r) => r.role === "narrator" && r.provider === "gemini")!;
     expect(gem).toMatchObject({

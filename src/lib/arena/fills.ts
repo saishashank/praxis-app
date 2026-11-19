@@ -8,7 +8,7 @@
 // The U1 quality gate blocks ENTRIES only (DAT-210): checked at creation and again here at fill;
 // exits are never blocked by it. A halted code gets no fill (ARN-026).
 import { type Micro } from "@/lib/money/micro";
-import { MIN_PRICE_MICRO, tickFor, type Side } from "@/lib/money/tick";
+import { TICK_TABLE, tickFor, type Side, type TickBand } from "@/lib/money/tick";
 import type { EntryDecision } from "@/lib/data/quality/gate";
 import { feeFor, type CostProfile, type FeeContext } from "./costs";
 import type { FillRule } from "./schema";
@@ -70,6 +70,8 @@ export type FillEnv = {
   readonly feeContext?: FeeContext;
   readonly tickCrossFactor?: Rational;
   readonly buckets?: readonly SlippageBucket[];
+  /** The market's tick grid (D-1154 item 2, D-1170); absent = the home market's (AU, unchanged). */
+  readonly tickTable?: readonly TickBand[];
 };
 
 function slipOf(env: FillEnv, ref: Micro, side: Side): Micro {
@@ -79,7 +81,16 @@ function slipOf(env: FillEnv, ref: Micro, side: Side): Micro {
     env.advMicro,
     env.tickCrossFactor ?? DEFAULT_TICK_CROSS_FACTOR,
     env.buckets ?? SLIPPAGE_BUCKETS,
+    env.tickTable,
   ).fillMicro;
+}
+
+/**
+ * The slippage a CS exit pays at a reference price: per ADV bucket and the market's tick grid (FAM-010,
+ * D-1224: the "family's exit slippage" is this one). Sell side, adverse, on the tick grid.
+ */
+export function csExitSlippedPrice(env: FillEnv, ref: Micro): Micro {
+  return slipOf(env, ref, "sell");
 }
 
 function build(
@@ -102,7 +113,7 @@ function build(
     slipMicro: diff < 0n ? -diff : diff,
     fillPriceMicro: fillPrice,
     valueMicro: value,
-    brokerageMicro: feeFor(env.profile, value, side, env.feeContext),
+    brokerageMicro: feeFor(env.profile, value, side, { ...env.feeContext, quantity: qty }),
     costProfile: env.profile.code,
     bar: env.bar,
   };
@@ -228,8 +239,10 @@ export function fillIntradayStop(
     // FAM-007: the level in the ex-date price terms; 0n dividend = the raw level (v1)
     const eff = levelMicro - div; // >= the low, so positive
     // D-184: never below the lowest price on the grid (a A$0.001-0.002 stop would go to zero)
-    const below = slipOf(env, eff, "sell") - tickFor(eff);
-    const fill = below < MIN_PRICE_MICRO ? MIN_PRICE_MICRO : below;
+    const table = env.tickTable ?? TICK_TABLE;
+    const below = slipOf(env, eff, "sell") - tickFor(eff, table);
+    const lowest = table[0]!.tickMicro; // D-184: the lowest price on THIS market's grid
+    const fill = below < lowest ? lowest : below;
     return build(env, "level", "sell", qty, eff, fill);
   }
   return null;
@@ -303,7 +316,15 @@ export type FillOrderEnv = FillEnv & {
   readonly halted?: boolean;
   /** Gate decision for the code, consulted for entries only. */
   readonly gate?: EntryDecision;
+  /**
+   * M20 D-1109: the session closed at one of its price-band limits (`bandLockedForSession`, cortex/states/bands.ts).
+   * Absent or false = the AU shape: nothing is refused. Only a market with a daily price band ever sets it.
+   */
+  readonly bandLocked?: boolean;
 };
+
+/** Why `fillOrder` cancels an order (the `arena_order` cancel reason). `band_locked` is M20 D-1109. */
+export type OrderCancelReason = "gate" | "halted" | "band_locked";
 
 export type FillOutcome =
   | {
@@ -311,8 +332,15 @@ export type FillOutcome =
       readonly fill: SimulatedFill;
       readonly initialStopMicro: bigint | null;
     }
-  | { readonly status: "cancelled"; readonly reason: "gate" | "halted"; readonly detail: string }
-  | { readonly status: "unfilled"; readonly reason: "halted" | "stop_not_reached" };
+  | { readonly status: "cancelled"; readonly reason: OrderCancelReason; readonly detail: string }
+  | { readonly status: "unfilled"; readonly reason: "halted" | "stop_not_reached" | "band_locked" };
+
+/** D-1109: a band-locked session executes nothing. An ENTRY is cancelled with this reason; an exit waits (below). */
+const BAND_LOCKED: FillOutcome = {
+  status: "cancelled",
+  reason: "band_locked",
+  detail: "band_locked",
+};
 
 /**
  * Fill one pending order against its session bar.
@@ -326,6 +354,7 @@ export function fillOrder(order: OrderToFill, env: FillOrderEnv): FillOutcome {
     const refusal = gateRefusal(env.gate, "fill");
     if (refusal !== null) return { status: "cancelled", reason: "gate", detail: refusal.detail };
     if (env.halted === true) return { status: "cancelled", reason: "halted", detail: "halted" };
+    if (env.bandLocked === true) return BAND_LOCKED;
     const fill = fillEntryAtOpen(env, order.qty);
     if (order.stopFrom !== undefined) {
       const stop = order.stopFrom(fill.fillPriceMicro);
@@ -342,6 +371,8 @@ export function fillOrder(order: OrderToFill, env: FillOrderEnv): FillOutcome {
     };
   }
   if (env.halted === true) return { status: "unfilled", reason: "halted" };
+  // an exit is never cancelled on a day the stock cannot trade: it stays pending and is retried (as a halt)
+  if (env.bandLocked === true) return { status: "unfilled", reason: "band_locked" };
   if (order.kind === "exit_cs") {
     return { status: "filled", fill: fillCloseSignalExit(env, order.qty), initialStopMicro: null };
   }

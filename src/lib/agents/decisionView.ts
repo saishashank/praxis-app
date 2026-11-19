@@ -13,13 +13,14 @@ import type { Client } from "@libsql/client";
 import { LookAheadError, priceMicro } from "@/lib/arena/marketData";
 import { assertBar } from "@/lib/arena/fills";
 import { localToUtc } from "@/lib/data/calendar";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 
 export { LookAheadError };
 
 type Reader = Pick<Client, "execute">;
 
 /** Exchange time zone of the AU market profile (PLT-023). */
-export const AU_TIME_ZONE = "Australia/Melbourne";
+export const AU_TIME_ZONE: string = OWNER_TZ;
 
 /** The cut-off instant of session D as ISO-8601 UTC text (ms), from the "HH:MM" local config. */
 export function decisionCutoffUtc(d: string, hhmm: string, tz: string = AU_TIME_ZONE): string {

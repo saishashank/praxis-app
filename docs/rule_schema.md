@@ -85,6 +85,13 @@ Optional structural switches (KB-081; absent = default = v1 behaviour; set only 
 | `f1_momentum_variant` | "v1" | v1, skip_month_u2 |
 | `f1_rank_variant` | "v1" | v1, composite3, vol_scaled |
 
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f1_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f1_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
+
 ```json
 {
   "schema_version": 1,
@@ -228,6 +235,13 @@ Universe: U1, U2. Rank: `event_ar_day0_pct` desc.
 | `f2_stop_atr` | 2.5 | 1.5 to 3.5 | x ATR |
 | `f2_time_stop` | 60 | 30 to 90 | sessions |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f2_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f2_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {
@@ -387,6 +401,13 @@ Optional structural switches (KB-081; absent = default = v1 behaviour; set only 
 | Key | Default | Allowed |
 |---|---|---|
 | `f3_surprise_mode` | "category" | category, day0_ar |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f3_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f3_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {
@@ -548,6 +569,13 @@ Optional structural switches (KB-081; absent = default = v1 behaviour; set only 
 | `f4_entry_variant` | "v1" | v1, reversal5_u2 |
 | `f4_rank_variant` | "v1" | v1, composite3, vol_scaled |
 
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f4_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f4_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
+
 ```json
 {
   "schema_version": 1,
@@ -687,6 +715,13 @@ Universe: U2, U3. Rank: `volume_ratio` desc.
 | `f5_trail_atr` | 3 | 2 to 4 | x ATR |
 | `f5_volume_ratio_min` | 3 | 2 to 5 | x |
 | `reentry_block` | 10 | 5 to 20 | sessions |
+
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f5_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f5_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
 
 ```json
 {
@@ -865,6 +900,13 @@ Universe: U1, U2. Rank: `class_insider_score` desc.
 | `insider_window_sessions` | 30 | 10 to 60 | sessions |
 | `reentry_block` | 10 | 5 to 20 | sessions |
 
+Target (FAM-010, D-1224; optional, set only by a pre-registered challenger; absent = no target = v1 behaviour; counted under the O-46 cap; give at most one):
+
+| Key | Bounds | Meaning |
+|---|---|---|
+| `f6_target_r` | 1 to 5 | exit at the next open after a close at or above entry + this many times (entry - initial stop) |
+| `f6_target_pct` | 5 to 50 | exit at the next open after a close at or above entry x (1 + this percent) |
+
 ```json
 {
   "schema_version": 1,
@@ -996,6 +1038,58 @@ Universe: U1, U2. Rank: `class_insider_score` desc.
   "rank": {
     "field": "class_insider_score",
     "order": "desc"
+  }
+}
+```
+## Schema v2: expert rules (KB-085, D-1436)
+
+A family rule version stays schema v1 (the specifications above are unchanged). An expressed cluster is an expert rule in schema v2: it keeps the v1 condition (literal value only, no `param`), group and count_of (whole-number n) nodes and adds three node kinds. The loader accepts v1 for a family and v1 or v2 for an expert rule; it refuses v2 for a family.
+
+Shape: `{schema_version: 2, entry: <node>}`; position fields are not allowed in an entry.
+
+| Node | Form | True when |
+|---|---|---|
+| `rel_sector` | `{rel_sector: {field, op, value}}` | the numeric field minus the median of that field over the codes of the same sector (the market's classification scheme, the code itself included) compares with the value |
+| `persist` | `{persist: {n, m, when}}` | `when` (a condition, `rel_sector` or `ratio`) holds on at least n of the last m sessions, today included; m is 1 to 20, n is 1 to m; a session before the data starts does not count |
+| `ratio` | `{ratio: {num, den, op, value}}` | numeric field num divided by numeric field den compares with the value; false when either is missing or den is 0 |
+
+Comparison operators of the three new nodes: `<`, `<=`, `>`, `>=`, `==` (the crossing operators stay on plain conditions).
+
+Exit (D-1437), one of: `{family, kind: "hold", sessions: n}` (close the position after n sessions) or `{family, kind: "family", max_sessions: n}` (the named family's own exits, evaluated on closes, forced shut after n sessions); n is 1 to 250. `family` names the lineage whose development split the screening uses.
+
+```json
+{
+  "schema_version": 2,
+  "entry": {
+    "logic": "AND",
+    "items": [
+      {
+        "rel_sector": {
+          "field": "net_debt_ebitda",
+          "op": "<",
+          "value": 0
+        }
+      },
+      {
+        "persist": {
+          "n": 3,
+          "m": 5,
+          "when": {
+            "field": "close_above_sma5",
+            "op": "==",
+            "value": true
+          }
+        }
+      },
+      {
+        "ratio": {
+          "num": "volume_ratio",
+          "den": "rsi14",
+          "op": ">=",
+          "value": 0.05
+        }
+      }
+    ]
   }
 }
 ```

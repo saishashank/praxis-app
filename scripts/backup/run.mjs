@@ -101,6 +101,7 @@ async function fetchAuthExport(env, fetchImpl, nowMs, date) {
       body,
       Math.floor(nowMs / 1000),
       randomBytes(16).toString("hex"),
+      { method: "POST", path: "/api/internal/backup-export" },
     ),
   };
   const base = env.APP_BASE_URL.trim().replace(/\/+$/, "");

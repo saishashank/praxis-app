@@ -5,6 +5,8 @@
 // Field names are [VERIFY at build]: result[0].meta.{regularMarketPrice, regularMarketTime (epoch s),
 // regularMarketVolume (cumulative), chartPreviousClose | previousClose}.
 import { type Micro, toMicroFromVendor } from "../../money/micro";
+import type { MarketProfile } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { DelayedQuote, QuoteReject } from "./types";
 
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
@@ -32,15 +34,24 @@ const positiveMicro = (v: unknown): Micro | null => {
  * D-907: the market index the quote poll also fetches, for the live ASX 200 line on Home. Stored in
  * quote_latest under the same code the stored index bars use (Batch 1 index stage, `^AXJO`).
  */
-export const MARKET_INDEX_CODE = "AXJO";
-const INDEX_SYMBOLS: Readonly<Record<string, string>> = { [MARKET_INDEX_CODE]: "^AXJO" };
+export const MARKET_INDEX_CODE: string = homeProfile().benchmarkIndex!;
 
-/** The Yahoo chart symbol of a code: `^AXJO` for the index, `<code>.AX` for a listed stock. */
-export function chartSymbol(code: string): string {
-  return INDEX_SYMBOLS[code] ?? `${code}.AX`;
+/**
+ * The Yahoo chart symbol of a code: the benchmark's symbol for the index, `<code><yahoo_suffix>` for a listed
+ * stock (CXA-002 h); the market is the home market unless a profile is passed.
+ */
+export function chartSymbol(code: string, profile: MarketProfile = homeProfile()): string {
+  return code === profile.benchmarkIndex
+    ? profile.benchmarkYahooSymbol!
+    : `${code}${profile.yahooSuffix}`;
 }
 
-export function parseChartMeta(json: unknown, code: string, now: Date): DelayedQuote | QuoteReject {
+export function parseChartMeta(
+  json: unknown,
+  code: string,
+  now: Date,
+  profile: MarketProfile = homeProfile(),
+): DelayedQuote | QuoteReject {
   if (!CODE_RE.test(code)) return { reject: "bad_code" };
   if (!isRecord(json) || !isRecord(json.chart)) return { reject: "bad_shape" };
   const result = json.chart.result;
@@ -50,10 +61,10 @@ export function parseChartMeta(json: unknown, code: string, now: Date): DelayedQ
   const meta = result[0].meta;
   if (!isRecord(meta)) return { reject: "no_meta" };
 
-  if (meta.currency !== "AUD") {
+  if (meta.currency !== profile.currency) {
     return { reject: meta.currency === undefined ? "no_currency" : "bad_currency" };
   }
-  if (meta.symbol !== undefined && meta.symbol !== chartSymbol(code)) {
+  if (meta.symbol !== undefined && meta.symbol !== chartSymbol(code, profile)) {
     return { reject: "symbol_mismatch" };
   }
 

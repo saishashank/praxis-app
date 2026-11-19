@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/States";
 import { requireUser } from "@/lib/auth/guard";
 import { authDb, mainDb } from "@/lib/db/client";
+import { loadProfile } from "@/lib/market/profile";
+import { resolveMarketOrNotFound } from "@/lib/market/resolve";
 import type { WhatIfOptions } from "@/lib/whatif/options";
 import { budgetFor, loadOptions, type Budget } from "@/lib/whatif/service";
 import { runWhatIfAction } from "./actions";
@@ -18,10 +20,13 @@ export default async function WhatIfPage() {
   const user = await requireUser("what_if", "/what-if");
   let options: WhatIfOptions | null = null;
   let budget: Budget | null = null;
+  let currency = "";
   try {
-    [options, budget] = await Promise.all([
+    const market = await resolveMarketOrNotFound(mainDb(), undefined, null);
+    [options, budget, currency] = await Promise.all([
       loadOptions(mainDb()),
       budgetFor(mainDb(), authDb(), user.id, new Date()),
+      loadProfile(mainDb(), market).then((p) => p.currency ?? ""),
     ]);
   } catch {
     options = null; // neutral message below; no error details
@@ -49,6 +54,7 @@ export default async function WhatIfPage() {
             options={options}
             remaining={budget.remaining}
             limit={budget.limit}
+            currency={currency}
             action={runWhatIfAction}
           />
         </Card>

@@ -299,7 +299,7 @@ function FilterFields({
 export default async function NewsPage({ searchParams }: { searchParams: Promise<SP> }) {
   const sp = await searchParams;
   const user = await requireUser("read", "/news");
-  const env = await envFor(user);
+  const env = await envFor(user, undefined, sp.market);
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") params.set(k, v);
   const query = parseNewsQuery(params);
@@ -487,9 +487,9 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
               ))}
             </ul>
           )}
-          {news.page > 1 || news.hasMore ? (
+          {news.hasNewer || news.hasMore ? (
             <nav aria-label="Pages" className="flex gap-4 text-sm">
-              {news.page > 1 ? (
+              {news.hasNewer ? (
                 <Link
                   className="text-accent underline"
                   href={href({
@@ -499,7 +499,8 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                     code: query.code,
                     from: query.from,
                     to: query.to,
-                    page: String(news.page - 1),
+                    page: news.page - 1 > 1 ? String(news.page - 1) : undefined,
+                    before: news.newerBefore ?? undefined, // keyset paging, no OFFSET (D-959)
                   })}
                 >
                   Newer
@@ -516,6 +517,7 @@ export default async function NewsPage({ searchParams }: { searchParams: Promise
                     from: query.from,
                     to: query.to,
                     page: String(news.page + 1),
+                    after: news.olderAfter ?? undefined,
                   })}
                 >
                   Older

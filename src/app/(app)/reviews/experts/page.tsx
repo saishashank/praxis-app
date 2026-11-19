@@ -21,7 +21,7 @@ import {
 } from "@/lib/ui/loaders/experts";
 import { CLAIM_STATUSES } from "@/lib/experts/types";
 import { PageHead, Shell } from "../learned/parts";
-import { detailHref, EXPERTS as PATH, QUEUE, TECHNIQUES } from "./parts";
+import { detailHref, EXPERTS as PATH, QUEUE, SOURCES, TECHNIQUES } from "./parts";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +111,11 @@ export default async function ExpertsPage({ searchParams }: { searchParams: Prom
         <Link href="/reviews/learned" className="text-accent underline">
           What the system learned
         </Link>
+        {user.role === "owner" ? (
+          <Link href={SOURCES} className="text-accent underline">
+            Where experts are read
+          </Link>
+        ) : null}
         {dir.canReview ? (
           <Link href={QUEUE} className="text-accent underline">
             Claims to check ({dir.toCheck})

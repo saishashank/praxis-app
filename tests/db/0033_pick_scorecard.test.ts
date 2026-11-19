@@ -23,7 +23,8 @@ const DAY = (runId: string, d: string, gainerHits: number) =>
 describe("0033_pick_scorecard", () => {
   it("rolls back to the older ledger shape and comes back identical", async () => {
     const db = track(createClient({ url: tempDbUrl() }));
-    const ms = await loadMigrations(MIGRATIONS("main"));
+    // pinned to 0033: the V3 migrations (0034 and later) sit on top (their own tests)
+    const ms = (await loadMigrations(MIGRATIONS("main"))).filter((m) => m.version <= 33);
     expect(ms[32]).toMatchObject({ version: 33, name: "pick_scorecard" });
     await migrateUp(
       db,

@@ -3,7 +3,7 @@
 // flat), never grey for a signed value. Every mark is labelled in text. Server component, pure CSS.
 import { cn } from "@/components/ui/cn";
 import { hueStyle } from "@/components/ui/hue";
-import { formatCents } from "@/lib/view/format";
+import { currencyFormatFor, formatCents } from "@/lib/view/format";
 
 const DEFAULT_MIN = 250_000; // threshold-ok: A$2,500 loss limit (display default, D-1020)
 const DEFAULT_START = 500_000; // threshold-ok: A$5,000 start (display default, D-1020)
@@ -16,6 +16,7 @@ export function NavBar({
   startCents = DEFAULT_START,
   minCents = DEFAULT_MIN,
   maxCents = DEFAULT_MAX,
+  currency,
   className,
 }: {
   label: string;
@@ -23,8 +24,11 @@ export function NavBar({
   startCents?: number;
   minCents?: number;
   maxCents?: number;
+  /** ISO 4217 code of the amounts (D-1815). */
+  currency: string;
   className?: string;
 }) {
+  const fmt = currencyFormatFor(currency);
   const span = Math.max(1, maxCents - minCents);
   const at = (c: number) => Math.max(0, Math.min(PCT, ((c - minCents) / span) * PCT));
   const known = navCents !== null && Number.isFinite(navCents);
@@ -35,8 +39,8 @@ export function NavBar({
         ? "positive"
         : "negative";
   const summary = known
-    ? `${label}: ${formatCents(navCents)} on a bar from the loss limit ${formatCents(minCents)} to the goal ${formatCents(maxCents)}; start ${formatCents(startCents)}.`
-    : `${label}: not measured yet; bar from the loss limit ${formatCents(minCents)} to the goal ${formatCents(maxCents)}; start ${formatCents(startCents)}.`;
+    ? `${label}: ${formatCents(navCents, fmt)} on a bar from the loss limit ${formatCents(minCents, fmt)} to the goal ${formatCents(maxCents, fmt)}; start ${formatCents(startCents, fmt)}.`
+    : `${label}: not measured yet; bar from the loss limit ${formatCents(minCents, fmt)} to the goal ${formatCents(maxCents, fmt)}; start ${formatCents(startCents, fmt)}.`;
   return (
     <figure data-nav-bar="" className={cn("m-0 min-w-0", className)}>
       <div
@@ -60,9 +64,9 @@ export function NavBar({
         />
       </div>
       <figcaption className="mt-1 flex min-w-0 flex-wrap justify-between gap-x-2 text-xs text-text-muted">
-        <span>Loss limit {formatCents(minCents)}</span>
-        <span data-nav-start-label="">Start {formatCents(startCents)}</span>
-        <span>Goal {formatCents(maxCents)}</span>
+        <span>Loss limit {formatCents(minCents, fmt)}</span>
+        <span data-nav-start-label="">Start {formatCents(startCents, fmt)}</span>
+        <span>Goal {formatCents(maxCents, fmt)}</span>
       </figcaption>
     </figure>
   );

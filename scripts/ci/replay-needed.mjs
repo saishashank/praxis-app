@@ -61,6 +61,12 @@ export function migrationTables(patch) {
   return [...out];
 }
 
+/**
+ * Files under the replay paths that only LIST table names without reading them: the pinned table list of the night
+ * schema hash (M20 D-1116) names every table, which would make every migration look replay-relevant.
+ */
+const NAMES_ONLY = new Set(["src/lib/cortex/stageTables.mjs"]);
+
 /** Every source file under the replay paths (migrations excluded), read once. */
 export function replayCodeText(root = process.cwd()) {
   const parts = [];
@@ -72,7 +78,11 @@ export function replayCodeText(root = process.cwd()) {
       return;
     }
     if (st.isDirectory()) for (const e of readdirSync(p)) walk(path.join(p, e));
-    else if (/\.(?:ts|tsx|mjs|js|sql|json)$/.test(p)) parts.push(readFileSync(p, "utf8"));
+    else if (
+      /\.(?:ts|tsx|mjs|js|sql|json)$/.test(p) &&
+      !NAMES_ONLY.has(path.relative(root, p).split(path.sep).join("/"))
+    )
+      parts.push(readFileSync(p, "utf8"));
   };
   for (const p of REPLAY_PATHS) if (p !== MIGRATIONS) walk(path.join(root, p));
   return parts.join("\n");

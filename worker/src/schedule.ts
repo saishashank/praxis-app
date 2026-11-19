@@ -1,14 +1,21 @@
-// The AU slot table as data (docs/M2_design.md section 3, "AU slot schedule (PLT-073)"). Times are
-// Australia/Sydney local HH:MM (the spec says Melbourne; the two share offset and DST dates, so
-// one zone key serves both). The clock (clock.ts) only ever dispatches slots that are
+// The slot table as data (docs/M2_design.md section 3, "AU slot schedule (PLT-073)"), built per market
+// from the `market` row (M19 C1, D-1811): the market-bound slots read their local HH:MM from the row's
+// `slots_json` anchors (the profile projection, src/lib/market/profileCore.mjs), the market-independent ops
+// slots from OPS_SLOT_TIMES, and the home market's exchange-feed slots from FEED_SLOT_TIMES. This file holds
+// no market code and no clock time. `slotsFor(row)` of the AU row reproduces the former AU table to the
+// byte (worker/test/auSlots.test.ts against the step-0 snapshot). Times are local HH:MM of the market zone
+// (the Owner's zone for ops slots; Sydney and Melbourne share offset and DST dates). The clock (clock.ts) only ever dispatches slots that are
 //  (1) `enabled`, (2) `runner: "actions"` and (3) name a workflow in DISPATCHABLE_WORKFLOWS.
 // Slots whose workflow does not exist yet stay disabled (T10); ingest-batch1 exists since T6 and
 // backfill-history since T9 (its slot stays disabled until the Owner enables the backfill).
-import { hhmm } from "./localtime";
+import { FEED_SLOT_TIMES } from "../../src/lib/market/clockTables.mjs";
+import { HOME_MARKET, OPS_SLOT_TIMES } from "../../src/lib/market/profileCore.mjs";
+import { hhmm, isHomeRule, zoneSupported } from "./localtime";
+import { anchorsOf, type MarketRow, type SlotAnchors } from "./markets";
 
 export type Slot = {
   id: string;
-  /** Local start, "HH:MM" Australia/Sydney. */
+  /** Local start, "HH:MM" in the zone of the slot's market (ops slots: the Owner's zone). */
   time: string;
   /** `time` in minutes since local midnight (derived, never typed by hand). */
   minute: number;
@@ -35,8 +42,21 @@ export type Slot = {
   /** Workflow file under .github/workflows for runner "actions", else null. */
   workflow: string | null;
   tradingDaysOnly: boolean;
-  /** Needs the market mode (market_mode for AU must not be "off"); nightly ops slots do not. */
+  /** Needs the market mode (the market's mode must not be "off"); nightly ops slots do not. */
   marketBound: boolean;
+  /**
+   * The market this slot belongs to, set only when more than one market is enabled (D-1825); absent means the
+   * table's only market. A market-bound dispatch then passes it to the workflow as the `market` input and
+   * the clock reads that market's mode and calendar.
+   */
+  market?: string;
+  /**
+   * The zone this slot's local time and date are in, set by `slotsFor` for a market-bound slot of a market whose
+   * zone does not follow the home (Sydney) rule (M20 A2, D-1117: IN, US). Absent = the home zone, in which the ops
+   * slots and every AU slot are written, so the AU table is byte-identical (worker/test/auSlots.test.ts). The clock
+   * decides a slot on `localFor(slot.tz, instant)` when it is set.
+   */
+  tz?: string;
   /** Dispatch order when several are due in the same minute: lower first. */
   priority: number;
   /** A missed slot may still be dispatched this many minutes after its time (catch-up). */
@@ -65,7 +85,23 @@ export type Slot = {
    * a slot whose run record `<keyPrefix><local date>` is neither closed nor running is dispatched
    * again (bounded by MAX_ATTEMPTS; the script's own success check makes a duplicate a no-op).
    */
-  recheck?: { keyPrefix: string; afterMin: number; untilMin: number };
+  recheck?: {
+    keyPrefix: string;
+    afterMin: number;
+    untilMin: number;
+    /**
+     * M18 (D-1782): re-dispatch at most once through the recheck. A dispatch made at or after
+     * `slot minute + afterMin` was itself a recheck, so it is not checked again.
+     */
+    once?: boolean;
+    /**
+     * M18 (D-1782): another run-record key prefix (`<prefix><local date>`) that must have a
+     * success/degraded record before the re-dispatch (2b needs a settled 2a). Unknown = no re-dispatch.
+     */
+    needsKeyPrefix?: string;
+  };
+  /** Runner "actions": run only on this local calendar day each year (M18, `calendar-draft`). */
+  annual?: { month: number; day: number };
   note: string;
 };
 
@@ -80,22 +116,54 @@ export const DISPATCHABLE_WORKFLOWS: readonly string[] = [
   "backfill-history.yml",
   "backfill-prices.yml",
   "backup.yml",
+  "calendar-draft.yml",
   "ingest-batch1.yml",
   "kb-archive.yml",
   "llm-bakeoff.yml",
   "maintenance.yml",
   "replay.yml",
+  "turso-usage.yml",
   "watchdog.yml",
 ];
 
 export const DEFAULT_CATCH_UP_MIN = 60;
+/** The rollback kill runs this many minutes after the market's open (D-1101). */
+export const KILL_AFTER_OPEN_MIN = 2;
 
-export const AU_SLOTS: readonly Slot[] = [
+/** Slot ids that belong to a market's exchange feed (D-194); only a market with a FEED_SLOT_TIMES entry has them (D-1117). */
+const FEED_IDS: ReadonlySet<string> = new Set([
+  "asx-poll",
+  "universe",
+  "asx-fetch",
+  "decision-cutoff",
+  "late-sweep",
+  "marker-check",
+]);
+
+export type TableOptions = {
+  /** Tag market-bound slots with `market` (more than one market is enabled). */
+  tag?: boolean;
+  /** Suffix the market-bound slot ids with `:<code>` (every market but the first when several are enabled). */
+  suffix?: boolean;
+  /** Include the market-independent ops slots (default true; only the first market's table carries them). */
+  ops?: boolean;
+};
+
+/** What a slot table is built from: the market code, its anchors and the ops and feed time tables. */
+type TableInput = {
+  code: string;
+  a: SlotAnchors;
+  ops: Record<string, { at: string; from: string; until: string; everyMin: number }>;
+  feed: (typeof FEED_SLOT_TIMES)[string];
+};
+
+/** The whole table of one market, in table order (market-bound and ops slots interleaved as designed). */
+const tableOf = ({ code, a, ops, feed }: TableInput): Slot[] => [
   slot({
     id: "asx-poll",
-    time: "07:00",
-    until: "19:30",
-    everyMin: 4,
+    time: feed.poll.from,
+    until: feed.poll.until,
+    everyMin: feed.poll.everyMin,
     runner: "worker",
     workflow: null,
     tradingDaysOnly: true,
@@ -110,9 +178,9 @@ export const AU_SLOTS: readonly Slot[] = [
   // dispatch clock never fires `route` slots (worker/src/routes.ts does).
   slot({
     id: "alert-flush",
-    time: "07:01",
-    until: "20:59",
-    everyMin: 2,
+    time: ops.alert_flush.from,
+    until: ops.alert_flush.until,
+    everyMin: ops.alert_flush.everyMin,
     runner: "route",
     route: "/api/internal/alert-flush",
     needs: "alert_flush_due",
@@ -131,7 +199,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // never fires `route` slots (worker/src/routes.ts does).
   slot({
     id: "pre-open",
-    time: "09:54",
+    time: a.preopen_recheck[0],
     runner: "route",
     route: "/api/internal/preopen",
     extra: { attempt: 1 },
@@ -147,7 +215,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "pre-open-retry",
-    time: "09:58",
+    time: a.preopen_recheck[1],
     runner: "route",
     route: "/api/internal/preopen",
     extra: { attempt: 2 },
@@ -169,9 +237,9 @@ export const AU_SLOTS: readonly Slot[] = [
   // later). Both DISABLED like every M5 slot; the dispatch clock never fires `route` slots.
   slot({
     id: "evening-review",
-    time: "20:00",
-    until: "20:45",
-    everyMin: 5,
+    time: ops.evening_review.from,
+    until: ops.evening_review.until,
+    everyMin: ops.evening_review.everyMin,
     runner: "route",
     route: "/api/internal/evening-review",
     timeoutMs: 58_000,
@@ -186,9 +254,9 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "evening-review-late",
-    time: "21:00",
-    until: "22:00",
-    everyMin: 15,
+    time: ops.evening_review_late.from,
+    until: ops.evening_review_late.until,
+    everyMin: ops.evening_review_late.everyMin,
     runner: "route",
     route: "/api/internal/evening-review",
     timeoutMs: 58_000,
@@ -205,7 +273,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // slot. Single shot at 08:00; the route itself is idempotent per day (one snapshot, one email key).
   slot({
     id: "morning",
-    time: "08:00",
+    time: ops.morning.at,
     runner: "route",
     route: "/api/internal/morning",
     timeoutMs: 58_000,
@@ -220,7 +288,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "universe",
-    time: "07:30",
+    time: feed.universe.at,
     runner: "worker",
     workflow: null,
     tradingDaysOnly: true,
@@ -237,9 +305,9 @@ export const AU_SLOTS: readonly Slot[] = [
   // on trading days, one request at a time with spacing (DAT-122); runs whenever dispatch is on.
   slot({
     id: "asx-fetch",
-    time: "08:00",
-    until: "19:00",
-    everyMin: 30,
+    time: feed.fetch.from,
+    until: feed.fetch.until,
+    everyMin: feed.fetch.everyMin,
     runner: "actions",
     workflow: "asx-fetch.yml",
     tradingDaysOnly: true,
@@ -251,7 +319,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "ingest-batch1",
-    time: "17:30",
+    time: a.b1,
     runner: "actions",
     workflow: "ingest-batch1.yml",
     // M5 T10 (D-107, decision 5): also on weekends and holidays, so the reduced pipeline writes the
@@ -270,14 +338,14 @@ export const AU_SLOTS: readonly Slot[] = [
   // Batch 1's catch-up window and waits for the completion marker; 2b (18:10) needs its result.
   slot({
     id: "arena-close",
-    time: "17:50",
+    time: a.b2a,
     runner: "actions",
     workflow: "arena-close.yml",
     tradingDaysOnly: true,
     marketBound: true,
     priority: 15,
     catchUpMin: 20,
-    recheck: { keyPrefix: "arena-2a:AU:", afterMin: 30, untilMin: 150 },
+    recheck: { keyPrefix: `arena-2a:${code}:`, afterMin: 30, untilMin: 150 },
     enabled: true,
     requiresListing: true,
     note: "Batch 2a close the books (T10, ARN-060): fills, stops, settlement, NAV, invariants; OFF until the Owner enables the arena",
@@ -285,15 +353,27 @@ export const AU_SLOTS: readonly Slot[] = [
   // M4 T8 (D-087): batch 2b "signals and orders". Allow-listed, slot OFF like arena-close: the
   // script waits for batch 2a of the same session and, with market.mode other than `full`, writes
   // only a skipped run record (D-066). It decides one session; there is no catch-up.
+  // M18 OPS-106 (D-666, D-1782): 2b waits 20 minutes for 2a and then records `skipped (no_2a_success)`.
+  // From 18:25 to 18:40 a 2b that has not closed its night is dispatched again ONCE, and only when 2a has
+  // a success/degraded record by then (`needsKeyPrefix`); after 18:40 the script itself records the night
+  // as degraded `late_2a`. Scheduling only: the inputs and outputs of 2b are unchanged.
   slot({
     id: "arena-signals",
-    time: "18:10",
+    time: a.b2b,
     runner: "actions",
     workflow: "arena-signals.yml",
     tradingDaysOnly: true,
     marketBound: true,
     priority: 16,
     catchUpMin: 30,
+    // M18 OPS-106 (D-666, D-1782): recheck from 18:25 to 18:40, once, needs a settled 2a (see above the slot).
+    recheck: {
+      keyPrefix: `arena-2b:${code}:`,
+      afterMin: 15,
+      untilMin: 30,
+      once: true,
+      needsKeyPrefix: `arena-2a:${code}:`,
+    },
     enabled: true,
     requiresListing: true,
     note: "Batch 2b signals and orders (M4 T8, ARN-060/020): A4/A3/A2, family rules, exits, FAM-001 entries, C2/C3 controls; OFF until the Owner enables the arena",
@@ -306,7 +386,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // recording `cutoff_poll_missing`. A single try (no catch-up): a poll later than 18:14 is too late.
   slot({
     id: "decision-cutoff",
-    time: "18:10",
+    time: a.cutoff_poll,
     runner: "actions",
     workflow: "asx-fetch.yml",
     tradingDaysOnly: true,
@@ -318,7 +398,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "late-sweep",
-    time: "19:35",
+    time: feed.late_sweep.at,
     runner: "worker",
     workflow: null,
     tradingDaysOnly: true,
@@ -330,7 +410,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "marker-check",
-    time: "19:50",
+    time: feed.marker_check.at,
     runner: "worker",
     workflow: null,
     tradingDaysOnly: true,
@@ -345,7 +425,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // (21:50); recorded as a decision in the T3 report.
   slot({
     id: "maintenance",
-    time: "22:30",
+    time: ops.maintenance.at,
     runner: "actions",
     workflow: "maintenance.yml",
     tradingDaysOnly: false,
@@ -357,7 +437,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "backup",
-    time: "23:00",
+    time: ops.backup.at,
     runner: "actions",
     workflow: "backup.yml",
     tradingDaysOnly: false,
@@ -369,7 +449,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "backfill-history",
-    time: "23:30",
+    time: ops.backfill_history.at,
     runner: "actions",
     workflow: "backfill-history.yml",
     tradingDaysOnly: false,
@@ -382,7 +462,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "backfill-prices",
-    time: "23:45",
+    time: ops.backfill_prices.at,
     runner: "actions",
     workflow: "backfill-prices.yml",
     tradingDaysOnly: false,
@@ -397,7 +477,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // enables the replay (weekly light, monthly full; the Owner dispatches the other modes by hand).
   slot({
     id: "replay",
-    time: "00:15",
+    time: ops.replay.at,
     runner: "actions",
     workflow: "replay.yml",
     tradingDaysOnly: false,
@@ -412,7 +492,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // Allow-listed, slot OFF until the Owner enables it (design 4.8).
   slot({
     id: "kb-archive",
-    time: "22:15",
+    time: ops.kb_archive.at,
     runner: "actions",
     workflow: "kb-archive.yml",
     tradingDaysOnly: false,
@@ -429,7 +509,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // from `worker_state.bakeoff_inputs` ({"candidates": "KIND:MODEL ...", optional trains/checked/store}).
   slot({
     id: "llm-bakeoff",
-    time: "10:00",
+    time: ops.llm_bakeoff.at,
     runner: "actions",
     workflow: "llm-bakeoff.yml",
     monthly: "first-saturday",
@@ -450,7 +530,7 @@ export const AU_SLOTS: readonly Slot[] = [
   // closes before the 21:00 review retry) and 20 min for 21:50 (ends before the 22:15 archive tick).
   slot({
     id: "watchdog-2040",
-    time: "20:40",
+    time: ops.watchdog_2040.at,
     runner: "actions",
     workflow: "watchdog.yml",
     fixedInputs: { slot: "2040" },
@@ -464,7 +544,7 @@ export const AU_SLOTS: readonly Slot[] = [
   }),
   slot({
     id: "watchdog-2150",
-    time: "21:50",
+    time: ops.watchdog_2150.at,
     runner: "actions",
     workflow: "watchdog.yml",
     fixedInputs: { slot: "2150" },
@@ -482,8 +562,8 @@ export const AU_SLOTS: readonly Slot[] = [
   // list skips them) and the routes themselves refuse until the Owner accepts the yahoo_delayed source.
   slot({
     id: "quote-poll",
-    time: "10:00",
-    until: "16:00",
+    time: a.quote_from,
+    until: a.quote_until,
     everyMin: 5,
     runner: "route",
     route: "/api/internal/pick-alerts",
@@ -499,8 +579,8 @@ export const AU_SLOTS: readonly Slot[] = [
   slot({
     id: "intraday-scan",
     // V2-I1 (D-770): offset 2 minutes so the scan never shares a tick with quote-poll (multiples of 5).
-    time: "10:32",
-    until: "15:32",
+    time: a.intraday_scan_from,
+    until: a.intraday_scan_until,
     everyMin: 30,
     runner: "route",
     route: "/api/internal/intraday-scan",
@@ -513,4 +593,146 @@ export const AU_SLOTS: readonly Slot[] = [
     requiresListing: true,
     note: "Intraday scan 10:32-15:32 every 30 min (M17, AGT-140); OFF until the Owner lists it and accepts the quote source",
   }),
+  // M18 OPS-103 (D-961): the yearly trading-calendar draft, 1 November 09:00 Melbourne (Sydney time is
+  // the same clock). calendar-draft.yml is dispatch-only; with no `market` and no `year` input it drafts
+  // next year for every market that has calendar rules (the market set lives in the script, so no market
+  // literal is added here). The draft is idempotent (it only inserts into a year with no rows), so a long
+  // catch-up is safe. Listed-only like every go-live slot.
+  slot({
+    id: "calendar-draft",
+    time: ops.calendar_draft.at,
+    runner: "actions",
+    workflow: "calendar-draft.yml",
+    annual: { month: 11, day: 1 },
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 29,
+    catchUpMin: 180,
+    enabled: true,
+    requiresListing: true,
+    note: "Yearly trading-calendar draft (M18 OPS-103, D-961): 1 November 09:00; OFF until the Owner lists it",
+  }),
+  // M18 OPS-104 (D-958): the daily Turso usage sample, 06:40 Melbourne, before the market day. The
+  // workflow holds the platform token (a GitHub environment secret, never on Vercel or here) and skips
+  // with source `unavailable` while it is absent. Idempotent per day (one sample row per run).
+  slot({
+    id: "turso-usage",
+    time: ops.turso_usage.at,
+    runner: "actions",
+    workflow: "turso-usage.yml",
+    tradingDaysOnly: false,
+    marketBound: false,
+    priority: 30,
+    catchUpMin: 120,
+    enabled: true,
+    requiresListing: true,
+    note: "Daily Turso usage sample (M18 OPS-104, D-958): 06:40; OFF until the Owner lists it",
+  }),
 ];
+
+/**
+ * The slot table of one enabled market row, in table order (market-bound and ops slots interleaved as
+ * designed). Throws `unsupported zone` for a market whose zone the Worker cannot compute (D-1817) and
+ * RangeError for an unusable `slots_json`; the clock catches both per market and skips that market.
+ */
+export function slotsFor(row: MarketRow, opts: TableOptions = {}): readonly Slot[] {
+  if (!zoneSupported(row.tz)) throw new RangeError("unsupported zone");
+  const a = anchorsOf(row);
+  const code = row.code;
+  // the ops table as the one shape its entries share (a point has `at`, a window has from/until/everyMin)
+  const ops = OPS_SLOT_TIMES as unknown as Record<
+    string,
+    { at: string; from: string; until: string; everyMin: number }
+  >;
+  // the feed times of this market; a market with no entry has no feed slot (the table is built with the home times
+  // as placeholders and the feed ids are then filtered out, D-1117)
+  const hasFeed = Object.prototype.hasOwnProperty.call(FEED_SLOT_TIMES, code);
+  const feed = hasFeed ? FEED_SLOT_TIMES[code]! : FEED_SLOT_TIMES[HOME_MARKET]!;
+  const table = tableOf({ code, a, ops, feed });
+  const zoned = !isHomeRule(row.tz);
+  const slots = table
+    .filter((x) => (hasFeed || !FEED_IDS.has(x.id)) && (opts.ops !== false || x.marketBound))
+    .map((x) => {
+      if (!x.marketBound) return x;
+      const out: Slot = { ...x };
+      if (zoned) out.tz = row.tz;
+      if (opts.suffix === true) {
+        out.id = `${x.id}:${code}`;
+        if (x.after !== undefined) out.after = `${x.after}:${code}`;
+      }
+      if (opts.tag === true) {
+        out.market = code;
+        // the market reaches the job: the `market` input of a workflow, the `market` field of a signed post
+        // (the feed workflow has no such input and only the home market has it)
+        if (out.runner === "actions" && !FEED_IDS.has(x.id)) {
+          out.fixedInputs = { ...(x.fixedInputs ?? {}), market: code };
+        }
+        if (out.runner === "route") out.extra = { ...(x.extra ?? {}), market: code };
+      }
+      return out;
+    });
+  // M20 A2 (D-1101, D-1117): the rollback kill. Only a market with `rollback_at` set has it; it is not market-bound
+  // (the market is off by then) and runs at open + 2 minutes on a trading day of the market, in its zone.
+  const kill = killSlot(row);
+  return kill === null ? slots : [...slots, kill];
+}
+
+/**
+ * The `arena-kill:<CODE>` slot of a market in rollback (D-1101): the arena close with `kill=1` at the open + 2 minutes
+ * on the market's next trading day. Null while the row has no `rollback_at`. The workflow input `kill` and the close
+ * itself are stream S1's; this is only the schedule. It never disables the market itself.
+ */
+function killSlot(row: MarketRow): Slot | null {
+  if (typeof row.rollback_at !== "string" || row.rollback_at === "") return null;
+  const at = hhmm(row.open_time) + KILL_AFTER_OPEN_MIN;
+  const time = `${String(Math.floor(at / 60)).padStart(2, "0")}:${String(at % 60).padStart(2, "0")}`;
+  // built from a named spec, not a table literal (the architecture reader counts the table's entries)
+  const spec: SlotInput = {
+    id: `arena-kill:${row.code}`,
+    time,
+    runner: "actions",
+    workflow: "arena-close.yml",
+    fixedInputs: { market: row.code, kill: "market_off" },
+    market: row.code,
+    tradingDaysOnly: true,
+    marketBound: false,
+    priority: 14,
+    catchUpMin: 20,
+    enabled: true,
+    note: "Rollback kill (M20 D-1101): closes every open book at the open with reason market_off, then disables the market; exists only while the market row has rollback_at",
+  };
+  const s = slot(spec);
+  return isHomeRule(row.tz) ? s : { ...s, tz: row.tz };
+}
+
+/**
+ * The slot table of every enabled market, in code order (D-1811). One market: `slotsFor(row)` untagged (the
+ * AU table of the snapshot). Several: the first market's full table, tagged, plus each later market's
+ * market-bound slots with `:<code>` ids and tags; the ops slots appear once. A market whose zone or anchors
+ * are unusable is left out and named in `skipped` (never thrown: one broken row must not stop the others).
+ */
+let tableOverride: readonly Slot[] | null = null;
+/** Test hook: the whole-Worker budget tests run a table they modified (every slot on, piled up). Never used in production. */
+export function overrideSlotTableForTests(table: readonly Slot[] | null): void {
+  tableOverride = table;
+}
+
+export function slotTable(rows: readonly MarketRow[]): { slots: Slot[]; skipped: string[] } {
+  if (tableOverride !== null) return { slots: [...tableOverride], skipped: [] };
+  const ok: { row: MarketRow; usable: boolean }[] = rows.map((row) => {
+    try {
+      slotsFor(row);
+      return { row, usable: true };
+    } catch {
+      return { row, usable: false };
+    }
+  });
+  const usable = ok.filter((x) => x.usable).map((x) => x.row);
+  const skipped = ok.filter((x) => !x.usable).map((x) => x.row.code);
+  const slots: Slot[] = [];
+  const multi = usable.length > 1;
+  usable.forEach((row, i) => {
+    slots.push(...slotsFor(row, { tag: multi, suffix: multi && i > 0, ops: i === 0 }));
+  });
+  return { slots, skipped };
+}

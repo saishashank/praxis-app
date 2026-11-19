@@ -4,11 +4,13 @@
 // gate itself could not run.
 //
 //   node scripts/ci/release-gate.mjs --mode full|infrastructure --sha <40-hex>
-//        [--real-key-since YYYY-MM-DD] [--signoff-exists] [--ci-jobs app,e2e,...]
+//        [--real-key-since YYYY-MM-DD] [--signoff-exists] [--ci-jobs app,e2e,...] [--branch <head>]
 //
 //   --mode is REQUIRED (no default). "infrastructure" is the first M8 release only (data-only mode,
 //   BLD-024); it is refused with --signoff-exists. --real-key-since switches the restore-drill
 //   condition to real-key mode (only drills created on or after that date count).
+//   --branch: the head branch whose push CI runs make the `ci-streak` condition (D-964); default
+//   GITHUB_HEAD_REF (a pull_request run), else GITHUB_REF_NAME; unknown = that condition fails.
 //   --sha: on a pull_request run pass the PR head commit (github.event.pull_request.head.sha), not
 //   GITHUB_SHA (the merge commit), through an env variable.
 //
@@ -27,6 +29,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const SHA = /^[0-9a-f]{40}$/;
 const REPO = /^[A-Za-z0-9-]+\/[A-Za-z0-9_-][A-Za-z0-9._-]*$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const BRANCH = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$/;
 const TIMEOUT_MS = 30_000; // threshold-ok: request timeout in ms
 const RUNS_PER_LIST = 30; // threshold-ok: how many past runs of one workflow are read
 const MAX_JOB_READS = 40; // threshold-ok: cap on per-run job reads per workflow
@@ -59,13 +62,21 @@ export function createClient(env, fetchImpl = fetch) {
 }
 
 export function parseArgs(argv) {
-  const o = { mode: null, sha: null, realKeySince: null, signoffExists: false, ciJobs: null };
+  const o = {
+    mode: null,
+    sha: null,
+    realKeySince: null,
+    signoffExists: false,
+    ciJobs: null,
+    branch: null,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--mode") o.mode = argv[++i] ?? null;
     else if (a === "--sha") o.sha = argv[++i] ?? null;
     else if (a === "--real-key-since") o.realKeySince = argv[++i] ?? null;
     else if (a === "--ci-jobs") o.ciJobs = (argv[++i] ?? "").split(",").filter(Boolean);
+    else if (a === "--branch") o.branch = argv[++i] ?? null;
     else if (a === "--signoff-exists") o.signoffExists = true;
     else return { error: "unknown option" };
   }
@@ -75,6 +86,9 @@ export function parseArgs(argv) {
   if (!o.sha || !SHA.test(o.sha)) return { error: "--sha must be a 40-hex commit id" };
   if (o.realKeySince !== null && !DATE.test(o.realKeySince)) {
     return { error: "--real-key-since must be YYYY-MM-DD" };
+  }
+  if (o.branch !== null && !BRANCH.test(o.branch)) {
+    return { error: "--branch must be a branch name" };
   }
   if (o.ciJobs !== null && !o.ciJobs.every((j) => /^[\w.-]+$/.test(j))) {
     return { error: "--ci-jobs must be a comma-separated list of job names" };
@@ -207,15 +221,22 @@ export async function gather({ opts, repo, client, local, now, runId }) {
       return c?.commit?.committer?.date ?? null;
     });
     const dayMs = 86_400_000; // threshold-ok: ms per day
-    input.stagingE2eDay =
+    // D-964: the staging runs are gone. The recorded day is a job of the CI run read above; the streak
+    // reads only run conclusions (no job reads); ZAP is the run of zap-baseline.yml on this commit.
+    input.ciStreak = opts.branch
+      ? ((await settle(() =>
+          runsOf(
+            client,
+            repo,
+            "ci.yml",
+            `&branch=${encodeURIComponent(opts.branch)}&event=push&status=completed`,
+            { jobsFor: () => false },
+          ),
+        )) ?? null)
+      : null;
+    input.zapLocal =
       (await settle(() =>
-        runsOf(client, repo, "staging-e2e-day.yml", `&head_sha=${opts.sha}&status=completed`),
-      )) ?? [];
-    input.nightly =
-      (await settle(() => runsOf(client, repo, "nightly.yml", "&status=completed"))) ?? [];
-    input.zapStaging =
-      (await settle(() =>
-        runsOf(client, repo, "zap-baseline.yml", "&event=workflow_dispatch&status=completed"),
+        runsOf(client, repo, "zap-baseline.yml", `&head_sha=${opts.sha}&status=completed`),
       )) ?? [];
     input.restoreDrill =
       (await settle(() =>
@@ -237,6 +258,10 @@ export async function main(
   if (opts.error) {
     out(`release-gate: ${opts.error}`);
     return 2;
+  }
+  if (opts.branch === null) {
+    const b = env.GITHUB_HEAD_REF || env.GITHUB_REF_NAME || "";
+    opts.branch = BRANCH.test(b) ? b : null;
   }
   const repo = env.GITHUB_REPOSITORY;
   if (!repo || !REPO.test(repo)) {

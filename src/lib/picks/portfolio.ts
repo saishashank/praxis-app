@@ -347,7 +347,7 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
     }
     if (bar.highMicro >= pos.aim) {
       const price = bar.openMicro > pos.aim ? bar.openMicro : pos.aim;
-      const fee = feeFor(p.costProfile, pos.qty * price, "sell");
+      const fee = feeFor(p.costProfile, pos.qty * price, "sell", { quantity: pos.qty });
       return sell(pos, d, pos.qty, price, fee, "aim", exitWords("aim", pos.strategy, p));
     }
     return false;
@@ -499,10 +499,10 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
       const risk = divFloor(v * BigInt(prof.riskPpm) * entry, BIG_PPM * (entry - k.stopMicro));
       const budget = min(room, divFloor(v, BigInt(prof.holdings)), part(v, cap), risk, cash);
       let qty = divFloor(budget, entry);
-      let fee = qty > 0n ? feeFor(p.costProfile, qty * entry, "buy") : 0n;
+      let fee = qty > 0n ? feeFor(p.costProfile, qty * entry, "buy", { quantity: qty }) : 0n;
       while (qty > 0n && qty * entry + fee > cash) {
         qty -= 1n;
-        fee = qty > 0n ? feeFor(p.costProfile, qty * entry, "buy") : 0n;
+        fee = qty > 0n ? feeFor(p.costProfile, qty * entry, "buy", { quantity: qty }) : 0n;
       }
       if (qty === 0n) {
         skip("cash");
@@ -513,7 +513,7 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
         skip("small");
         continue;
       }
-      if (!costOk(fee + feeFor(p.costProfile, amount, "sell"), amount, 1n)) {
+      if (!costOk(fee + feeFor(p.costProfile, amount, "sell", { quantity: qty }), amount, 1n)) {
         skip("cost");
         continue;
       }
@@ -626,7 +626,11 @@ export function simulatePortfolio(input: PortfolioInput, p: PortfolioParams): Po
       if (qty > pos.qty) qty = pos.qty;
       if ((pos.qty - qty) * price < p.minParcelMicro) qty = pos.qty;
       const amount = qty * price;
-      if (qty <= 0n || !costOk(feeFor(p.costProfile, amount, "sell"), amount, 2n)) continue;
+      if (
+        qty <= 0n ||
+        !costOk(feeFor(p.costProfile, amount, "sell", { quantity: qty }), amount, 2n)
+      )
+        continue;
       pos.plan = {
         reason: "rebalance",
         qty,

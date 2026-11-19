@@ -40,6 +40,7 @@ import {
 } from "@/lib/cortex/learn/store";
 import { WARM_EVENT_SEQ } from "@/lib/cortex/learn/warmConst";
 import { FAMILY_WORD, CLUSTER_WORD } from "@/lib/cortex/phrases";
+import { EMPTY_RESEARCH, loadResearchView, type ResearchView } from "@/lib/research/pageView";
 import { formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
 import {
   loaded,
@@ -186,6 +187,8 @@ export type CortexView = {
   sectorTilt: { d: string; rows: { book: string; sector: string; tiltPp: number }[] } | null;
   coldStart: { nights: number; firstD: string | null; lastD: string | null; warming: boolean };
   opinions: OpinionView[];
+  /** The four research sections (M23 M4; D-1760): tests and their one look, waiting for data, risk monitors, sector series. */
+  research: ResearchView;
   /** The learning Cortex (null until its first generation is written). */
   learner: LearnerView | null;
   tickCost: TickRowView[];
@@ -401,8 +404,8 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
         total,
         reasons,
         shadowFilled: n,
-        shadowMeanNet: masked || n === 0 ? null : money(Math.round(net / n)),
-        shadowTotalNet: masked || n === 0 ? null : money(net),
+        shadowMeanNet: masked || n === 0 ? null : money(Math.round(net / n), v.currency),
+        shadowTotalNet: masked || n === 0 ? null : money(net, v.currency),
         idleSharePpm:
           total + bookNights === 0 ? null : Math.round((total / (total + bookNights)) * PPM),
       };
@@ -445,6 +448,17 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
     });
     return r.rows.map((x) => ({ kind: str(x.kind), total: num(x.n), settled: num(x.s) }));
   }, [] as OpinionView[]);
+
+  // research half (M23 M4): dates in trading terms, an ISO week for a masked viewer; proposal counts for the Owner only (D-1643)
+  const research = await soft(
+    () =>
+      loadResearchView(db, {
+        market,
+        owner: role === "owner",
+        when: (d) => (masked ? weekOf(d) : formatDay(d)),
+      }),
+    EMPTY_RESEARCH,
+  );
 
   const tickCost: TickRowView[] = TICK_PRICES_CENTS.map((c) => {
     const row = tickCostRow(BigInt(c) * CENTS_TO_MICRO);
@@ -495,6 +509,7 @@ export async function loadCortex(deps: LoaderDeps): Promise<Loaded<CortexView>> 
       warming: mapsLoaded === 0,
     },
     opinions,
+    research,
     learner,
     tickCost,
     controls: {

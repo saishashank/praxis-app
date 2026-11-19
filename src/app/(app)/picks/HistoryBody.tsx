@@ -58,7 +58,7 @@ function priceOn(m: HistoryRow["entry"], d: string | null) {
   if (!m) return <NotMeasured>—</NotMeasured>;
   return (
     <span className="block">
-      <Money micro={m.micro} />
+      <Money micro={m.micro} currency={m.currency} />
       {d ? <span className="block text-xs text-text-muted">{formatDay(d)}</span> : null}
     </span>
   );
@@ -84,7 +84,7 @@ function changeCell(r: HistoryRow) {
         <span className="block text-xs text-text-muted">{change(r.netPpm)} after costs</span>
       ) : r.status === "open" && r.now ? (
         <span className="block text-xs text-text-muted">
-          now <Money micro={r.now.micro} />
+          now <Money micro={r.now.micro} currency={r.now.currency} />
         </span>
       ) : null}
     </span>
@@ -102,9 +102,15 @@ function stockCell(r: HistoryRow) {
       ) : null}
       {r.plan ? (
         <span className="block text-xs text-text-muted">
-          Plan: buy up to {r.plan.buyUpTo ? <Money micro={r.plan.buyUpTo.micro} /> : "—"}, stop{" "}
-          {r.plan.stop ? <Money micro={r.plan.stop.micro} /> : "—"}, aim{" "}
-          {r.plan.aim ? <Money micro={r.plan.aim.micro} /> : "—"}
+          Plan: buy up to{" "}
+          {r.plan.buyUpTo ? (
+            <Money micro={r.plan.buyUpTo.micro} currency={r.plan.buyUpTo.currency} />
+          ) : (
+            "—"
+          )}
+          , stop{" "}
+          {r.plan.stop ? <Money micro={r.plan.stop.micro} currency={r.plan.stop.currency} /> : "—"},
+          aim {r.plan.aim ? <Money micro={r.plan.aim.micro} currency={r.plan.aim.currency} /> : "—"}
         </span>
       ) : null}
     </span>

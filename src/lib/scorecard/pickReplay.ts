@@ -51,10 +51,12 @@ import {
   type ScoredPick,
 } from "./pickScorecard";
 import { top5Movers } from "@/lib/learning/dailyTop5";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET; // the scorecard replays the home market only (main D-1060: AU)
 const WINDOW_DAYS = 480; // threshold-ok: same bar window as the nightly shortlist (shortlistLoad.ts)
-const INDEX_CODE = "AXJO";
+const INDEX_CODE: string = homeProfile().benchmarkIndex!;
 /** The manifest's schema stamp: a constant, so a night's manifest id does not depend on the snapshot file. */
 const SCHEMA_SHA = "pick-scorecard-replay";
 const PPM = 1_000_000; // threshold-ok: parts per million

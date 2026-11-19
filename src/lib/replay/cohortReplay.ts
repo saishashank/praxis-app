@@ -35,6 +35,7 @@
 // Determinism (2.8): no clock, no Math.random; every iteration over codes, cohorts and orders is
 // sorted; the PRNG is the arena SplitMix64 seeded by `deriveRngSeed(master, <scope>)`.
 import { PROGRESS_SESSIONS_DEFAULT } from "@/lib/config/keys";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import {
   evaluateExit,
   runFamilies,
@@ -90,7 +91,9 @@ import {
   type CohortParams,
   type ParamOverrides,
 } from "@/lib/arena/cohort";
-import { COST_PROFILES, feeFor, type CostProfile } from "@/lib/arena/costs";
+import { cohortCostProfile, feeFor, type CostProfile } from "@/lib/arena/costs";
+import { profileOnDate } from "@/lib/arena/costAsOf";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import {
   fillCloseSignalExit,
   fillEntryLimit,
@@ -105,7 +108,6 @@ import {
   availableCash,
   fillTxns,
   fillNetMicro,
-  SETTLEMENT_LAG_SESSIONS,
   seedTxn,
   settlementsDue,
   txnRows,
@@ -191,6 +193,11 @@ export type CohortReplaySource = LedgerSource & {
    * Without it the `halted` flag of the family facts of the session is used.
    */
   halted?(code: string, d: string): boolean | null;
+  /**
+   * M20 D-1109/D-1163: the session of `code` on `d` closed at a price-band limit (IN); no fill is possible. An exit
+   * waits and an entry is cancelled, as for a halt. Absent: never locked (AU, US).
+   */
+  bandLocked?(code: string, d: string): boolean;
   /** The entry decision of the data-quality gate (`entriesAllowed`) on `d`; absent: no quality data. */
   qualityGate?(code: string, d: string): EntryDecision;
   /** Short-interest change (latest minus the value a window earlier, ppm) usable on `d`; absent: unknown. */
@@ -213,6 +220,18 @@ export type ReplayProgress = {
   readonly cohortsEnded: number;
 };
 
+/** Work counters of one `onStep` call. */
+export type ReplayStep = {
+  /** Sessions processed so far (1-based) of `total`. */
+  readonly session: number;
+  readonly total: number;
+  readonly d: string;
+  /** Cohort-days evaluated so far over the whole run (every live cohort on every session). */
+  readonly cohortDays: number;
+  /** Cohorts started so far. */
+  readonly cohortsStarted: number;
+};
+
 /** One stored cohort-day (diagnostics and the parity test against the database engine). */
 export type CohortDayTrace = {
   readonly cohortId: string;
@@ -227,6 +246,8 @@ export type CohortDayTrace = {
 
 export type CohortReplayOptions = {
   readonly params: AgentParams;
+  /** The market replayed (default the home market): its settlement lag, tick grid, buckets, cost profile and seed (D-1154). */
+  readonly market?: string;
   /** First start session (default: the second session). Starts repeat every `rolling_start_step`. */
   readonly from?: string;
   /** Last session processed (default: the last of the source). */
@@ -250,6 +271,11 @@ export type CohortReplayOptions = {
   /** ARN-026 haircut and the sessions before it (default `DEFAULT_SUSPENSION`: 1/2 from session 21). */
   readonly suspension?: SuspensionConfig;
   readonly progress?: (p: ReplayProgress) => void;
+  /**
+   * M18 TST-136 (D-968): called once per processed session with the work done so far, so a test can assert the
+   * amount of work (sessions, cohort-days) instead of measuring wall-clock time. Off by default; it changes nothing.
+   */
+  readonly onStep?: (s: ReplayStep) => void;
   /** Called with every cohort-day after its NAV is computed (off by default). */
   readonly trace?: (e: CohortDayTrace) => void;
   /** Restrict the registry to these execution ids (default: all). */
@@ -569,6 +595,8 @@ type DayEnv = {
   bar(code: string): ViewBar | null;
   /** Halted today (universe flag, ARN-026); a trading day also advances the code's halt clock. */
   halted(code: string): boolean;
+  /** Closed at a price-band limit today (IN): no fill; an exit waits, an entry is cancelled (D-1163). */
+  bandLocked(code: string): boolean;
   positionFacts(code: string): PositionFacts | null;
   readonly advPrev: ReadonlyMap<string, bigint>;
   readonly prevClose: ReadonlyMap<string, bigint>;
@@ -585,6 +613,8 @@ export function replayCohorts(
   opts: CohortReplayOptions,
 ): CohortReplayResult {
   const { params } = opts;
+  const market = opts.market ?? HOME_MARKET;
+  const money = marketMoney(market); // D-1154: lag, tick grid and buckets of THIS market (the home market = the defaults)
   const sessions = src.sessions;
   if (sessions.length < 2) throw new RangeError("a replay needs at least two sessions");
   const index = new Map<string, number>();
@@ -674,6 +704,7 @@ export function replayCohorts(
 
   const cohorts: Cohort[] = [];
   let live: Cohort[] = [];
+  let cohortDays = 0; // onStep: cohort-days evaluated so far
   const startsSeen: string[] = [];
   let advPrev = new Map<string, bigint>();
   const advMemory = new Map<string, bigint>(); // last known ADV per code (marks of a code without facts)
@@ -688,8 +719,8 @@ export function replayCohorts(
     startIdx: number,
   ): Cohort => {
     const startD = sessions[startIdx]!;
-    const p = resolveCohortParams(opts.cohortParams?.(execution) ?? {});
-    const profile = COST_PROFILES[p.costProfile];
+    const p = resolveCohortParams({ market, ...(opts.cohortParams?.(execution) ?? {}) });
+    const profile = cohortCostProfile(p);
     const lev = group === "reality" ? (realityLeverage ?? leverage) : leverage;
     const cfg = carriesSleeve(execution)
       ? { ...defaultSleeveConfig(profile), leverage: BigInt(lev) }
@@ -773,17 +804,19 @@ export function replayCohorts(
   const fillEnv = (c: Cohort, bar: ViewBar, env: DayEnv, code: string, first = true): FillEnv => ({
     bar: { openMicro: bar.open, highMicro: bar.high, lowMicro: bar.low, closeMicro: bar.close },
     advMicro: env.advPrev.get(code) ?? advMemory.get(code) ?? 0n,
-    profile: c.profile,
+    profile: profileOnDate(c.profile, env.d),
     tickCrossFactor: c.params.tickCrossFactor,
+    buckets: money.buckets,
+    tickTable: money.tickTable,
     feeContext: { code, firstBuyOfSecurityToday: first },
   });
 
-  /** T+2 trading sessions of THIS calendar (the source's); never settles inside the data when beyond it. */
+  /** The market's settlement lag in trading sessions of THIS calendar (AU T+2, IN T+1); never settles inside the data when beyond it. */
   const settleItem = (fill: LedgerFill, idx: number): SettlementItem => ({
     fillId: fill.id,
     side: fill.side,
     tradeD: fill.d,
-    settleD: sessions[idx + SETTLEMENT_LAG_SESSIONS] ?? NEVER,
+    settleD: sessions[idx + money.lagSessions] ?? NEVER,
     netMicro: fillNetMicro(fill),
   });
 
@@ -911,7 +944,7 @@ export function replayCohorts(
     for (const pos of [...c.positions.values()].sort((a, b) => cmp(a.code, b.code))) {
       if (pos.pendingCs === null) continue;
       const bar = env.bar(pos.code);
-      if (bar === null || env.halted(pos.code)) continue; // waits for a session with a bar, not halted
+      if (bar === null || env.halted(pos.code) || env.bandLocked(pos.code)) continue; // waits for a session with a bar, not halted or band-locked
       const fe = fillEnv(c, bar, env, pos.code);
       const cs = fillCloseSignalExit(fe, pos.qty);
       const level = effLevel(pos);
@@ -939,6 +972,7 @@ export function replayCohorts(
           {
             ...fe,
             halted: env.halted(o.code),
+            bandLocked: env.bandLocked(o.code),
             // the gate result of the fill session; without quality data every code passes (flagged)
             gate:
               gateSource === undefined
@@ -971,6 +1005,7 @@ export function replayCohorts(
         availableCashMicro: cashNow(c, env),
         profile: c.profile,
         feeContext: fe.feeContext,
+        minParcelMicro: c.params.minParcelMicro, // the market's parcel floor (D-1154)
       });
       if (sized.status === "cancel") continue; // cancelled: cash
       if (sized.status === "resized") {
@@ -1031,7 +1066,7 @@ export function replayCohorts(
     if (c.positions.size === 0) return;
     for (const pos of [...c.positions.values()].sort((a, b) => cmp(a.code, b.code))) {
       const bar = env.bar(pos.code);
-      if (bar === null || env.halted(pos.code)) continue;
+      if (bar === null || env.halted(pos.code) || env.bandLocked(pos.code)) continue;
       const level = effLevel(pos);
       const fill = fillIntradayStop(fillEnv(c, bar, env, pos.code), pos.qty, level, {
         afterOpen: pos.entryIdx === env.i,
@@ -1096,7 +1131,7 @@ export function replayCohorts(
     };
     for (const t of c.sleeveTrades.filter((x) => x.closed === null)) {
       const bar = env.bar(t.code);
-      if (bar === null || env.halted(t.code)) continue;
+      if (bar === null || env.halted(t.code) || env.bandLocked(t.code)) continue;
       const fe: FillEnv = { ...fillEnv(c, bar, env, t.code), profile: cfg.profile };
       const afterOpen = t.openD === env.d;
       const closeout = quoteSleeveExit(
@@ -1325,6 +1360,7 @@ export function replayCohorts(
       sleeveStage(c, env, c.cfg);
     }
     navStage(c, env);
+    cohortDays += 1;
     opts.trace?.({
       cohortId: c.id,
       d: env.d,
@@ -1380,6 +1416,7 @@ export function replayCohorts(
         plan: pos.plan,
         fillDay: pos.entryD,
         fillMicro: pos.fillFrame,
+        initialStopMicro: pos.level0,
         sessionsHeld: env.i - pos.entryIdx + 1,
         closeMicro: bar.close,
         highestCloseMicro: pos.highest,
@@ -1838,6 +1875,7 @@ export function replayCohorts(
       facts,
       bar,
       halted,
+      bandLocked: (code) => src.bandLocked?.(code, d) === true,
       positionFacts: (code) => {
         let p = pfMemo.get(code);
         if (p === undefined) {
@@ -1933,6 +1971,13 @@ export function replayCohorts(
     live = stillLive;
     advPrev = advNow;
     prevClose = closeNow;
+    opts.onStep?.({
+      session: i - firstStart + 1,
+      total: endIdx - firstStart + 1,
+      d,
+      cohortDays,
+      cohortsStarted: cohorts.length,
+    });
     opts.progress?.({
       stage: "sessions",
       session: i - firstStart + 1,
@@ -1981,7 +2026,7 @@ export function replayCohorts(
     })
     .sort((a, b) => cmp(a.startD, b.startD) || cmp(a.id, b.id));
   return {
-    market: "AU",
+    market,
     from: sessions[firstStart]!,
     to: sessions[endIdx]!,
     sessions: sessions.length,

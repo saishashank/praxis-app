@@ -130,8 +130,8 @@ function DataControlsSection(props: {
       </h2>
       {c.dataOnly && (
         <p role="status" className="m-0 text-sm text-text-muted">
-          Production data-only mode (BLD-024): the nightly data pipeline runs; the Arena, emails and
-          decision agents are off.
+          Production data-only mode: the nightly data pipeline runs; the Arena, emails and decision
+          agents are off.
         </p>
       )}
       <div className="ui-card min-w-0 divide-y divide-border rounded-lg border border-border bg-surface">
@@ -155,7 +155,7 @@ function DataControlsSection(props: {
               <StatePill on={false} />
               <span className="text-xs text-text-muted">
                 {!yahooReady
-                  ? "Accept the Yahoo source (O-26) first."
+                  ? "Accept the Yahoo source first."
                   : "Confirm the AU trading calendar first."}
               </span>
             </>
@@ -202,7 +202,7 @@ function DataControlsSection(props: {
           ) : (
             <>
               <StatePill on={false} />
-              <span className="text-xs text-text-muted">Accept the ASX source (O-23) first.</span>
+              <span className="text-xs text-text-muted">Accept the ASX source first.</span>
             </>
           )}
           {owner && c.asxTripped && (
@@ -536,6 +536,9 @@ export default async function HealthPage() {
     if (owner && summary.intradayLines && summary.intradayLines.length > 0) {
       nav.push({ id: "intraday-h", label: "Intraday polling" });
     }
+    if (owner && summary.dataLines && summary.dataLines.length > 0) {
+      nav.push({ id: "data-feeds-h", label: "Data feeds" });
+    }
     if (summary.quality) nav.push({ id: "quality-h", label: "Data quality" });
     if (owner && summary.secrets) nav.push({ id: "secrets-h", label: "Secrets" });
     if (owner && summary.workerSecrets) {
@@ -738,6 +741,19 @@ export default async function HealthPage() {
                 </h2>
                 <ul className="list-disc pl-6 text-sm">
                   {summary.intradayLines.map((l) => (
+                    <li key={l}>{l}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {owner && summary.dataLines && summary.dataLines.length > 0 && (
+              <section aria-labelledby="data-feeds-h" className="flex flex-col gap-3">
+                <h2 id="data-feeds-h" className="text-xl font-semibold">
+                  Data feeds
+                </h2>
+                <ul className="list-disc pl-6 text-sm">
+                  {summary.dataLines.map((l) => (
                     <li key={l}>{l}</li>
                   ))}
                 </ul>

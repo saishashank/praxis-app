@@ -26,7 +26,7 @@ import { Term } from "@/components/ui/Overlays";
 import { Banner, EmptyState, ShowDetails } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
-import { formatMicro, formatPpm, gainLossGlyph } from "@/lib/view/format";
+import { currencyFormatFor, formatMicro, formatPpm, gainLossGlyph } from "@/lib/view/format";
 import { NavBar } from "../NavBar";
 import { OutcomeBars } from "../OutcomeBars";
 import { StrategyTabs } from "../StrategyTabs";
@@ -80,7 +80,16 @@ function cifRowsOf(ev: EvidenceRow | null): CifRow[] {
   }));
 }
 
-function Leg({ title, leg }: { title: string; leg: SleeveLegView | null }) {
+function Leg({
+  title,
+  leg,
+  currency,
+}: {
+  title: string;
+  leg: SleeveLegView | null;
+  currency: string;
+}) {
+  const fmt = currencyFormatFor(currency);
   return (
     <Card title={title} headingLevel={4}>
       {leg ? (
@@ -97,7 +106,9 @@ function Leg({ title, leg }: { title: string; leg: SleeveLegView | null }) {
           <dd className="m-0 text-right">
             {leg.netPl ? (
               <GainLoss value={leg.netPl.micro} kind="cents">
-                {formatMicro(leg.netPl.micro, { sign: "always" })}
+                {formatMicro(leg.netPl.micro, currencyFormatFor(leg.netPl.currency), {
+                  sign: "always",
+                })}
               </GainLoss>
             ) : (
               <NotMeasured />
@@ -107,10 +118,10 @@ function Leg({ title, leg }: { title: string; leg: SleeveLegView | null }) {
           <dd className="m-0 text-right">
             {leg.navMinusSeed ? (
               <>
-                <Money micro={leg.navMinusSeed.meanMicro} sign="always" />
+                <Money micro={leg.navMinusSeed.meanMicro} currency={currency} sign="always" />
                 <span className="block text-xs text-text-muted">
-                  90% range {formatMicro(leg.navMinusSeed.lowerMicro, { sign: "always" })} to{" "}
-                  {formatMicro(leg.navMinusSeed.upperMicro, { sign: "always" })},{" "}
+                  90% range {formatMicro(leg.navMinusSeed.lowerMicro, fmt, { sign: "always" })} to{" "}
+                  {formatMicro(leg.navMinusSeed.upperMicro, fmt, { sign: "always" })},{" "}
                   {leg.navMinusSeed.n} rounds
                 </span>
               </>
@@ -142,6 +153,8 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
   if (!detail.data.found) notFound();
   const d = detail.data;
   const tile = d.tile;
+  const ccy = tile?.currency ?? "";
+  const fmt = currencyFormatFor(ccy);
   const ex = await loadStrategyExtras(
     deps,
     id,
@@ -173,12 +186,22 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       t.returnPpm === null
         ? null
         : `${gainLossGlyph(t.returnPpm)} ${formatPpm(t.returnPpm, { sign: "always" })}`,
-    pnlText: t.pnl ? formatMicro(t.pnl.micro, { sign: "always" }) : null,
-    entryPriceText: t.entryPrice ? formatMicro(t.entryPrice.micro) : null,
-    exitPriceText: t.exitPrice ? formatMicro(t.exitPrice.micro) : null,
-    stopText: t.stop ? formatMicro(t.stop.micro) : null,
-    targetText: t.target ? formatMicro(t.target.micro) : null,
-    lastPriceText: t.lastPrice ? formatMicro(t.lastPrice.micro) : null,
+    pnlText: t.pnl
+      ? formatMicro(t.pnl.micro, currencyFormatFor(t.pnl.currency), { sign: "always" })
+      : null,
+    entryPriceText: t.entryPrice
+      ? formatMicro(t.entryPrice.micro, currencyFormatFor(t.entryPrice.currency))
+      : null,
+    exitPriceText: t.exitPrice
+      ? formatMicro(t.exitPrice.micro, currencyFormatFor(t.exitPrice.currency))
+      : null,
+    stopText: t.stop ? formatMicro(t.stop.micro, currencyFormatFor(t.stop.currency)) : null,
+    targetText: t.target ? formatMicro(t.target.micro, currencyFormatFor(t.target.currency)) : null,
+    noTarget: t.entryPrice !== null && t.target === null,
+    targetReached: t.targetReached,
+    lastPriceText: t.lastPrice
+      ? formatMicro(t.lastPrice.micro, currencyFormatFor(t.lastPrice.currency))
+      : null,
     lastPriceAtText: t.lastPriceAt ? `delayed, ${t.lastPriceAt}` : null,
     openReturnText:
       t.open && t.lastPrice && t.entryPrice && t.entryPrice.micro > 0
@@ -201,7 +224,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
     ex.zeroEdge && ex.zeroEdge.meanNavMinusSeedMicro !== null && seedMicro !== null
       ? {
           level: dollars(seedMicro + ex.zeroEdge.meanNavMinusSeedMicro),
-          text: `Zero-edge benchmark (long dashes): expected end value ${formatMicro(seedMicro + ex.zeroEdge.meanNavMinusSeedMicro)}`,
+          text: `Zero-edge benchmark (long dashes): expected end value ${formatMicro(seedMicro + ex.zeroEdge.meanNavMinusSeedMicro, fmt)}`,
         }
       : null;
 
@@ -225,7 +248,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       key: "seed",
       header: "Started with",
       align: "right",
-      cell: (r) => <Money micro={r.seed.micro} />,
+      cell: (r) => <Money micro={r.seed.micro} currency={r.seed.currency} />,
     },
     {
       key: "ended",
@@ -251,7 +274,11 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
       header: "Final value",
       align: "right",
       cell: (r) =>
-        r.outcome ? <Money micro={r.outcome.micro} /> : <NotMeasured>Not final yet</NotMeasured>,
+        r.outcome ? (
+          <Money micro={r.outcome.micro} currency={r.outcome.currency} />
+        ) : (
+          <NotMeasured>Not final yet</NotMeasured>
+        ),
     },
   ];
 
@@ -323,13 +350,17 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
             <KpiTile
               label="Average value change vs start"
               value={
-                ev.navMinusSeed ? <Money micro={ev.navMinusSeed.meanMicro} sign="always" /> : null
+                ev.navMinusSeed ? (
+                  <Money micro={ev.navMinusSeed.meanMicro} currency={ccy} sign="always" />
+                ) : null
               }
             />
             <KpiTile
               label="Value change vs matched control C2"
               value={
-                ev.minusC2Micro === null ? null : <Money micro={ev.minusC2Micro} sign="always" />
+                ev.minusC2Micro === null ? null : (
+                  <Money micro={ev.minusC2Micro} currency={ccy} sign="always" />
+                )
               }
             />
           </KpiRow>
@@ -395,7 +426,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             {tile?.nav ? (
               <span className="font-mono text-lg" data-header-nav="">
-                <Money micro={tile.nav.micro} />
+                <Money micro={tile.nav.micro} currency={tile.nav.currency} />
               </span>
             ) : null}
             {tile && tileState(tile) ? (
@@ -410,6 +441,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
             startCents={tile.seed ? Math.round(tile.seed.micro / MICRO_PER_CENT) : undefined}
             minCents={tile.bust ? Math.round(tile.bust.micro / MICRO_PER_CENT) : undefined}
             maxCents={tile.target ? Math.round(tile.target.micro / MICRO_PER_CENT) : undefined}
+            currency={tile.currency}
           />
         ) : null}
         <p className="m-0 text-sm text-text-muted">
@@ -463,8 +495,10 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
           <KpiRow label="Where this round stands">
             <KpiTile
               label="Value now"
-              value={tile.nav ? <Money micro={tile.nav.micro} /> : null}
-              currency="AUD"
+              value={
+                tile.nav ? <Money micro={tile.nav.micro} currency={tile.nav.currency} /> : null
+              }
+              currency={ccy}
             />
             <KpiTile
               label="Change since start"
@@ -481,7 +515,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 }
                 value={
                   <GainLoss value={tile.day.change.micro}>
-                    {`${formatMicro(tile.day.change.micro, { sign: "always" })}${
+                    {`${formatMicro(tile.day.change.micro, fmt, { sign: "always" })}${
                       tile.day.ppm !== null
                         ? ` (${formatPpm(tile.day.ppm, { sign: "always" })})`
                         : ""
@@ -492,18 +526,25 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
             ) : null}
             <KpiTile
               label="Loss limit"
-              value={tile.bust ? <Money micro={tile.bust.micro} /> : null}
-              currency="AUD"
+              value={
+                tile.bust ? <Money micro={tile.bust.micro} currency={tile.bust.currency} /> : null
+              }
+              currency={ccy}
             />
             <KpiTile
               label="Goal"
-              value={tile.target ? <Money micro={tile.target.micro} /> : null}
-              currency="AUD"
+              value={
+                tile.target ? (
+                  <Money micro={tile.target.micro} currency={tile.target.currency} />
+                ) : null
+              }
+              currency={ccy}
             />
           </KpiRow>
 
           <Card title="Value over time" headingLevel={2}>
             <StrategyChart
+              currency={ccy}
               name={d.name ?? "Strategy"}
               nav={navPoints}
               regimes={ex.regimes}
@@ -515,6 +556,7 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 target: tile.target ? dollars(tile.target.micro) : null,
               }}
               trades={trades}
+              noTargetNote={!ex.hasTarget}
               showMarkers={!detail.masked}
               drawdown={drawdown}
               maxDropText={maxDropText}
@@ -534,9 +576,11 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 className="flex min-w-0 flex-wrap items-center justify-between gap-2 rounded-md bg-surface-2 p-2 text-sm"
               >
                 <span className="min-w-0 font-semibold break-words">{t.stock}</span>
-                <span>
-                  {t.qty} {t.qty === 1 ? "share" : "shares"}
-                </span>
+                {t.qty === null ? null : (
+                  <span>
+                    {t.qty} {t.qty === 1 ? "share" : "shares"}
+                  </span>
+                )}
                 <span className="text-text-muted">
                   since {t.entryDay === null ? "an earlier session" : dayText(t.entryDay)}
                 </span>
@@ -608,7 +652,10 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
                 <dd className="m-0 text-right">{dayText(d.sleeve.sinceD)}</dd>
                 <dt className="text-text-muted">Loss to win back</dt>
                 <dd className="m-0 text-right">
-                  <Money micro={d.sleeve.lossToRecover.micro} />
+                  <Money
+                    micro={d.sleeve.lossToRecover.micro}
+                    currency={d.sleeve.lossToRecover.currency}
+                  />
                 </dd>
                 <dt className="text-text-muted">Open sleeve trades</dt>
                 <dd className="m-0 text-right font-mono">{d.sleeve.openTrades}</dd>
@@ -622,8 +669,16 @@ export default async function StrategyPage({ params }: { params: Promise<{ execu
               Hypothetical leverage (simulated, not real broker leverage)
             </p>
             <div className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
-              <Leg title="Designed leverage (10 times)" leg={ex.sleeve?.levered ?? null} />
-              <Leg title="Reality-adjusted (5 times)" leg={ex.sleeve?.reality ?? null} />
+              <Leg
+                title="Designed leverage (10 times)"
+                leg={ex.sleeve?.levered ?? null}
+                currency={ccy}
+              />
+              <Leg
+                title="Reality-adjusted (5 times)"
+                leg={ex.sleeve?.reality ?? null}
+                currency={ccy}
+              />
             </div>
             <p className="m-0 text-xs text-text-muted">
               Win rate, net expectancy, costs, financing and how much of the sleeve is used: Not

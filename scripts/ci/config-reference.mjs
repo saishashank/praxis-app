@@ -199,7 +199,7 @@ export async function resolve(specifier, context, next) {
     p = path.resolve(path.dirname(fileURLToPath(context.parentURL)), specifier);
   }
   if (p) {
-    for (const ext of [".ts", "/index.ts"]) {
+    for (const ext of path.extname(p) ? ["", ".ts", "/index.ts"] : [".ts", "/index.ts"]) {
       if (existsSync(p + ext)) return next(pathToFileURL(p + ext).href, context);
     }
   }

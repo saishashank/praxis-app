@@ -13,13 +13,14 @@
 // incident (once while open). Nothing from the file is ever written to a record, log or incident
 // beyond counts. Delisted instruments are never deleted (the table refuses DELETE, DAT-130).
 import type { Client, InStatement } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import { openS2Once } from "@/lib/heartbeat/incidents";
 import { finishRun, hasSuccess, startRun } from "@/lib/runs/runRecord";
 import { DELIST_REASON, planUniverse, REUSE_SUSPECTED, type UniverseCounts } from "./apply.mjs";
 import { parseListedCompanies, type ParseStats } from "./parse.mjs";
 
 export const UNIVERSE_JOB = "universe-import";
-export const UNIVERSE_MARKET = "AU";
+export const UNIVERSE_MARKET: string = HOME_MARKET;
 export const UNIVERSE_INCIDENT = "universe_shrink";
 /** V1-S7: a delisted code came back looking like a different company; it stays delisted until the Owner decides. */
 export const CODE_REUSE_INCIDENT = "code_reuse_suspected";
@@ -40,8 +41,8 @@ export type ImportInput = {
   /** ISO timestamp source (injected so tests are deterministic). */
   now: () => string;
   commit?: string;
-  /** Where the file came from: the Worker (default) or the Owner's upload on Configuration (DAT-236). */
-  source?: "worker" | "manual";
+  /** Where the file came from: the Worker (default), the Owner's upload on Configuration (DAT-236) or the Wikidata fallback (D-1791). */
+  source?: "worker" | "manual" | "wikidata";
   /** Email environment: present = the shrink incident is also emailed (M5 T11). */
   env?: Record<string, string | undefined>;
 };

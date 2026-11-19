@@ -14,7 +14,7 @@ export const THEME_LABEL: Record<Theme, string> = {
 
 export const THEME_NOTE: Record<Theme, string> = {
   dark: "Dark blue-grey surfaces.",
-  light: "White surfaces with navy, the default (D-884).",
+  light: "White surfaces with navy, the default.",
   system: "Follows your device: light or dark.",
   midnight: "True black, for OLED screens.",
   dim: "A softer blue-grey dark.",

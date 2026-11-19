@@ -17,7 +17,7 @@ import {
   type Priority,
 } from "../src/asx/policy";
 import { ASX_ANNOUNCEMENTS_URL, buildAsxRequest } from "../src/asx/request";
-import { AU_SLOTS } from "../src/schedule";
+import { AU_SLOTS } from "./auRow";
 import {
   ASX_JOBS,
   POLL_END_MIN,

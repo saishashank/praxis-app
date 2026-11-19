@@ -13,6 +13,7 @@ import { isPublicPath } from "@/lib/http/gate";
 import type { NonceStore } from "@/lib/security/replay";
 import { KEY } from "../auth/helpers";
 import { cleanupTempDbs, freshDb } from "../db/helpers";
+import { seedRestoreDrill } from "./restoreFixture";
 
 vi.mock("@/lib/security/replay", () => ({
   TursoNonceStore: class {
@@ -24,6 +25,8 @@ vi.mock("@/lib/security/replay", () => ({
 vi.mock("@/lib/db/client", () => ({ mainDb: () => null, authDb: () => null }));
 
 import * as morningRoute from "@/app/api/internal/morning/route";
+
+const SIGN_TARGET = { method: "POST", path: "/api/internal/morning" };
 
 afterEach(() => {
   cleanupTempDbs();
@@ -71,12 +74,13 @@ const post = (b: string | object, headers?: Record<string, string>, nc = nonce()
   return new Request(URL_M, {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(SECRET, raw, NOW, nc) as Record<string, string>),
+    headers: headers ?? (sign(SECRET, raw, NOW, nc, SIGN_TARGET) as Record<string, string>),
   });
 };
 
 beforeEach(async () => {
   db = await freshDb("main");
+  await seedRestoreDrill(db);
   mock = createMockProvider();
   await db.execute({
     sql: "INSERT INTO worker_state (key, value_json, updated_at) VALUES ('email_mode', '\"full\"', 'x')",
@@ -129,9 +133,15 @@ describe("POST /api/internal/morning", () => {
   it("401 generic body: wrong secret, no headers, stale, tampered body, replay", async () => {
     const h = createMorningHandler(deps());
     const raw = JSON.stringify(body());
-    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32)) as Record<string, string>;
-    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32)) as Record<string, string>;
-    const ok = sign(SECRET, raw, NOW, "e".repeat(32)) as Record<string, string>;
+    const wrong = sign("8".repeat(64), raw, NOW, "a".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const stale = sign(SECRET, raw, NOW - 301, "b".repeat(32), SIGN_TARGET) as Record<
+      string,
+      string
+    >;
+    const ok = sign(SECRET, raw, NOW, "e".repeat(32), SIGN_TARGET) as Record<string, string>;
     const once = "c".repeat(32);
     expect((await h(post(raw, undefined, once))).status).toBe(200);
     for (const req of [

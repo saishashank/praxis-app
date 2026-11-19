@@ -10,7 +10,8 @@
 import type { Client } from "@libsql/client";
 import { LookAheadError } from "@/lib/arena/marketData";
 import { knownBy, quantityRatio, type CorpActionRecord } from "@/lib/arena/corpActions";
-import { COST_PROFILES } from "@/lib/arena/costs";
+import { cohortCostProfile } from "@/lib/arena/costs";
+import { marketMoney } from "@/lib/arena/marketMoney";
 import type { CohortParams } from "@/lib/arena/cohort";
 import { rejectReasonText, sizeEntry, type SizingResult } from "@/lib/arena/sizing";
 import {
@@ -55,14 +56,18 @@ import {
   type Bar,
 } from "./indicators";
 import { insiderFlowFor, insiderSinceIso } from "./insiderFlow";
-import { crossing, scaleMicro, type Crossing } from "./orderPlan";
+import { crossing, initialStopAtFill, scaleMicro, type Crossing } from "./orderPlan";
 import type { AgentParams } from "./params";
+import { benchmarkIndexOf, homeProfile } from "@/lib/market/staticProfile.mjs";
 import { computeRegime, type RegimeResult, type RegimeLabel } from "./regime";
 import type { EventRow, InsiderFlowScoreRow } from "./schema";
 import { shortInterestFor, shortInterestLimit } from "./shortInterest";
 
-/** The benchmark index code of the AU market (Batch 1 index stage, `^AXJO`). */
-export const INDEX_CODE = "AXJO";
+/**
+ * The benchmark index code of the home market (Batch 1 index stage, CXA-002 h). A run reads its own market's
+ * code through `benchmarkIndexOf(market)`; this constant stays for callers that hold no market (M19 B1).
+ */
+export const INDEX_CODE: string = homeProfile().benchmarkIndex!;
 /** regime_daily.version: the rule version of the classifier (bumped when AGT-101 changes). */
 export const REGIME_VERSION = 1;
 /** signal.schema_version. */
@@ -353,7 +358,7 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
   // A3: regime
   let regime: DayInputs["regime"] = null;
   try {
-    regime = await computeRegime(view, INDEX_CODE, p, REGIME_VERSION);
+    regime = await computeRegime(view, benchmarkIndexOf(market), p, REGIME_VERSION);
   } catch (error) {
     if (error instanceof LookAheadError) throw error;
     partialReasons.push("a3_failed");
@@ -379,7 +384,7 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
         params: p,
         calendar: req.calendar,
         hours: req.hours,
-        indexCode: INDEX_CODE,
+        indexCode: benchmarkIndexOf(market),
         codes: universe.map((u) => u.code),
         sinceIso,
         prevCloseFactor: (code, day0) => {
@@ -637,6 +642,10 @@ export function positionState(
     plan: { ...plan.plan, cs },
     fillDay: trade.fillD,
     fillMicro,
+    initialStopMicro: scaleMicro(
+      initialStopAtFill(plan, trade.fillMicro, atFill.priceFactor),
+      sinceFill.priceFactor,
+    ),
     sessionsHeld: held,
     closeMicro: facts.bar.close,
     highestCloseMicro: highest,
@@ -717,12 +726,14 @@ export function sizeLeg(ctx: SizingContext, leg: Leg, legs: number): SizingResul
     advValueMicro: leg.env.advValueMicro,
     adv20Shares: leg.env.adv20Shares,
     tier: leg.env.tier,
-    profile: COST_PROFILES[ctx.params.costProfile],
+    profile: cohortCostProfile(ctx.params),
     feeContext: { code: leg.env.code, firstBuyOfSecurityToday: true },
     minParcelMicro: ctx.params.minParcelMicro,
     participationCap: ctx.params.participationCap,
     cashBuffer: ctx.params.cashBuffer,
     tickCrossFactor: ctx.params.tickCrossFactor,
+    buckets: marketMoney(ctx.params.market).buckets,
+    tickTable: marketMoney(ctx.params.market).tickTable,
   });
 }
 

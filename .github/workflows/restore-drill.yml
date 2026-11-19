@@ -114,6 +114,21 @@ jobs:
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN_PROD }}
           DATA_REPO: ${{ github.repository }}-data
 
+      # OPS-105 (D-962): one run record per successful run (drill, restore, or verify-removed with both
+      # temporary secrets gone), written to the production database, so System Health knows this
+      # quarter's real-key drill is done and clears the quarterly Owner item. The step also holds the two
+      # temporary secrets: for verify-removed it writes nothing while either is still present.
+      - name: Record the result
+        if: success() && inputs.environment == 'production'
+        run: node scripts/restore/drill-turso.mjs record
+        env:
+          MODE: ${{ inputs.mode }}
+          KEY_MODE: ${{ inputs.key }}
+          TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
+          TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
+          BACKUP_PRIVATE_KEY: ${{ secrets.BACKUP_PRIVATE_KEY }}
+          TURSO_PLATFORM_TOKEN_TEMP: ${{ secrets.TURSO_PLATFORM_TOKEN_TEMP }}
+
       - name: Remove plaintext temp files
         if: always()
         run: node scripts/restore/drill-turso.mjs cleanup

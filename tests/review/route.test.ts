@@ -35,6 +35,8 @@ vi.mock("@/lib/db/client", () => ({ mainDb: () => mem.main }));
 
 import * as route from "@/app/api/internal/evening-review/route";
 
+const SIGN_TARGET = { method: "POST", path: "/api/internal/evening-review" };
+
 afterEach(() => {
   cleanupTempDbs();
   vi.unstubAllEnvs();
@@ -105,7 +107,7 @@ const post = (
   return new Request(URL_ER, {
     method: "POST",
     body: raw,
-    headers: headers ?? (sign(secret, raw, ts, nc) as Record<string, string>),
+    headers: headers ?? (sign(secret, raw, ts, nc, SIGN_TARGET) as Record<string, string>),
   });
 };
 const setMode = (mode: string) =>
@@ -143,7 +145,7 @@ describe("verification (fail closed, fixed words)", () => {
     expect((await h(post(workerBody(), WORKER, undefined, nonce(), NOW - 301))).status).toBe(401);
     expect((await h(post(workerBody(), "5".repeat(64)))).status).toBe(401);
     const raw = JSON.stringify(workerBody());
-    const headers = sign(WORKER, raw, NOW, nonce()) as Record<string, string>;
+    const headers = sign(WORKER, raw, NOW, nonce(), SIGN_TARGET) as Record<string, string>;
     const tampered = raw.replace(D, "2026-10-18");
     expect((await h(post(tampered, WORKER, headers))).status).toBe(401);
     expect(mock.calls).toHaveLength(0);

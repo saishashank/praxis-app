@@ -1,0 +1,90 @@
+{
+  "item": "CXA-014",
+  "decision": "D-1625, D-1721",
+  "hypothesis": "Six rules that were built in shadow in M15 each carry a direction. For each rule, the mean market-adjusted return of its flagged events, taken in the stated direction, is beyond zero. Each rule is its own lineage with one look at its own n. A pass is recorded for the CTX-053 path only; no rule, gate, weight or status changes.",
+  "market_rule": "each market is counted and tested on its own forward record; a lineage and its plan are per market",
+  "return_rule": "market-adjusted return = the stock's simple return over the window minus the benchmark index's simple return over the same window; no costs unless the rule says net",
+  "counter": "events whose whole horizon has already elapsed (a calendar count by session dates, made before any outcome is read); the look needs this count to reach the rule's n",
+  "interval": "one-sided 90 % lower bound of the mean in the stated direction (the 0.10 quantile of 2000 stationary block-bootstrap replicate means resampled by session, expected block = the rule's horizon in sessions, seeded per rule); for a difference rule, the same bound of the difference of the two group means",
+  "replicates": 2000,
+  "level": 0.1,
+  "pass_rule": "PASS when the lower bound of the direction-signed statistic is above zero; NULL when it is not; INCONCLUSIVE and spent when the statistic cannot be computed (an undefined bootstrap)",
+  "below_n": "INCONCLUSIVE: no look is taken and no outcome is used; the plan stays frozen and the one look waits for the night the count reaches n; events whose prices are missing are left out, and if fewer than n remain nothing is written",
+  "consequence": "a PASS is recorded for the CTX-053 path, shadow first; a NULL keeps the rule in shadow; nothing here changes a gate or a rule",
+  "rules": [
+    {
+      "id": "A1",
+      "lineage": "movers_a1",
+      "name": "halt-resume block",
+      "event": "a trading halt of a watch with expected sign zero or negative has resumed (one event per code and halt)",
+      "outcome": "market-adjusted return from the open of the resume session to the close of the fifth session counting the resume session as the first; the index leg is its open on the first session to its close on the fifth",
+      "horizon_sessions": 5,
+      "direction": "below zero",
+      "n": 40,
+      "kind": "mean",
+      "reader": "halt_watch and the daily bars"
+    },
+    {
+      "id": "A2",
+      "lineage": "movers_a2",
+      "name": "results window",
+      "event": "a gate-eight pass of a Cortex family (first session of the pass, one event per code and session); inside the results window or outside it",
+      "outcome": "net return from the fill over 20 sessions in parts per million of the fill value, minus the benchmark index return over the same sessions",
+      "horizon_sessions": 20,
+      "direction": "inside minus outside above zero",
+      "n": 60,
+      "n_note": "at least 60 passes inside the window and at least 60 outside (a difference needs both sides)",
+      "kind": "difference",
+      "reader": "none until a stored forward record of the window note exists"
+    },
+    {
+      "id": "A3",
+      "lineage": "movers_a3",
+      "name": "volume creep",
+      "event": "a code-day flagged by the volume-creep angle at its default grid point (ar_min_pct=2,vr_min=3), one event per code and day",
+      "outcome": "market-adjusted close-to-close return from the flag day to the close of the tenth session after it",
+      "horizon_sessions": 10,
+      "direction": "above zero",
+      "n": 100,
+      "kind": "mean",
+      "reader": "angle_forward_flag and the daily bars"
+    },
+    {
+      "id": "A4",
+      "lineage": "movers_a4",
+      "name": "short risk",
+      "event": "a code-day flagged for short-selling risk, one event per code and day",
+      "outcome": "market-adjusted close-to-close return from the flag day to the close of the twentieth session after it",
+      "horizon_sessions": 20,
+      "direction": "below zero",
+      "n": 60,
+      "kind": "mean",
+      "reader": "none until a stored forward record of the flag exists"
+    },
+    {
+      "id": "A5",
+      "lineage": "movers_a5",
+      "name": "young listings",
+      "event": "a Cortex setup that used the young-listing grid point (60 to 251 sessions of history), one event per code and session",
+      "outcome": "net return from the fill over 20 sessions in parts per million of the fill value, minus the benchmark index return over the same sessions",
+      "horizon_sessions": 20,
+      "direction": "above zero",
+      "n": 60,
+      "kind": "mean",
+      "reader": "none until a stored forward record of the grid point used exists"
+    },
+    {
+      "id": "A8",
+      "lineage": "movers_a8",
+      "name": "sector composite",
+      "event": "an intraday candidate with a sector-adjusted move; the side is above zero or at or below zero",
+      "outcome": "the candidate's recorded excess return from the next open to the close of that session against the benchmark index",
+      "horizon_sessions": 1,
+      "direction": "above-zero side minus at-or-below side above zero",
+      "n": 60,
+      "n_note": "at least 60 candidates on each side",
+      "kind": "difference",
+      "reader": "intraday_candidate"
+    }
+  ]
+}

@@ -57,8 +57,49 @@ export function expertsHealthOf(x: {
   };
 }
 
+export type PollRunFacts = { d: string; counts: Record<string, number> };
+
+/** Pure (M22 E2, KB-082): the polling line in plain words, or null when the job has never run. */
+export function pollingLineOf(
+  last: PollRunFacts | null,
+): { text: string; warning: string | null } | null {
+  if (last === null) return null;
+  const c = last.counts;
+  const n = (k: string): number => Number(c[k] ?? 0);
+  const noun = (k: number, one: string, many: string): string => `${k} ${k === 1 ? one : many}`;
+  if (n("off") > 0)
+    return { text: "Reading experts: switched off (the daily limit is zero).", warning: null };
+  const refused = n("refused");
+  const sources = n("sources");
+  const failed = n("failed");
+  const text =
+    `Reading experts: last read ${last.d}, ${noun(n("new"), "new headline", "new headlines")} from ` +
+    `${noun(sources, "source", "sources")}` +
+    (n("notAllowed") > 0 ? `, ${noun(n("notAllowed"), "source", "sources")} not allowed` : "") +
+    (failed > 0 ? `, ${noun(failed, "source", "sources")} could not be read` : "") +
+    (refused > 0 ? `, ${noun(refused, "request", "requests")} refused` : "") +
+    ".";
+  const bad = refused > 0 || (sources > 0 && failed * 2 >= sources);
+  return {
+    text,
+    warning: bad ? "some expert sources could not be read or were refused" : null,
+  };
+}
+
 const count = async (db: Exec, sql: string, args: string[] = []): Promise<number> =>
   Number((await db.execute({ sql, args })).rows[0]?.n ?? 0);
+
+/** "<day>|<counts json>" of the newest poll run (one scalar read, folded into the screening read), or null. */
+function pollRunOf(v: unknown): PollRunFacts | null {
+  if (typeof v !== "string") return null;
+  const i = v.indexOf("|");
+  if (i < 0) return null;
+  try {
+    return { d: v.slice(0, i), counts: JSON.parse(v.slice(i + 1)) as Record<string, number> };
+  } catch {
+    return { d: v.slice(0, i), counts: {} };
+  }
+}
 
 /** The line for a market; a failed read says so instead of throwing. */
 export async function loadExpertsHealth(db: Exec, market: string): Promise<ExpertsHealth> {
@@ -69,7 +110,11 @@ export async function loadExpertsHealth(db: Exec, market: string): Promise<Exper
           AND s.seq = (SELECT MAX(seq) FROM claim_status WHERE claim_id = s.claim_id)`,
     );
     const last = await db.execute({
-      sql: "SELECT MAX(d) AS d FROM screening_run WHERE market = ?",
+      // rows-ok: one aggregate row; the scalar subselect reads at most 1 row (LIMIT 1, newest first by the key (kind, d))
+      sql: `SELECT MAX(d) AS d,
+                   (SELECT d || '|' || counts_json FROM expert_poll_run WHERE kind = 'poll'
+                     ORDER BY d DESC LIMIT 1) AS poll
+              FROM screening_run WHERE market = ?`,
       args: [market],
     });
     const clustersParked = await count(
@@ -98,12 +143,21 @@ export async function loadExpertsHealth(db: Exec, market: string): Promise<Exper
       }
     }
     const d = last.rows[0]?.d;
-    return expertsHealthOf({
+    const poll = pollingLineOf(pollRunOf(last.rows[0]?.poll));
+    const health = expertsHealthOf({
       claimsToCheck,
       lastScreening: d === null || d === undefined ? null : String(d),
       clustersParked,
       stat,
     });
+    if (poll === null) return health;
+    const warnings = poll.warning === null ? health.warnings : [...health.warnings, poll.warning];
+    return {
+      ...health,
+      state: warnings.length > 0 ? "attention" : "ok",
+      warnings,
+      text: `${health.text} ${poll.text}`,
+    };
   } catch {
     return {
       state: "attention",

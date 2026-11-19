@@ -16,6 +16,7 @@ import {
   readTables,
   readWorkflows,
 } from "./readers.mjs";
+import { HOME_TZ } from "../../src/lib/market/homeMarket.mjs";
 import { readerProblems } from "./checks.mjs";
 import { SCHEMA_VERSION, VIEWS, validateModel } from "./schema.mjs";
 import { parseYaml } from "./yaml.mjs";
@@ -187,7 +188,7 @@ export function readCode(root, specMap = {}) {
         source: "worker/src/schedule.ts",
         owner: "worker",
         purpose: s.note,
-        schedule: `${when} Australia/Sydney local`,
+        schedule: `${when} ${HOME_TZ} local`,
         attrs: {
           runner: s.runner,
           enabled: s.enabled,

@@ -5,14 +5,24 @@
 // the book count per industry is a reporting figure only. Exact Rational comparisons on micro-dollars.
 import type { Micro } from "@/lib/money/micro";
 import { cmpRat, makeRational, type Rational } from "@/lib/money/rational";
+import type { ClassificationReader, InstrumentClassRow } from "../profileReaders";
 import { PORTFOLIO_CODE_LABEL, PORTFOLIO_INDUSTRY_LABEL } from "./list";
 import { fail, pass, type GateResult } from "./types";
+
+/**
+ * D-1112: the group the per-industry NAV cap counts a code under, from the market's classification reader (the home
+ * scheme and the NSE level-2 string read `instrument.industry`; the US scheme is the first two digits of the SIC code).
+ * The result is `Exposure.industry` / `PortfolioInput.industry`; null = unknown (counts towards no cap).
+ */
+export function groupOf(reader: ClassificationReader, row: InstrumentClassRow): string | null {
+  return reader.groupOf(row);
+}
 
 /** One held line of one book, valued at the night's close. */
 export type Exposure = {
   readonly bookId: string;
   readonly code: string;
-  /** GICS industry group at the cut-off; null = unknown (counts towards no industry cap). */
+  /** Industry group at the cut-off (the market's classification scheme, `groupOf`); null = unknown (counts towards no industry cap). */
   readonly industry: string | null;
   readonly exposureMicro: Micro;
 };

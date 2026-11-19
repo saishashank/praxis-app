@@ -9,7 +9,7 @@
 import type { Client, Transaction } from "@libsql/client";
 import { controlStates } from "@/lib/agents/controls";
 import {
-  FAMILY_OPTIONAL_KEYS,
+  optionalKeyNames,
   FAMILY_PARAM_KEYS,
   FAMILY_SPECS,
   ruleSpecJson,
@@ -197,7 +197,8 @@ export type NewChallenger = {
 export const VARIANT_QUARTER_CAP = 3; // threshold-ok: Owner decision O-46 (3 variants per family per quarter)
 
 /** A stop, trail or sizing key (the price stops and the trail; the time exits are not stops). */
-const STOP_SIZING_KEY = /(^|_)(stop_atr|stop_cap_pct|trail_atr|trail_after_pct|size|sizing)(_|$)/;
+const STOP_SIZING_KEY =
+  /(^|_)(stop_atr|stop_cap_pct|trail_atr|trail_after_pct|target_r|target_pct|size|sizing)(_|$)/;
 export const isStopOrSizingKey = (key: string): boolean => STOP_SIZING_KEY.test(key);
 
 /** True when `params` differ from `base` on any stop, trail or sizing key (a key missing on one side counts). */
@@ -362,7 +363,7 @@ export async function createChallenger(db: Client, input: NewChallenger): Promis
   });
   // the FULL canonical key set, plus any of the family's optional structural keys (KB-081, D-235);
   // nothing else (the loader checks values, not the key set)
-  const optional = FAMILY_OPTIONAL_KEYS[family].map((s) => s.key);
+  const optional = optionalKeyNames(family);
   const got = Object.keys(input.params);
   const keysOk =
     FAMILY_PARAM_KEYS[family].every((k) => got.includes(k)) &&

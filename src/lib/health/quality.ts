@@ -4,6 +4,7 @@
 //
 // Verbatim (spec/06_data_layer.md:89 DAT-211): "Every check is stored and summarised on System
 // Health and in review section 9."
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { Client } from "@libsql/client";
 import type { Role } from "@/lib/auth/permissions";
 import { FACT_SEVERITIES } from "@/lib/data/quality/rules.mjs";
@@ -36,7 +37,7 @@ export type QualitySummary = {
 export async function getQualitySummary(
   db: Client,
   role: Role,
-  market = "AU",
+  market = HOME_MARKET,
 ): Promise<QualitySummary> {
   const latest = await db.execute({
     sql: "SELECT MAX(d) AS d FROM quality_score WHERE market = ?",

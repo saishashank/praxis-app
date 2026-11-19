@@ -26,4 +26,18 @@ export const STRATEGIES_PAGES: PageEntry[] = [
     action: "read",
     h1: "Cortex",
   },
+  // M21 L1 (D-1227): the golden-set labelling page is Owner only (the "admin" action).
+  {
+    file: "src/app/(app)/cortex/labels/page.tsx",
+    path: "/cortex/labels",
+    action: "admin",
+    h1: "Label announcements",
+  },
+  // M22 C2 (D-1423, UXN-289): the Committee trial page; every signed-in role reads it, the loader masks for all but the Owner.
+  {
+    file: "src/app/(app)/strategies/experiments/committee/page.tsx",
+    path: "/strategies/experiments/committee",
+    action: "read",
+    h1: "Committee trial",
+  },
 ];

@@ -10,6 +10,7 @@
 // as_of <= d per code. Both are pure reads, so the live night and the snapshot builder
 // (snapshotCore.mjs) see the same rows, and a replay at `d` never sees a later upload's dates.
 import type { Client, InStatement } from "@libsql/client";
+import { HOME_MARKET } from "@/lib/market/homeMarket.mjs";
 import type { IndexChangeFact } from "@/lib/agents/families/types";
 import { splitCsv } from "@/lib/data/universe/parse.mjs";
 
@@ -37,7 +38,7 @@ export function industryUnknown(industry: string | null | undefined): boolean {
   return industry === null || industry === undefined || UNKNOWN_INDUSTRY_VALUES.includes(industry);
 }
 
-const MARKET = "AU";
+const MARKET = HOME_MARKET;
 const CODE_RE = /^[A-Z0-9]{2,6}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const CONTROL_RE = /[\u0000-\u001f\u007f]/;

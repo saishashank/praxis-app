@@ -14,7 +14,7 @@ export function AlertChip({ chip }: { chip: AlertChipView }) {
         {chip.limit ? (
           <>
             {" with limit "}
-            <Money micro={chip.limit.micro} />
+            <Money micro={chip.limit.micro} currency={chip.limit.currency} />
           </>
         ) : null}
       </span>

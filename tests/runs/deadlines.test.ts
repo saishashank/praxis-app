@@ -20,6 +20,7 @@ import {
   type StepRow,
 } from "@/lib/runs/deadlines";
 import { cleanupTempDbs, freshDb, ROOT } from "../db/helpers";
+import { AU_SLOTS } from "../../worker/test/auRow";
 
 afterEach(cleanupTempDbs);
 
@@ -238,7 +239,6 @@ describe("configuration overrides", () => {
 describe("the table against its sources", () => {
   const read = (f: string) => readFileSync(path.join(ROOT, f), "utf8");
   const spec = read("spec/13_review_errata_and_addenda.md");
-  const sched = read("worker/src/schedule.ts");
 
   it("every step start time is a PLT-073 row (spec/13)", () => {
     const table = spec.slice(spec.indexOf("PLT-073 Canonical"), spec.indexOf("## 13.5"));
@@ -249,8 +249,8 @@ describe("the table against its sources", () => {
   });
 
   it("the Worker's slot table agrees on the times it dispatches", () => {
-    const slotTime = (id: string) =>
-      new RegExp(`id: "${id}",\\s*time: "(\\d\\d:\\d\\d)"`).exec(sched)?.[1];
+    // the Worker builds its table from the market row (M19 C1): the AU row gives the table of this test
+    const slotTime = (id: string) => AU_SLOTS.find((x) => x.id === id)?.time;
     expect(slotTime("ingest-batch1")).toBe(STEPS.find((s) => s.id === "batch1")!.start);
     expect(slotTime("arena-signals")).toBe(STEPS.find((s) => s.id === "batch2")!.start);
     expect(slotTime("late-sweep")).toBe(STEPS.find((s) => s.id === "late_sweep")!.start);

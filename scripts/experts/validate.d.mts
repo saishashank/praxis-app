@@ -1,4 +1,10 @@
 export const FORMAT: string;
+export const FORMAT_V2: string;
+export const FORMATS: string[];
+export const LICENCE_FORMAT: string;
+export const PROPOSALS_FORMAT: string;
+export const PARK_REASONS: string[];
+export const EXPRESSION_CAPS: Record<string, number>;
 export const CAPS: Record<string, number>;
 export const JSON_CAPS: Record<string, number>;
 export const SUMMARY_WORDS: number;
@@ -11,3 +17,6 @@ export function validateClaims(j: unknown): string[];
 export function validateClusters(j: unknown): string[];
 export function validateCalls(j: unknown): string[];
 export function validateSeed(files: Record<string, any>): string[];
+export function validateLicenceCheck(j: unknown): string[];
+export function validateCallProposals(j: unknown): string[];
+export function validateExpressions(j: unknown): string[];

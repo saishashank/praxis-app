@@ -29,6 +29,10 @@
 //                           outside the scheduled allow-list (PLT-015)
 //   [npm-install]           `npm install` / `npm i` (only `npm ci`)
 //   [pip-hashes]            `pip install` without `--require-hashes`
+//   [cli-unpinned]          `npx vercel` without an exact semver suffix (so `vercel@latest`, `vercel@63`
+//                           or a bare `vercel` fails), and an `npx wrangler@<spec>` that is not exact semver
+//                           (a bare `npx wrangler` is the lockfile's devDependency and stays allowed)
+//                           (OPS-109 a, D-1788)
 //
 // Exceptions: scripts/ci/workflow-lint-exceptions.json lists known findings by file, job, step (the
 // 1-based step number) and rule, each with a reason. An entry with approvedBy "pending" is NOT an
@@ -50,6 +54,22 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const SHA_USES = /^[\w.-]+\/[\w.-]+(\/[\w./-]+)?@[0-9a-f]{40}$/;
 const DIGEST = /@sha256:[0-9a-f]{64}$/;
 
+const SEMVER_EXACT = /^\d+\.\d+\.\d+$/;
+
+/** The package specs after `npx` (flags skipped) in a run: text; `\` line continuations are joined. */
+export function npxSpecs(run) {
+  const specs = [];
+  for (const line of run.replace(/\\\r?\n/g, " ").split(/\r?\n/)) {
+    const tokens = line.trim().split(/\s+/);
+    tokens.forEach((t, i) => {
+      if (t !== "npx") return;
+      const spec = tokens.slice(i + 1).find((x) => !x.startsWith("-"));
+      if (spec) specs.push(spec);
+    });
+  }
+  return specs;
+}
+
 /** Workflows the Worker dispatches, plus the deploys: these must serialise (PLT-071). */
 export const PIPELINE_WORKFLOWS = [
   "arena-close.yml",
@@ -68,15 +88,22 @@ export const PIPELINE_WORKFLOWS = [
   "deploy-staging.yml",
   "deploy-production.yml",
 ];
-/** Files allowed to carry `schedule:` (decision 21 nightly, decision 22 weekly mutation, GL-07 watchdog and Batch-1 fallback). */
+/** Files allowed to carry `schedule:` (decision 21 nightly, decision 22 weekly mutation, GL-07 watchdog and Batch-1 fallback, D-962 quarterly restore dry run: no secret, no environment). */
 export const SCHEDULED_WORKFLOWS = [
   "nightly.yml",
   "mutation.yml",
   "watchdog.yml",
   "ingest-batch1.yml",
+  "restore-dry-run.yml",
 ];
 /** `file::job` pairs allowed to upload an artifact (failure-only report on synthetic data). */
 export const UPLOAD_ALLOWED = ["ci.yml::e2e"];
+/**
+ * `file::job` pairs allowed to upload an artifact on success (M20 A3, DAT-101): the source report holds no secret, no
+ * environment and no database; its artefact is counts, statuses and hashes only (SEC-110). The secret-job-storage rule
+ * still applies to it, so adding a secret to that job fails the lint.
+ */
+export const UPLOAD_ALWAYS_ALLOWED = ["source-report.yml::report"];
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 const SECRET_REF = /\bsecrets\s*(\.|\[)|secrets:\s*inherit/;
@@ -131,13 +158,14 @@ const FORK_GUARDS = [
 /**
  * @param {string} file workflow file name, e.g. "ci.yml"
  * @param {string} text the YAML text
- * @param {{ pipeline?: string[], scheduled?: string[], uploadAllowed?: string[] }} [opts]
+ * @param {{ pipeline?: string[], scheduled?: string[], uploadAllowed?: string[], uploadAlways?: string[] }} [opts]
  * @returns {{ file: string, rule: string, where: string, message: string }[]}
  */
 export function lintWorkflow(file, text, opts = {}) {
   const pipeline = opts.pipeline ?? PIPELINE_WORKFLOWS;
   const scheduled = opts.scheduled ?? SCHEDULED_WORKFLOWS;
   const uploadAllowed = opts.uploadAllowed ?? UPLOAD_ALLOWED;
+  const uploadAlways = opts.uploadAlways ?? UPLOAD_ALWAYS_ALLOWED;
   const findings = [];
   const add = (rule, where, message) => findings.push({ file, rule, where, message });
 
@@ -272,10 +300,11 @@ export function lintWorkflow(file, text, opts = {}) {
             "a job that holds secrets must not upload an artifact or use a cache",
           );
         }
-        if (isUpload && !uploadAllowed.includes(`${file}::${id}`)) {
+        const always = uploadAlways.includes(`${file}::${id}`);
+        if (isUpload && !always && !uploadAllowed.includes(`${file}::${id}`)) {
           add("artifact-upload", where, "upload-artifact is not on the allow-list (SEC-110)");
         }
-        if (isUpload && uploadAllowed.includes(`${file}::${id}`)) {
+        if (isUpload && !always && uploadAllowed.includes(`${file}::${id}`)) {
           if (typeof s.if !== "string" || !/failure\(\)/.test(s.if)) {
             add("artifact-upload", where, "an allowed upload must run only on failure()");
           }
@@ -294,6 +323,20 @@ export function lintWorkflow(file, text, opts = {}) {
         }
         if (/(^|[\s;&|(])npm\s+(install|i|add)(\s|$)/m.test(s.run)) {
           add("npm-install", where, "use npm ci, not npm install");
+        }
+        for (const spec of npxSpecs(s.run)) {
+          const at = spec.lastIndexOf("@");
+          const name = at > 0 ? spec.slice(0, at) : spec;
+          const version = at > 0 ? spec.slice(at + 1) : "";
+          if (name === "vercel" && !SEMVER_EXACT.test(version)) {
+            add(
+              "cli-unpinned",
+              where,
+              "npx vercel must name an exact version (an exact semver, never latest)",
+            );
+          } else if (name === "wrangler" && at > 0 && !SEMVER_EXACT.test(version)) {
+            add("cli-unpinned", where, "npx wrangler@<version> must be an exact version");
+          }
         }
         for (const line of s.run.split("\n")) {
           if (/(^|[\s;&|(])pip3?\s+install\b/.test(line) && !/--require-hashes/.test(line)) {

@@ -1,0 +1,42 @@
+# Quarterly restore DRY RUN (OPS-105, D-962; TST-108). On the first day of January, April, July and
+# October (and by hand) it runs the restore drill end to end into LOCAL libSQL files on the runner:
+# synthetic backups built with a throwaway key, decrypted in memory, restored, checksummed, the check
+# cohort replayed, the files removed. It proves that the drill code still works; the REAL-key drill stays
+# Owner-run (SEC-108 f: the backup private key never sits on GitHub) from restore-drill.yml.
+# PLT-015: this is one of the few scheduled files. It is NOT a production job: no environment, no
+# repository or environment secret, no Turso platform token, no network beyond installing packages, no
+# approved-commit requirement. `schedule:` runs from the default branch (`release`) only.
+name: Restore dry run
+
+on:
+  schedule:
+    - cron: "17 3 1 1,4,7,10 *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    concurrency:
+      group: restore-dry-run
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - run: npm ci
+      - name: Restore drill into local files (synthetic data, throwaway key)
+        run: node scripts/restore/drill-turso.mjs run
+        env:
+          MODE: drill
+          KEY_MODE: throwaway
+          TARGETS: both
+          TARGET: local
+          RUNNER_TEMP: ${{ runner.temp }}

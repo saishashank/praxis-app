@@ -11,7 +11,14 @@ import pytest
 import fetch_prices as fp
 import yahoo_fetch as yf_fetch
 
-PLAN = {"month": "2020-01", "start": "2020-01-01", "end": "2020-01-31", "codes": ["ZZA", "ZZB"]}
+# the plan carries the market's Yahoo suffix (M20 A2, D-1090: no default in the module)
+PLAN = {
+    "month": "2020-01",
+    "start": "2020-01-01",
+    "end": "2020-01-31",
+    "codes": ["ZZA", "ZZB"],
+    "suffix": ".AX",
+}
 
 
 def frame(codes, split_on=None):
@@ -105,3 +112,16 @@ def test_main_writes_file_and_prints_counts_only(tmp_path, monkeypatch, capsys):
     assert fp.main(["--plan", str(plan), "--output", str(out)]) == 0
     assert json.loads(out.read_text())["bars"]
     assert "ZZA" not in capsys.readouterr().out
+
+
+def test_plan_suffix_reaches_the_tickers():
+    seen = []
+
+    def download(**kw):
+        seen.append(kw["tickers"])
+        return frame(["ZZA", "ZZB"])
+
+    fp.fetch_month({**PLAN, "suffix": ".NS"}, 100, 1, download, sleep=lambda s: None)
+    assert seen == [["ZZA.NS", "ZZB.NS"]]
+    with pytest.raises(yf_fetch.InputError):
+        fp.fetch_month({**PLAN, "suffix": "NS"}, 100, 1, download, sleep=lambda s: None)

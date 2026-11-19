@@ -10,21 +10,37 @@
 //                are KEPT, only with the explicit confirmation input.
 //   cleanup      remove any plaintext temp folder (the run keeps plaintext in memory only).
 //   final-check  FAIL while the temporary private-key secret or token (l) still exists.
+//   record       OPS-105 (D-962): after a successful drill or verify-removed run, write one run_record
+//                `restore-drill` row (details {keyMode, mode}) that the quarterly Owner item reads.
 //
 // env (run): MODE drill|restore, KEY_MODE real|throwaway, BACKUP_ENV production|staging,
 //   TARGETS main|auth|both, BACKUP_TAG (empty = latest), CONFIRM (restore: must be RESTORE),
 //   TURSO_ORG, TURSO_GROUP, TURSO_PLATFORM_TOKEN_TEMP, and for KEY_MODE=real: BACKUP_PRIVATE_KEY,
 //   DATA_REPO (`<owner>/<repo>-data`), DATA_REPO_TOKEN.
+// TARGET=local (OPS-105, D-962): the same path into LOCAL libSQL files in a temp folder: no platform
+//   token, no organisation, no Turso call. KEY_MODE=throwaway builds synthetic backups in memory (the CI
+//   dry run, .github/workflows/restore-dry-run.yml); KEY_MODE=real reads the encrypted backups from
+//   BACKUP_DIR (files named as the nightly backup names them) when it is set, else from the data repo.
+//   With BACKUP_DIR set nothing leaves the machine. mode=restore is refused for a local target.
 // KEY_MODE=throwaway (build phase): SYNTHETIC data only, a throwaway key generated in memory; no
 //   production data, no private key, no data-repo token.
 // Output (stdout and job summary): table names, counts, PASS/FAIL, elapsed time, the names of
 //   databases that were NOT deleted. Never a URL, token, key, path or row content: every line also
 //   passes through a scrubber that blanks any secret value this process holds.
 import { createClient } from "@libsql/client";
-import { appendFileSync, existsSync, rmSync } from "node:fs";
+import {
+  appendFileSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+} from "node:fs";
 import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   assetName,
   decryptToText,
@@ -73,21 +89,33 @@ export function parseConfig(env) {
       refuse("restore refused: the confirm input must be exactly RESTORE");
     }
   }
-  if (!has(env.TURSO_ORG)) refuse("TURSO_ORG is not set");
-  if (!has(env[TOKEN_SECRET])) refuse(`${TOKEN_SECRET} is missing`);
+  const target = pick(env.TARGET, ["local", "turso"], "turso");
+  if (!target) refuse("an input has an unknown value");
+  const local = target === "local";
+  if (local && mode === "restore") refuse("restore is not possible into a local target");
+  const backupDir = has(env.BACKUP_DIR) ? env.BACKUP_DIR.trim() : "";
+  if (!local) {
+    if (!has(env.TURSO_ORG)) refuse("TURSO_ORG is not set");
+    if (!has(env[TOKEN_SECRET])) refuse(`${TOKEN_SECRET} is missing`);
+  }
   if (keyMode === "real") {
     if (!has(env[KEY_SECRET])) refuse(`${KEY_SECRET} is missing`);
-    if (!has(env.DATA_REPO) || !has(env.DATA_REPO_TOKEN)) refuse("data repo access is missing");
+    const fromDir = local && backupDir !== "";
+    if (!fromDir && (!has(env.DATA_REPO) || !has(env.DATA_REPO_TOKEN))) {
+      refuse("data repo access is missing");
+    }
   }
   return {
+    target,
+    backupDir,
     mode,
     keyMode,
     backupEnv,
     targets: targets === "both" ? ["main", "auth"] : [targets],
     tag,
-    org: env.TURSO_ORG.trim(),
+    org: has(env.TURSO_ORG) ? env.TURSO_ORG.trim() : "",
     group: has(env.TURSO_GROUP) ? env.TURSO_GROUP.trim() : "default",
-    platformToken: env[TOKEN_SECRET].trim(),
+    platformToken: has(env[TOKEN_SECRET]) ? env[TOKEN_SECRET].trim() : "",
     privateKey: keyMode === "real" ? env[KEY_SECRET] : "",
     dataRepo: (env.DATA_REPO ?? "").trim(),
     dataRepoToken: (env.DATA_REPO_TOKEN ?? "").trim(),
@@ -151,6 +179,58 @@ export function finalCheck(env, out = console.log) {
   return 0;
 }
 
+/**
+ * OPS-105 (D-962): one run_record row per successful drill (or verify-removed) run, written to the
+ * production database so System Health can tell whether this quarter's real-key drill is done. A step
+ * that cannot reach the database says so and exits 1 (the Owner item would otherwise never clear); a
+ * run without database access configured says so and exits 0.
+ * @param {Record<string, string | undefined>} env
+ * @param {(line: string) => void} out
+ * @param {{ now?: () => Date, connect?: (url: string, token: string) => any }} [deps]
+ * @returns {Promise<number>}
+ */
+export async function record(env, out = console.log, deps = {}) {
+  const mode = (env.MODE ?? "").trim();
+  const keyMode = (env.KEY_MODE ?? "real").trim() || "real";
+  if (!["drill", "restore", "verify-removed"].includes(mode)) {
+    out("record: FAIL unknown mode");
+    return 1;
+  }
+  if (mode === "verify-removed" && [KEY_SECRET, TOKEN_SECRET].some((n) => has(env[n]))) {
+    out("record: skipped (a temporary restore secret is still present)");
+    return 0;
+  }
+  if (!has(env.TURSO_MAIN_URL)) {
+    out("record: skipped (database access is not set)");
+    return 0;
+  }
+  const at = (deps.now ?? (() => new Date()))().toISOString();
+  let db;
+  try {
+    db =
+      deps.connect?.(env.TURSO_MAIN_URL, env.TURSO_MAIN_TOKEN ?? "") ??
+      createClient({ url: env.TURSO_MAIN_URL, authToken: env.TURSO_MAIN_TOKEN });
+    await db.execute({
+      sql: `INSERT OR IGNORE INTO run_record (job, concurrency_key, scheduled_for, started_at, ended_at,
+            status, items_processed, details_json) VALUES ('restore-drill', ?, ?, ?, ?, 'success', 1, ?)`,
+      args: [
+        `restore-drill:${at.slice(0, 10)}:${mode}:${keyMode}`,
+        at.slice(0, 10),
+        at,
+        at,
+        JSON.stringify({ keyMode, mode }),
+      ],
+    });
+  } catch {
+    out("record: FAIL the run record could not be written");
+    return 1;
+  } finally {
+    db?.close?.();
+  }
+  out(`record: ok (${mode}, ${keyMode} key)`);
+  return 0;
+}
+
 /** Remove the plaintext temp folder (defence in depth: the run itself writes no plaintext file). */
 export function cleanup(env, out = console.log) {
   const base = has(env.RUNNER_TEMP) ? env.RUNNER_TEMP : "";
@@ -165,6 +245,38 @@ export function cleanup(env, out = console.log) {
   }
   out("cleanup: ok");
   return 0;
+}
+
+const BACKUP_FILE_RE = /^(main|auth)-(\d{4}-\d{2}-\d{2})\.ndjson\.gz\.age$/;
+const MAX_LOCAL_BYTES = 256 * 1024 * 1024;
+
+/**
+ * The encrypted backups of a LOCAL folder (OPS-105 dry run on the Owner's machine): the newest date
+ * (or the named tag) for which every wanted database has its file. Reads only; never prints a path.
+ * @param {string} dir @param {{ tag?: string, names: Record<string, (tag: string) => string> }} want
+ */
+export function readLocalBackup(dir, { tag, names }) {
+  let files;
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return refuse("the backup folder is not readable");
+  }
+  const dates = new Set(files.map((f) => BACKUP_FILE_RE.exec(f)?.[2]).filter(Boolean));
+  const wanted = Object.keys(names);
+  for (const date of [...dates].sort().reverse()) {
+    const t = `backup-${date}`;
+    if (tag !== undefined && tag !== "" && tag !== t) continue;
+    if (!wanted.every((db) => files.includes(names[db](t)))) continue;
+    const data = {};
+    for (const db of wanted) {
+      const file = path.join(dir, names[db](t));
+      if (statSync(file).size > MAX_LOCAL_BYTES) refuse(`${db}: the backup file is too large`);
+      data[db] = new Uint8Array(readFileSync(file));
+    }
+    return { tag: t, data };
+  }
+  return refuse("no backup found in the folder");
 }
 
 const fmtElapsed = (ms) => {
@@ -201,13 +313,18 @@ export async function run(env, deps = {}) {
   }
   const created = [];
   let platform;
+  let local = false;
+  let localDir = null;
   let ok = false;
   let cfg;
   try {
     cfg = parseConfig(env);
-    platform =
-      deps.platform ??
-      createTursoPlatform({ org: cfg.org, token: cfg.platformToken, group: cfg.group });
+    local = cfg.target === "local";
+    if (!local) {
+      platform =
+        deps.platform ??
+        createTursoPlatform({ org: cfg.org, token: cfg.platformToken, group: cfg.group });
+    }
     const openDb =
       deps.openDb ??
       // Lossless integers (D-175): the restore re-dumps to verify, and cohort.rng_seed is 64-bit.
@@ -230,11 +347,14 @@ export async function run(env, deps = {}) {
       identity = extractIdentity(cfg.privateKey);
       if (!identity) refuse("the private key secret is not an age secret key");
       secrets.add(identity);
-      const reader =
-        deps.reader ?? createBackupReader({ repo: cfg.dataRepo, token: cfg.dataRepoToken });
       const names = {};
       for (const db of cfg.targets) names[db] = (tag) => assetName(db, tag.slice("backup-".length));
-      const got = await reader.fetchBackup({ tag: cfg.tag, names });
+      const got =
+        local && cfg.backupDir !== ""
+          ? readLocalBackup(cfg.backupDir, { tag: cfg.tag, names })
+          : await (
+              deps.reader ?? createBackupReader({ repo: cfg.dataRepo, token: cfg.dataRepoToken })
+            ).fetchBackup({ tag: cfg.tag, names });
       cipher = got.data;
       backupDate = got.tag.slice("backup-".length);
       out(`source: ${got.tag}`);
@@ -266,12 +386,25 @@ export async function run(env, deps = {}) {
       const dbSuffix =
         cfg.mode === "drill" ? suffix() : `${backupDate.replaceAll("-", "")}${suffix()}`;
       const name = throwawayName(db, dbSuffix, prefix);
-      const info = await platform.createDatabase(name);
-      created.push({ db, name });
-      secrets.add(info.url);
-      const dbToken = await platform.createDatabaseToken(name, "1h");
-      secrets.add(dbToken);
-      const client = openDb(info.url, dbToken);
+      let client;
+      if (local) {
+        // a LOCAL libSQL file in a fresh temp folder: no platform, no token, no network
+        localDir ??= mkdtempSync(
+          path.join(has(env.RUNNER_TEMP) ? env.RUNNER_TEMP : tmpdir(), "praxis-drill-local-"),
+        );
+        created.push({ db, name });
+        client = createClient({
+          url: pathToFileURL(path.join(localDir, `${name}.db`)).href,
+          intMode: "bigint",
+        });
+      } else {
+        const info = await platform.createDatabase(name);
+        created.push({ db, name });
+        secrets.add(info.url);
+        const dbToken = await platform.createDatabaseToken(name, "1h");
+        secrets.add(dbToken);
+        client = openDb(info.url, dbToken);
+      }
       try {
         const result = await restoreDatabase(client, textBy[db]);
         let same = true;
@@ -317,7 +450,29 @@ export async function run(env, deps = {}) {
 
   // Cleanup: drill always deletes; restore keeps the new databases only after a full success.
   let leftover = [];
-  if (platform && created.length > 0 && (cfg?.mode === "drill" || !ok)) {
+  if (local) {
+    let atExit = false;
+    if (localDir !== null) {
+      const dir = localDir;
+      try {
+        rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+      } catch {
+        // Windows keeps a closed libSQL file locked until the process ends: remove it at exit, so a
+        // restored real backup never stays on the disk (the folder is private to this run).
+        atExit = true;
+        process.once("exit", () => {
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch {
+            // nothing more can be done at exit
+          }
+        });
+      }
+    }
+    out(
+      `delete: ${created.length}/${created.length} local databases removed${atExit ? " (the last files go when this process exits)" : ""}`,
+    );
+  } else if (platform && created.length > 0 && (cfg?.mode === "drill" || !ok)) {
     for (const c of created) {
       let gone = false;
       for (let attempt = 0; attempt < 3 && !gone; attempt++) {
@@ -372,10 +527,12 @@ export async function main(argv, env) {
       return finalCheck(env, out);
     case "cleanup":
       return cleanup(env, out);
+    case "record":
+      return record(env, out);
     case "run":
       return run(env, { out });
     default:
-      out("usage: drill-turso.mjs guard|run|cleanup|final-check");
+      out("usage: drill-turso.mjs guard|run|cleanup|final-check|record");
       return 1;
   }
 }

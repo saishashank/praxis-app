@@ -7,7 +7,13 @@ import { EmptyState } from "@/components/ui/States";
 import { Pill } from "@/components/ui/Pill";
 import { hueStyle } from "@/components/ui/hue";
 import { Masked } from "@/components/ui/Values";
-import { displayName, formatCount, formatDay, formatMicro } from "@/lib/view/format";
+import {
+  currencyFormatFor,
+  displayName,
+  formatCount,
+  formatDay,
+  formatMicro,
+} from "@/lib/view/format";
 import type { MarketRow } from "@/lib/ui/loaders/market";
 import { Change, FIG } from "./Figures";
 import { RowActions, type WatchMode } from "./RowActions";
@@ -114,12 +120,16 @@ export function MarketTable({
           <Masked />
         ) : r.live ? (
           <span className="block">
-            <span className={FIG}>{formatMicro(r.live.price.micro)}</span>
+            <span className={FIG}>
+              {formatMicro(r.live.price.micro, currencyFormatFor(r.live.price.currency))}
+            </span>
             <span className="block text-xs text-text-muted">delayed {r.live.at}</span>
           </span>
         ) : (
           <span className="block">
-            <span className={FIG}>{formatMicro(r.close.micro)}</span>
+            <span className={FIG}>
+              {formatMicro(r.close.micro, currencyFormatFor(r.close.currency))}
+            </span>
             <span className="block text-xs text-text-muted">close</span>
           </span>
         ),
@@ -172,9 +182,11 @@ export function MarketTable({
       />
     ),
   });
-  const visible = masked
-    ? columns.filter((c) => c.key !== "price" && c.key !== "sizeBadge")
-    : columns;
+  // UXN-320 (b), D-1204: the Size column renders only when at least one row has a value, and never for a masked role.
+  const hasSize = !masked && rows.some((r) => r.sizeGroup !== null);
+  const visible = columns.filter(
+    (c) => !(masked && c.key === "price") && !(c.key === "sizeBadge" && !hasSize),
+  );
   return (
     <DataTable
       caption={caption}

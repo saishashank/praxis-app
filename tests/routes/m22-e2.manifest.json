@@ -1,0 +1,8 @@
+{
+  "$comment": "M22 E2 (KB-082, UXN-296, D-1480): the Owner's approve, dismiss and snooze of a discovery candidate on the Sources page. A test file must mention the path.",
+  "routes": {
+    "action src/app/(app)/reviews/experts/sources/actions.ts#candidateAction": {
+      "tests": ["tests/experts/poll/candidates.test.tsx"]
+    }
+  }
+}

@@ -37,6 +37,7 @@ import {
   readMyPortfolios,
   readOrders,
   readPickReview,
+  readUnprovenNotes,
   readRecap,
   readStats,
   unreadStreak,
@@ -168,6 +169,10 @@ export async function buildFacts(db: Client, o: BuildOptions): Promise<BuiltFact
   // D-909: descriptive, soft: a failing read leaves the section out, never the review
   const missedMovers = await readMissedMovers(c).catch(() => null);
   if (missedMovers !== null) facts.missedMovers = missedMovers;
+  // D-1425: the month's first review lists last month's AI-written reflections; soft, a failing read leaves it out
+  const unprovenNotes = minimal ? null : await readUnprovenNotes(c).catch(() => null);
+  if (unprovenNotes !== null)
+    facts.unprovenNotes = { ...unprovenNotes, lines: [...unprovenNotes.lines] };
   // D-957: one line per My portfolio profile in section 3; soft, a failing read leaves it out
   if (av.arenaActive && !minimal && !gone.has(3)) {
     const mine = await readMyPortfolios(c).catch(() => null);

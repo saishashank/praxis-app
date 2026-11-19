@@ -15,6 +15,7 @@ import {
 } from "./core";
 import { dateLabel, plural, truncate } from "./format";
 import { displayTitle } from "@/lib/view/displayText";
+import { briefMarketBlocks, type BriefMarketSection } from "./marketSections";
 
 export interface ReminderItem {
   name: string;
@@ -110,6 +111,12 @@ export interface BriefInput {
   overnight: { code: string; title: string; time: string; url?: string }[];
   events: { label: string; detail: string }[];
   plan: string[];
+  /**
+   * UXN-313, D-1124: the further active markets that trade on the date, one section each, never pooled. Absent with one
+   * market, so a single-market brief is exactly what it was. `firstMarket` names the market of the lists above then.
+   */
+  marketSections?: BriefMarketSection[];
+  firstMarket?: string;
 }
 
 export function renderBrief(i: BriefInput): SizedEmailOut {
@@ -119,6 +126,11 @@ export function renderBrief(i: BriefInput): SizedEmailOut {
     const blocks: Block[] = [
       { t: "h", text: "Morning Brief", level: 1 },
       { t: "p", text: dateLabel(i.date), tone: "muted" },
+      ...(i.marketSections !== undefined &&
+      i.marketSections.length > 0 &&
+      i.firstMarket !== undefined
+        ? ([{ t: "h", text: i.firstMarket }] as Block[])
+        : []),
       { t: "h", text: "Overnight announcements" },
       i.overnight.length
         ? {
@@ -142,7 +154,13 @@ export function renderBrief(i: BriefInput): SizedEmailOut {
         ? { t: "ul", items: i.plan.slice(0, cap) }
         : { t: "p", text: "No orders pending.", tone: "muted" },
     ];
-    const total = i.overnight.length + i.events.length + i.plan.length;
+    const extra = i.marketSections ?? [];
+    if (extra.length > 0) blocks.push(...briefMarketBlocks(extra, cap));
+    const total =
+      i.overnight.length +
+      i.events.length +
+      i.plan.length +
+      extra.reduce((a, s) => a + s.overnight.length + s.events.length + s.plan.length, 0);
     if (
       cap !== Infinity &&
       (i.overnight.length > cap || i.events.length > cap || i.plan.length > cap)

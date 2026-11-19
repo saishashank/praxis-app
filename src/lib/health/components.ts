@@ -6,6 +6,7 @@
 // (amber and red). Each unhealthy component lists items with a stable key (the snooze unit), a
 // label, a one-line fix and the Control Room anchor. `since_d` is added by the snapshot writer from
 // the previous snapshot, never here.
+import type { CalendarFinding } from "@/lib/data/calendarEscalation";
 import { HEALTH_COMPONENTS, type HealthComponent } from "@/lib/sentinel/schema";
 
 export type ComponentState = "healthy" | "attention" | "down";
@@ -57,7 +58,32 @@ export interface HealthFacts {
   credentials: CredentialFact[];
   /** Worst usage meter over all quotas. */
   quotaLevel: LevelFact;
+  /** OPS-103: findings about a drafted next-year trading calendar (absent = not read). */
+  calendar?: CalendarFinding[];
+  /** OPS-105: the restore drills the drill script recorded (absent = not read). */
+  restore?: RestoreFacts;
+  /** PLT-080: the Turso plan name from the daily usage sample (absent = not read). */
+  tursoPlan?: { name: string | null };
 }
+
+/** One recorded run of scripts/restore/drill-turso.mjs (run_record job `restore-drill`). */
+export interface RestoreRun {
+  /** ISO start time. */
+  at: string;
+  keyMode: string;
+  mode: string;
+}
+export interface RestoreFacts {
+  /** Runs since the start of the current quarter, newest first. */
+  thisQuarter: RestoreRun[];
+  /** Start (ISO) of the newest real-key drill ever recorded, null = never. */
+  lastRealDrillAt: string | null;
+}
+
+/** PLT-080: from this day a plan that is not Free (or not known) is a finding. */
+export const TURSO_DOWNGRADE_DEADLINE = "2026-12-01";
+/** Plan ids the Turso API gives the free plan (the current name and the older one). */
+export const TURSO_FREE_PLAN_IDS = ["free", "starter"] as const;
 
 /** Sentinel silence beyond this is amber; beyond the red bound it is red (design 4.2 cadence). */
 export const SENTINEL_AMBER_H = 36;
@@ -206,6 +232,19 @@ function marketData(f: HealthFacts): ComponentResult {
       );
     }
   }
+  for (const f2 of f.calendar ?? []) {
+    const state: ItemState = f2.kind === "draft_ready" ? "attention" : "down";
+    items.push(
+      item(
+        c,
+        `calendar.${f2.kind}.${f2.market}.${f2.year}`,
+        f2.text,
+        state,
+        "Open System Health, Data controls, Trading calendar, and confirm the year",
+        f2.kind === "draft_ready" ? `${f2.year - 1}-12-31` : null,
+      ),
+    );
+  }
   return result(c, items, "Data fresh and checks pass");
 }
 
@@ -300,21 +339,55 @@ function database(f: HealthFacts): ComponentResult {
   return result(c, items, "Reachable");
 }
 
+/** First day of the quarter a date is in (the restore drill is quarterly, OPS-105). */
+export function quarterStart(d: string): string {
+  const m = Number(d.slice(5, 7));
+  return `${d.slice(0, 4)}-${String(Math.floor((m - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
+}
+
+/**
+ * OPS-105 (D-962): the quarterly real-key restore drill is Owner-run. From the first day of each
+ * quarter an Owner item stays open until a real-key drill AND a later green verify-removed run are
+ * recorded inside that quarter. Pure: no clock beyond `f.today`.
+ */
+export function restoreDrillDue(f: Pick<HealthFacts, "today" | "restore">): boolean {
+  if (f.restore === undefined) return false;
+  const drills = f.restore.thisQuarter.filter(
+    (r) => r.keyMode === "real" && (r.mode === "drill" || r.mode === "restore"),
+  );
+  return !drills.some((dr) =>
+    f.restore!.thisQuarter.some((v) => v.mode === "verify-removed" && v.at >= dr.at),
+  );
+}
+
 function backups(f: HealthFacts): ComponentResult {
   const c = "backups";
-  return result(
-    c,
-    compact([
-      jobItem(
+  const items = compact([
+    jobItem(
+      c,
+      "nightly-backup",
+      "Nightly backup",
+      f.jobs["nightly-backup"],
+      "Run the backup and check its log",
+    ),
+  ]);
+  const last = f.restore?.lastRealDrillAt ?? null;
+  const lastText =
+    f.restore === undefined
+      ? ""
+      : `; last real-key restore drill ${last === null ? "never" : last.slice(0, 10)}`;
+  if (restoreDrillDue(f)) {
+    items.push(
+      item(
         c,
-        "nightly-backup",
-        "Nightly backup",
-        f.jobs["nightly-backup"],
-        "Run the backup and check its log",
+        "restore.drill_due",
+        `Quarterly restore drill due (last real-key drill ${last === null ? "never" : last.slice(0, 10)}): run Restore drill (real key) from the Actions tab, then verify-removed`,
+        "attention",
+        "Follow owner_checks.md (the restore drill section)",
       ),
-    ]),
-    "Last backup succeeded",
-  );
+    );
+  }
+  return result(c, items, `Last backup succeeded${lastText}`);
 }
 
 function security(f: HealthFacts): ComponentResult {
@@ -390,6 +463,31 @@ function freeTier(f: HealthFacts): ComponentResult {
     items.push(item(c, "quota.degrade", "A free-tier limit is reached", "down", "Open Usage"));
   else if (f.quotaLevel === "alert")
     items.push(item(c, "quota.alert", "A free-tier limit is close", "attention", "Open Usage"));
+  const plan = f.tursoPlan;
+  if (plan !== undefined && f.today >= TURSO_DOWNGRADE_DEADLINE) {
+    const name = plan.name?.trim() ?? "";
+    if (name === "") {
+      items.push(
+        item(
+          c,
+          "turso.plan_unknown",
+          "Turso plan unknown: confirm the Free plan",
+          "attention",
+          "Add the Turso usage token (owner_checks.md) or check the plan in the Turso dashboard",
+        ),
+      );
+    } else if (!(TURSO_FREE_PLAN_IDS as readonly string[]).includes(name.toLowerCase())) {
+      items.push(
+        item(
+          c,
+          "turso.plan_not_free",
+          `Turso plan is ${name}: downgrade to Free (PLT-080, $0 rule)`,
+          "down",
+          "Downgrade the Turso plan to Free in the Turso dashboard",
+        ),
+      );
+    }
+  }
   return result(c, items, "Well inside the limits");
 }
 

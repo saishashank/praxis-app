@@ -6,6 +6,8 @@
 // (pool slot only; the P0 slot is never touched). Every outcome is a `pick_alert_mail` row, so the
 // mailer derives "unmailed" from `pick_alert` rows without such a row and a lost tick is repaired.
 // Writes here: `pick_alert_mail` only (the e-mail rows go through sendEmail / recordRow).
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { Client } from "@libsql/client";
 import { buyIdeaSql } from "@/lib/intraday/side";
 import { inQuietHours, parseQuietHours, type QuietHours } from "@/lib/alerts/api";
@@ -19,6 +21,9 @@ import {
   type PickAlertMailer,
 } from "@/lib/alerts/pick/types";
 import { getConfig } from "@/lib/config/store";
+import { effectiveStopHitEmails } from "@/lib/preferences/service";
+import { displayName } from "@/lib/view/format";
+import type { StopHitItem } from "@/lib/alerts/pick/stopHit";
 import type { Exec } from "@/lib/cortex/store/common";
 import type { EmailEnv } from "@/lib/sentinel/schema";
 import { COUNTED, loadCaps, recordRow, releaseOrphanBatches } from "./caps";
@@ -59,7 +64,7 @@ export type PickFacts = {
   latency?: Latency;
 };
 
-const SESSION_END = "16:00"; // threshold-ok: last quote-poll tick (D-388)
+const SESSION_END = homeProfile().sessionClose!; // threshold-ok: last quote-poll tick (D-388)
 
 const pickKindOf = (e: PickEvent): PickKind =>
   e === "hit" ? "pick_hit" : e === "candidate" ? "pick_candidate" : "pick_cleared";
@@ -139,6 +144,8 @@ async function writeMail(
 // ---- preferences and quiet hours (auth DB) -----------------------------------------------------------
 
 type UserPrefs = {
+  /** EML-043 (D-1226): the effective stop-hit mail setting (stored choice, else `stop_hit_email_default`). */
+  stopHit: boolean;
   alerts: boolean;
   cleared: boolean;
   candidates: boolean;
@@ -152,13 +159,16 @@ async function readPrefs(
   auth: Exec | undefined,
   userId: string,
   ownerOn: boolean,
+  stopHitDefault: unknown = "off",
 ): Promise<UserPrefs> {
-  if (!auth) return { alerts: true, cleared: true, candidates: true, quiet: null };
+  const none = effectiveStopHitEmails(null, stopHitDefault) === "on";
+  if (!auth) return { stopHit: none, alerts: true, cleared: true, candidates: true, quiet: null };
   const r = await auth.execute({
     sql: "SELECT u.role AS role, p.prefs_json AS prefs_json FROM app_user u LEFT JOIN user_preference p ON p.user_id = u.id WHERE u.id = ?",
     args: [Number(userId)],
   });
-  if (!r.rows.length) return { alerts: false, cleared: false, candidates: false, quiet: null };
+  if (!r.rows.length)
+    return { stopHit: false, alerts: false, cleared: false, candidates: false, quiet: null };
   let v: Record<string, unknown> = {};
   if (r.rows[0].prefs_json !== null) {
     try {
@@ -175,6 +185,11 @@ async function readPrefs(
         ? false
         : String(r.rows[0].role) === "owner" && ownerOn;
   return {
+    stopHit:
+      effectiveStopHitEmails(
+        v.stop_hit_emails === "on" || v.stop_hit_emails === "off" ? v.stop_hit_emails : null,
+        stopHitDefault,
+      ) === "on",
     alerts,
     cleared: v.cleared_pick_emails !== "off",
     candidates: v.intraday_candidate_emails !== "off",
@@ -381,14 +396,14 @@ async function deliver(
 }
 
 const hmFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",
 });
 const melbourneHm = (at: Date): string => hmFmt.format(at);
 const stampFmt = new Intl.DateTimeFormat("en-AU", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   weekday: "short",
   day: "numeric",
   month: "short",
@@ -406,7 +421,7 @@ export const melbourneStamp = (iso: string): string =>
 export function priceText(micro: bigint): string {
   const whole = micro / 1_000_000n;
   const frac = (micro % 1_000_000n) / 1_000n;
-  return `A$${whole}.${String(frac).padStart(3, "0")}`;
+  return `${homeProfile().currencyFormat!.symbol}${whole}.${String(frac).padStart(3, "0")}`;
 }
 
 // ---- deriving the unmailed transitions and building their facts --------------------------------------
@@ -446,7 +461,10 @@ async function unmailed(db: Exec, c: MailerCtx): Promise<AlertRow[]> {
   return r.rows.map(toRow);
 }
 
-async function pickInfo(db: Exec, t: AlertRow) {
+async function pickInfo(
+  db: Exec,
+  t: Pick<AlertRow, "market" | "pickD" | "profile" | "rank" | "code">,
+) {
   const r = await db.execute({
     sql: "SELECT label, size_micro, time_frame_sessions, created_at FROM pick WHERE market = ? AND d = ? AND profile = ? AND rank = ?",
     args: [t.market, t.pickD, t.profile, t.rank],
@@ -554,7 +572,82 @@ export function createPickMailer(ctx: PickMailCtx): PickAlertMailer {
       }
     },
     digest: async (c: MailerCtx) => sendDigest({ ...ctx, db: c.db, now: () => c.now }, c),
+    stopHit: async (c: MailerCtx, due: readonly StopHitItem[]) =>
+      sendStopHitMails({ ...ctx, db: c.db, now: () => c.now }, c, due),
   };
+}
+
+// ---- the stop-hit mail (EML-043, D-1226) ---------------------------------------------------------------
+
+/**
+ * One information mail per alert and session for a user who opted in, when a hit alert's delayed price is
+ * under its stop. It is kind `pick_cleared` (variant `stop_hit`, its own key), so the closed kind CHECK, the
+ * pool slot, `pick_alert_emails_per_day` and the claim's atomic cap re-check apply unchanged, and the
+ * `email_message` primary key makes it once per alert and session. Quiet hours: nothing is sent and nothing
+ * is claimed (the mail is not held to a digest; the next tick after the window sends it if the price is still
+ * under the stop). No `pick_alert` row, no order, no `pick_alert_mail` row (that table's kind list is closed).
+ */
+export async function sendStopHitMails(
+  ctx: PickMailCtx,
+  c: MailerCtx,
+  due: readonly StopHitItem[],
+): Promise<void> {
+  if (due.length === 0) return;
+  const now = c.now;
+  const d = melbourneDate(now);
+  const env = emailEnvName(ctx.env);
+  if (env === "staging") return; // staging sends none to the inbox (EML-041)
+  const ownerOn = String(await getConfig(c.db as Client, "pick_alerts_default_owner")) === "on";
+  const stopDefault = await getConfig(c.db as Client, "stop_hit_email_default");
+  const latency = await latencyOf(c.db);
+  const prefsOf = new Map<string, UserPrefs>();
+  for (const it of due) {
+    let prefs = prefsOf.get(it.userId);
+    if (!prefs) {
+      prefs = await readPrefs(ctx.auth, it.userId, ownerOn, stopDefault);
+      prefsOf.set(it.userId, prefs);
+    }
+    if (!prefs.alerts || !prefs.stopHit) continue; // opt-in: off writes nothing
+    if (inQuietHours(now, prefs.quiet)) continue;
+    const key = emailKeys.pickStopHit(it.alertId, c.sessionD);
+    const seen = await c.db.execute({
+      sql: "SELECT status FROM email_message WHERE email_key = ?",
+      args: [key],
+    });
+    if (seen.rows.length > 0 && String(seen.rows[0].status) !== "claimed") continue; // once per alert and session
+    if ((await pickCapRemaining(c.db, env, d)) < 1) {
+      await recordRow(c.db, {
+        key,
+        kind: "pick_cleared",
+        env,
+        d,
+        slot: "pool",
+        status: "suppressed_cap",
+        nowIso: now.toISOString(),
+      });
+      continue;
+    }
+    const info = await pickInfo(c.db, it);
+    await sendEmail(
+      { ...ctx, db: c.db, now: () => now },
+      "pick_cleared",
+      key,
+      {
+        facts: {
+          alertId: it.alertId,
+          code: it.code,
+          name: displayName(info.name, { code: it.code }),
+          variant: "stop_hit",
+          limit: priceText(it.limitMicro),
+          stop: priceText(it.stopMicro),
+          last: priceText(it.lastMicro),
+          quoteTime: melbourneStamp(it.quoteAt),
+        },
+        latency,
+      },
+      { pickCap: { own: await num(c.db, "pick_alert_emails_per_day") } },
+    );
+  }
 }
 
 type Held = { alertId: string; key: string; userId: string; sessionD: string };

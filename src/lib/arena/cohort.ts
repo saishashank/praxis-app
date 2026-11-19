@@ -23,17 +23,16 @@ import { createHash } from "node:crypto";
 import { C1_ETF_PLACEHOLDER } from "@/lib/config/keys";
 import { nextTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import { type Micro } from "@/lib/money/micro";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
+import { homeProfile, staticProfile } from "@/lib/market/staticProfile.mjs";
 import { makeRational, mulRat, parseRational, type Rational } from "@/lib/money/rational";
 import { roundHalfAwayFromZero } from "@/lib/money/round";
-import { COST_PROFILES, type CostProfileCode } from "./costs";
+import { cohortCostProfile } from "./costs";
+import { marketMoney } from "./marketMoney";
+import { seedForMarket, type FxRow } from "./seed";
 import { seedTxn, type LedgerTxn, type SettlementMode } from "./ledger";
 import type { ExecutionKind, ExecutionRow, RecoveryMode, TerminalKind, Variant } from "./schema";
-import {
-  DEFAULT_CASH_BUFFER,
-  DEFAULT_PARTICIPATION_CAP,
-  MIN_MARKETABLE_PARCEL_MICRO,
-  stallFloorMicro,
-} from "./sizing";
+import { DEFAULT_CASH_BUFFER, DEFAULT_PARTICIPATION_CAP, stallFloorMicro } from "./sizing";
 import { DEFAULT_TICK_CROSS_FACTOR } from "./slippage";
 import { defaultSleeveConfig, type SleeveConfig } from "./sleeve";
 import {
@@ -49,16 +48,21 @@ import {
 
 // ---- constants -----------------------------------------------------------------------------------------------
 
-export const ARENA_MARKET = "AU";
+/** Micro units per whole currency unit (money is stored in micro units of the market currency). */
+const MICRO_PER_UNIT = 1_000_000n;
+
+export const ARENA_MARKET: string = HOME_MARKET;
 /**
- * ARN-001: the AU market seed A$600 (Owner O-25), the FIRST round. Kept as the default of
- * `resolveCohortParams` so history replays, the research replay and every stored round of A$600 keep
- * their meaning; the live arena resolves its seed per start session with `roundOverridesFor`.
+ * ARN-001: the home market's cohort seed amount (AU A$600, Owner O-25), from its profile (`seed_amount`), the FIRST
+ * round. Kept as the default of `resolveCohortParams` so history replays, the research replay and every stored round of
+ * A$600 keep their meaning; the live arena resolves its seed per start session with `roundOverridesFor`.
  */
-export const SEED_MICRO: Micro = 600_000_000n;
+export const SEED_MICRO: Micro =
+  BigInt((homeProfile().fields.seed_amount!.value as { amount: number }).amount) * MICRO_PER_UNIT;
 /**
  * D-1020 (Owner O-82, 2026-11-11): the live arena's second round starts every strategy and control
  * with A$5,000 so a book can hold several stocks (A$600 and the A$500 parcel allowed only one).
+ * The round is the home market's (AU); a market activated later seeds from its own profile.
  */
 export const ROUND2_SEED_MICRO: Micro = 5_000_000_000n;
 /** D-1021: most positions open at once in the A$5,000 round (about A$830 each at an even split). */
@@ -130,8 +134,15 @@ export function c1EtfStatus(code: string): C1EtfStatus {
 export type RegistryOptions = {
   readonly market?: string;
   readonly ruleVersion?: string;
-  readonly costProfile?: CostProfileCode;
+  readonly costProfile?: string;
 };
+
+/** The profile a market's `cost_formula` names (AU `P5`, IN `IN-P1`): a new cohort's default (D-1154 item 3). */
+export function defaultCostProfileOf(market: string): string {
+  const code = staticProfile(market).costFormula;
+  if (code === null) throw new RangeError(`market ${market} has no cost_formula`);
+  return code;
+}
 
 export function twinGroupOf(family: FamilyId): string {
   return `TW-${family}`;
@@ -146,7 +157,7 @@ function two(n: number): string {
 export function buildExecutionRegistry(options: RegistryOptions = {}): ExecutionRow[] {
   const market = options.market ?? ARENA_MARKET;
   const ruleVersion = options.ruleVersion ?? DEFAULT_RULE_VERSION;
-  const costProfile = options.costProfile ?? "P5";
+  const costProfile = options.costProfile ?? defaultCostProfileOf(market);
   const row = (
     id: string,
     kind: ExecutionKind,
@@ -232,7 +243,7 @@ export type CohortParams = {
   readonly market: string;
   readonly seedMicro: Micro;
   readonly terminal: TerminalParams;
-  readonly costProfile: CostProfileCode;
+  readonly costProfile: string;
   readonly settlementMode: SettlementMode;
   readonly minParcelMicro: Micro;
   readonly participationCap: Rational;
@@ -245,14 +256,26 @@ export type CohortParams = {
 
 export type ParamOverrides = Partial<Omit<CohortParams, "terminal">> & {
   readonly terminal?: Partial<TerminalParams>;
+  /**
+   * The FX close the seed converts with (D-1107): required for a market whose `seed_amount` is `fx_rounded` (IN, US)
+   * unless `seedMicro` is given; the home market ignores it.
+   */
+  readonly fxRow?: FxRow | null;
 };
 
 /** Resolve the parameters of a new cohort from the defaults and the injected (config) values. */
 export function resolveCohortParams(overrides: ParamOverrides = {}): CohortParams {
-  const costProfile = overrides.costProfile ?? "P5";
-  const seedMicro = overrides.seedMicro ?? SEED_MICRO;
+  const market = overrides.market ?? ARENA_MARKET;
+  const mprofile = staticProfile(market);
+  const costProfile = overrides.costProfile ?? defaultCostProfileOf(market);
+  // D-1154 item 3 / D-1107: the home seed is the fixed A$600; another market converts its seed from the FX close
+  const seedMicro =
+    overrides.seedMicro ??
+    (market === ARENA_MARKET
+      ? SEED_MICRO
+      : seedForMarket(mprofile, overrides.fxRow ?? null).seedMicro);
   const cashBuffer = overrides.cashBuffer ?? DEFAULT_CASH_BUFFER;
-  const minParcelMicro = overrides.minParcelMicro ?? MIN_MARKETABLE_PARCEL_MICRO;
+  const minParcelMicro = overrides.minParcelMicro ?? marketMoney(market).parcelMicro;
   const t = overrides.terminal ?? {};
   const terminal: TerminalParams = {
     seedMicro,
@@ -261,9 +284,11 @@ export function resolveCohortParams(overrides: ParamOverrides = {}): CohortParam
     stallFloorMicro:
       t.stallFloorMicro ??
       stallFloorMicro({
-        profile: COST_PROFILES[costProfile],
+        profile: cohortCostProfile({ market, costProfile }),
         parcelMicro: minParcelMicro,
         cashBuffer,
+        marketProfile: mprofile,
+        tickTable: marketMoney(market).tickTable,
       }),
     stallSessions: t.stallSessions ?? DEFAULT_STALL_SESSIONS,
     stallParcelRejections: t.stallParcelRejections ?? DEFAULT_STALL_PARCEL_REJECTIONS,
@@ -271,7 +296,7 @@ export function resolveCohortParams(overrides: ParamOverrides = {}): CohortParam
   };
   assertTerminalParams(terminal);
   return {
-    market: overrides.market ?? ARENA_MARKET,
+    market,
     seedMicro,
     terminal,
     costProfile,
@@ -343,7 +368,7 @@ export function parseCohortParams(text: string): CohortParams {
   const b = parsed.params as {
     market: string;
     seed_micro: string;
-    cost_profile: CostProfileCode;
+    cost_profile: string;
     settlement_mode: SettlementMode;
     min_parcel_micro: string;
     participation_cap: string;
@@ -501,7 +526,7 @@ export function planCohortStart(input: StartInput): CohortStart {
   ) {
     throw new RangeError("control index must be a positive whole number");
   }
-  const profile = COST_PROFILES[params.costProfile];
+  const profile = cohortCostProfile(params);
   const id = cohortIdFor(execution.id, input.controlIdx, input.startD);
   return {
     id,

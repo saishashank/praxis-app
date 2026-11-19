@@ -4,10 +4,12 @@
 // exits reads this table: stops and exits stay at the close (ARN-021).
 import type { Exec } from "@/lib/cortex/store/common";
 import { marketDate } from "@/lib/data/calendar";
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
+import { homeProfile } from "@/lib/market/staticProfile.mjs";
 import type { DelayedQuote } from "./types";
 
 /** The quote date is the exchange's own date (the ASX trades on Sydney time). */
-export const QUOTE_TZ = "Australia/Sydney";
+export const QUOTE_TZ: string = homeProfile().tz!;
 /** Codes per read (SQLite host-parameter headroom). */
 export const LATEST_READ_MAX = 200; // threshold-ok: query parameter cap
 
@@ -35,9 +37,15 @@ export async function storeLatestQuotes(
       sql:
         "INSERT INTO quote_latest (market, code, last_micro, prev_close_micro, quote_at, fetched_at) " +
         "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (market, code) DO UPDATE SET " +
-        "last_micro = excluded.last_micro, prev_close_micro = excluded.prev_close_micro, " +
+        // M18 (OPS-109 c starvation check): a re-fetch with the same quote time (an untraded stock)
+        // moves only fetched_at, so a quiet held stock is not reported as starved; the price never
+        // moves back.
+        "last_micro = CASE WHEN excluded.quote_at > quote_latest.quote_at " +
+        "THEN excluded.last_micro ELSE quote_latest.last_micro END, " +
+        "prev_close_micro = CASE WHEN excluded.quote_at > quote_latest.quote_at " +
+        "THEN excluded.prev_close_micro ELSE quote_latest.prev_close_micro END, " +
         "quote_at = excluded.quote_at, fetched_at = excluded.fetched_at " +
-        "WHERE excluded.quote_at > quote_latest.quote_at",
+        "WHERE excluded.quote_at >= quote_latest.quote_at",
       args: [market, q.code, q.lastMicro, q.prevCloseMicro, q.quoteAt, q.fetchedAt],
     });
     n += 1;
@@ -132,7 +140,7 @@ export function quoteChangePpm(
 export function quoteTimeMelbourne(quoteAt: string): string {
   const t = new Date(quoteAt);
   return new Intl.DateTimeFormat("en-AU", {
-    timeZone: "Australia/Melbourne",
+    timeZone: OWNER_TZ,
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,

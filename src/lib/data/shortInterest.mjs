@@ -4,10 +4,11 @@
 // `short_interest` first-seen (ON CONFLICT DO NOTHING) and reads it back look-ahead safe.
 // The file carries no publication time: `published_at` is ASSUMED as as_of + 5 weekdays (end of
 // day) and the row is flagged `assumed_time = 1` (D-065). Plain ESM + JSDoc.
+import { HOME_MARKET } from "../market/homeMarket.mjs";
 import { addDays, isRealDate, isValidCode, isWeekend } from "./pipeline/rules.mjs";
 import { asicPublishedAt } from "./backfill/rules.mjs";
 
-export const SHORT_MARKET = "AU";
+export const SHORT_MARKET = HOME_MARKET;
 /** `source_status.source` id and the `short_interest.source` value. */
 export const SHORT_SOURCE = "asic_short";
 /** ASIC files are requested for the weekdays of the last N calendar days (the lag is ~T+4). */

@@ -200,7 +200,12 @@ describe("7. Market overview sheet has the delayed quote", () => {
     expect((await loadOverview(envOf(w, "owner"), "ZZUP"))!.live).toBeNull();
     await quote(w.main, "ZZUP", 11_025_000); // close 10.50
     const o = (await loadOverview(envOf(w, "owner"), "ZZUP"))!;
-    expect(o.live).toEqual({ priceMicro: "11025000", changePpm: 50_000, at: "13:05" });
+    expect(o.live).toEqual({
+      priceMicro: "11025000",
+      currency: "AUD",
+      changePpm: 50_000,
+      at: "13:05",
+    });
     let sawMasked = 0;
     for (const letter of "abcdefghijklmnopqrstuvwxyz") {
       const m = await loadOverview(envOf(w, "viewer"), `stock-${letter}`);

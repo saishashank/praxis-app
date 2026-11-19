@@ -158,7 +158,7 @@ describe("morning check", () => {
       async () =>
         db.execute("UPDATE source_status SET mode = 'tripped' WHERE source = 'asx_announcements'"),
     ],
-    ["market off", async () => db.execute("UPDATE market SET mode = 'off'")],
+    ["market off", async () => db.execute("UPDATE market SET mode = 'off' WHERE code = 'AU'")],
   ])("the poll check is skipped (not an incident) when %s", async (_n, change) => {
     await healthyMorning();
     await change();
@@ -248,9 +248,9 @@ describe("evening check", () => {
     expect(off.problems).toEqual([]);
     expect(off.notes.join(" ")).toMatch(/dispatch is off/);
     await setState("dispatch_enabled", true);
-    await db.execute("UPDATE market SET mode = 'off'");
+    await db.execute("UPDATE market SET mode = 'off' WHERE code = 'AU'");
     expect((await runChecks("evening", db, EVENING_MON)).problems).toEqual([]);
-    await db.execute("UPDATE market SET mode = 'data_only'");
+    await db.execute("UPDATE market SET mode = 'data_only' WHERE code = 'AU'");
     const sun = await runChecks("evening", db, new Date("2026-10-11T11:10:00.000Z"));
     expect(kinds(sun)).toEqual(["worker_blind"]); // only the Worker check
   });

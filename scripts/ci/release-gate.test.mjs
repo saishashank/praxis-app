@@ -1,4 +1,6 @@
 // M8 T6: the release-gate CLI against a fake GitHub client. No network, no real token.
+// M18 OPS-107 / D-964: no staging runs are read; the CLI reads the recorded-day job of the CI run, the
+// push CI runs of the head branch (conclusions only) and the zap-baseline run on the commit.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -20,6 +22,7 @@ const env = (over = {}) => ({
   GITHUB_TOKEN: TOKEN,
   GITHUB_REPOSITORY: REPO,
   GITHUB_RUN_ID: "500",
+  GITHUB_HEAD_REF: "build",
   ...over,
 });
 const S = (name, conclusion = "success") => ({ name, conclusion });
@@ -33,6 +36,7 @@ const J = (
   conclusion,
   steps,
 });
+const RECORDED = J("recorded-day", "success", [S(STEP.recordedDeadlines), S(STEP.recordedNetwork)]);
 const R = (id, sha, created, conclusion = "success") => ({
   id,
   head_sha: sha,
@@ -47,21 +51,17 @@ function world(patch = {}) {
       workflow_runs: [R(500, SHA, ago(H))],
     },
     [`/repos/${REPO}/actions/runs/500/jobs?per_page=100`]: {
-      jobs: CI_REQUIRED_JOBS.map((n) => J(n)),
+      jobs: [...CI_REQUIRED_JOBS.map((n) => J(n)), RECORDED],
     },
     [`/repos/${REPO}/commits/${SHA}`]: { commit: { committer: { date: ago(3 * D) } } },
-    [`/repos/${REPO}/actions/workflows/staging-e2e-day.yml/runs?per_page=30&head_sha=${SHA}&status=completed`]:
-      { workflow_runs: [R(600, SHA, ago(D))] },
-    "/repos/praxis-owner/praxis-app/actions/runs/600/jobs?per_page=100": {
-      jobs: [J("staging", "success", [S(STEP.e2eDeadlines), S(STEP.e2eStaging)])],
-    },
-    [`/repos/${REPO}/actions/workflows/nightly.yml/runs?per_page=30&status=completed`]: {
-      workflow_runs: [R(701, OTHER, ago(2 * H)), R(702, OTHER, ago(D)), R(703, OTHER, ago(2 * D))],
-    },
-    [`/repos/${REPO}/actions/workflows/zap-baseline.yml/runs?per_page=30&event=workflow_dispatch&status=completed`]:
-      { workflow_runs: [R(800, OTHER, ago(2 * D))] },
+    [`/repos/${REPO}/actions/workflows/ci.yml/runs?per_page=30&branch=build&event=push&status=completed`]:
+      {
+        workflow_runs: [R(701, SHA, ago(2 * H)), R(702, OTHER, ago(D)), R(703, OTHER, ago(2 * D))],
+      },
+    [`/repos/${REPO}/actions/workflows/zap-baseline.yml/runs?per_page=30&head_sha=${SHA}&status=completed`]:
+      { workflow_runs: [R(800, SHA, ago(D))] },
     "/repos/praxis-owner/praxis-app/actions/runs/800/jobs?per_page=100": {
-      jobs: [J("staging", "success", [S(STEP.zapScan)])],
+      jobs: [J("local", "success", [S(STEP.zapScan)])],
     },
     [`/repos/${REPO}/actions/workflows/restore-drill.yml/runs?per_page=30&status=completed`]: {
       workflow_runs: [R(900, OTHER, ago(5 * D)), R(901, OTHER, ago(9 * D), "failure")],
@@ -74,11 +74,6 @@ function world(patch = {}) {
     },
     ...patch,
   };
-  for (const id of [701, 702, 703]) {
-    w[`/repos/praxis-owner/praxis-app/actions/runs/${id}/jobs?per_page=100`] = {
-      jobs: [J("staging")],
-    };
-  }
   return w;
 }
 
@@ -148,18 +143,19 @@ test("each missing piece of GitHub evidence fails the gate with exit 1", async (
         workflow_runs: [],
       },
     }),
-    e2e: world({
-      [`/repos/${REPO}/actions/workflows/staging-e2e-day.yml/runs?per_page=30&head_sha=${SHA}&status=completed`]:
-        { workflow_runs: [] },
-    }),
-    nightly: world({
-      [`/repos/${REPO}/actions/workflows/nightly.yml/runs?per_page=30&status=completed`]: {
-        workflow_runs: [],
+    recorded: world({
+      [`/repos/${REPO}/actions/runs/500/jobs?per_page=100`]: {
+        jobs: CI_REQUIRED_JOBS.map((n) => J(n)),
       },
     }),
-    zap: drop(
-      `/repos/${REPO}/actions/workflows/zap-baseline.yml/runs?per_page=30&event=workflow_dispatch&status=completed`,
-    ),
+    streak: world({
+      [`/repos/${REPO}/actions/workflows/ci.yml/runs?per_page=30&branch=build&event=push&status=completed`]:
+        { workflow_runs: [R(701, SHA, ago(2 * H)), R(702, OTHER, ago(D), "failure")] },
+    }),
+    zap: world({
+      [`/repos/${REPO}/actions/workflows/zap-baseline.yml/runs?per_page=30&head_sha=${SHA}&status=completed`]:
+        { workflow_runs: [] },
+    }),
     drill: world({
       [`/repos/${REPO}/actions/workflows/restore-drill.yml/runs?per_page=30&status=completed`]: {
         workflow_runs: [],
@@ -222,6 +218,42 @@ test("infrastructure mode: no staging evidence is read, and the table says so", 
   assert.match(s.text, /only the full gate applies/);
 });
 
+test("ci-streak: the head branch comes from --branch, else GITHUB_HEAD_REF, else GITHUB_REF_NAME; unknown fails", async () => {
+  const w = world();
+  const viaFlag = await exec([...FULL, "--branch", "build"], {
+    e: env({ GITHUB_HEAD_REF: undefined }),
+  });
+  assert.equal(viaFlag.code, 0);
+  const viaRef = await exec(FULL, {
+    w,
+    e: env({ GITHUB_HEAD_REF: undefined, GITHUB_REF_NAME: "build" }),
+  });
+  assert.equal(viaRef.code, 0);
+  const none = await exec(FULL, { e: env({ GITHUB_HEAD_REF: undefined }) });
+  assert.equal(none.code, 1);
+  assert.match(none.text, /CI streak/);
+  assert.ok(none.client.calls.every((c) => !c.includes("event=push")));
+  // a hostile branch name is never put into a request
+  const bad = await exec(FULL, { e: env({ GITHUB_HEAD_REF: "x&event=push/../" }) });
+  assert.equal(bad.code, 1);
+  assert.ok(bad.client.calls.every((c) => !c.includes("x&event")));
+  const badFlag = await exec([...FULL, "--branch", "a b"]);
+  assert.equal(badFlag.code, 2);
+});
+
+test("the streak read asks for push runs of the branch only and reads no jobs; ZAP is read for the commit; no staging workflow is read", async () => {
+  const r = await exec(FULL);
+  assert.ok(
+    r.client.calls.includes(
+      `/repos/${REPO}/actions/workflows/ci.yml/runs?per_page=30&branch=build&event=push&status=completed`,
+    ),
+  );
+  for (const id of [701, 702, 703]) {
+    assert.ok(!r.client.calls.some((c) => c.includes(`/runs/${id}/jobs`)));
+  }
+  assert.ok(r.client.calls.every((c) => !/nightly|staging/.test(c)));
+});
+
 test("--real-key-since: a build-phase drill before the date no longer counts", async () => {
   const r = await exec([...FULL, "--real-key-since", "2026-11-18"]);
   assert.equal(r.code, 1);
@@ -271,10 +303,10 @@ test("missing or malformed GitHub context exits 2", async () => {
 test("API failures fail the gate closed with plain reasons, never exit 0", async () => {
   const w = world();
   for (const k of Object.keys(w))
-    if (k.includes("nightly.yml")) w[k] = new GateError("GitHub API returned HTTP 500");
+    if (k.includes("ci.yml/runs?per_page=30")) w[k] = new GateError("GitHub API returned HTTP 500");
   const r = await exec(FULL, { w });
   assert.equal(r.code, 1);
-  assert.match(r.text, /Nightly suite/);
+  assert.match(r.text, /CI streak/);
   const down = await exec(FULL, { w: {} });
   assert.equal(down.code, 1);
 });
@@ -363,37 +395,36 @@ test("localChecks: quarantine and exception files are read and checked against t
   assert.ok((await l.quarantine("2026-11-20")) >= 1);
 });
 
-// D-860: the CLI reads docs/release/waivers.json from the checked-out commit.
+// D-860 / D-964: the CLI still reads docs/release/waivers.json, but nothing is waivable.
 const GATE_WAIVER = {
-  condition: "staging-e2e-day",
-  reason: "staging has never run a full day",
+  condition: "recorded-day",
+  reason: "the recorded day cannot run yet",
   decidedBy: "Owner",
   decidedOn: "2026-11-18",
   expires: "2026-11-25",
-  followUp: "set up a staging test day",
+  followUp: "fix the recorded day",
 };
 const noDayWorld = () =>
   world({
-    [`/repos/${REPO}/actions/workflows/staging-e2e-day.yml/runs?per_page=30&head_sha=${SHA}&status=completed`]:
-      { workflow_runs: [] },
+    [`/repos/${REPO}/actions/runs/500/jobs?per_page=100`]: {
+      jobs: CI_REQUIRED_JOBS.map((n) => J(n)),
+    },
   });
 
-test("waivers: a valid waiver passes the gate (exit 0) and the summary names it", async () => {
-  const local = okLocal({ waivers: async () => [GATE_WAIVER] });
-  const r = await exec(FULL, { w: noDayWorld(), local, summary: true });
-  assert.equal(r.code, 0);
-  assert.match(r.text, /1 condition waived by the Owner/);
-  assert.match(r.summary, /WAIVED/);
-  assert.match(r.summary, /Next step: set up a staging test day/);
+test("waivers: a waiver naming any condition is ignored (nothing is waivable): exit 1, the summary says so", async () => {
+  for (const condition of ["recorded-day", "ci-streak", "zap-local", "staging-e2e-day"]) {
+    const local = okLocal({ waivers: async () => [{ ...GATE_WAIVER, condition }] });
+    const r = await exec(FULL, { w: noDayWorld(), local, summary: true });
+    assert.equal(r.code, 1, condition);
+    assert.match(r.summary, /1 waiver in docs\/release\/waivers\.json was ignored/, condition);
+    assert.doesNotMatch(r.summary, /WAIVED/, condition);
+  }
 });
 
-test("waivers: none, expired, unreadable or malformed waivers leave the failure in place (exit 1)", async () => {
+test("waivers: none, unreadable or malformed waivers leave the failure in place (exit 1)", async () => {
   const none = await exec(FULL, { w: noDayWorld() });
   assert.equal(none.code, 1);
-  const expired = okLocal({
-    waivers: async () => [{ ...GATE_WAIVER, decidedOn: "2026-10-01", expires: "2026-10-10" }],
-  });
-  assert.equal((await exec(FULL, { w: noDayWorld(), local: expired })).code, 1);
+  assert.match(none.text, /recorded-day job is not in the CI run/);
   const broken = okLocal({
     waivers: async () => {
       throw new Error("bad json");

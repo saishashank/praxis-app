@@ -10,6 +10,7 @@
 // session user, never a field of the request. Every change and its audit event commit together.
 // Quiet hours, snooze and the per-tier `digest` preference hide P1/P2 from the BADGE only; P0 and
 // the regime-shift P1 are never hidden (UXN-160, UXN-251) and cannot be snoozed.
+import { OWNER_TZ } from "@/lib/market/profileCore.mjs";
 import type { Client, Transaction } from "@libsql/client";
 import { auditTx, NO_META, type RequestMeta } from "@/lib/auth/audit";
 import type { AuthEnv } from "@/lib/auth/env";
@@ -48,7 +49,7 @@ export function parseQuietHours(v: unknown): QuietHours | null {
 }
 
 const melFmt = new Intl.DateTimeFormat("en-GB", {
-  timeZone: "Australia/Melbourne",
+  timeZone: OWNER_TZ,
   hour: "2-digit",
   minute: "2-digit",
   hourCycle: "h23",

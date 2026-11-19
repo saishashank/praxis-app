@@ -92,6 +92,8 @@ function csJson(r: CsRule): Record<string, unknown> {
       return { ...base, categories: r.categories === null ? null : [...r.categories] };
     case "close_below_level":
       return { ...base, level_micro: r.levelMicro.toString() };
+    case "target":
+      return { ...base, target_r: rText(r.targetR), target_pct: rText(r.targetPct) };
     case "volume_dry_up":
       return { ...base, ratio_below: ratText(r.ratioBelow), sessions: r.sessions };
   }
@@ -120,6 +122,14 @@ function csOf(o: Record<string, unknown>): CsRule {
       };
     case "close_below_level":
       return { id, via, kind: "close_below_level", levelMicro: BigInt(String(o.level_micro)) };
+    case "target":
+      return {
+        id,
+        via,
+        kind: "target",
+        targetR: ratOrNull(o.target_r),
+        targetPct: ratOrNull(o.target_pct),
+      };
     case "volume_dry_up":
       return {
         id,

@@ -78,11 +78,15 @@ test("every action is pinned to a full commit SHA; setup-python matches ci.yml",
   assert.equal(py.with["python-version"], ciPy.with["python-version"]);
 });
 
-test("secrets appear only in env of the two database steps, only the prod Turso pair", () => {
+test("secrets appear only in env of the database steps (plan, ingest and the off-by-default macro step), only the prod Turso pair", () => {
   const withSecrets = steps.filter((s) => JSON.stringify(s).includes("secrets."));
   assert.deepEqual(
     withSecrets.map((s) => s.name),
-    ["Plan the fetch (read-only)", "Ingest batch 1"],
+    [
+      "Plan the fetch (read-only)",
+      "Ingest batch 1",
+      "Macro series (Friday, off unless MACRO_FETCH is set)", // DAT-251 c (D-1790): gated by vars.MACRO_FETCH
+    ],
   );
   for (const s of withSecrets) {
     assert.deepEqual(
@@ -98,7 +102,7 @@ test("secrets appear only in env of the two database steps, only the prod Turso 
   }
   assert.equal(wf.env, undefined);
   assert.equal(job.env, undefined);
-  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 4);
+  assert.equal(JSON.stringify(job).match(/secrets\./g).length, 6); // two steps with the pair, plus the macro step (D-1790)
 });
 
 test("the Python fetch step has no secrets and only the throttle values from the plan step", () => {
@@ -144,10 +148,13 @@ test("steps run in order: plan, fetch, ingest; ingest also records a failed or s
   const fetch = steps.findIndex((s) => s.name === "Fetch bars (no secrets)");
   const ingest = steps.findIndex((s) => s.name === "Ingest batch 1");
   assert.ok(0 < plan && plan < fetch && fetch < ingest, names.join(" | "));
-  assert.equal(steps[plan].run, "node scripts/ingest/batch1.mjs prepare --request request.json");
+  assert.equal(
+    steps[plan].run,
+    'node scripts/ingest/batch1.mjs prepare ${MARKET_INPUT:+--market "$MARKET_INPUT"} --request request.json',
+  );
   assert.equal(
     steps[ingest].run,
-    "node scripts/ingest/batch1.mjs run --bars bars.json --index index.json --short short.json --actions actions.json",
+    'node scripts/ingest/batch1.mjs run ${MARKET_INPUT:+--market "$MARKET_INPUT"} --bars bars.json --index index.json --short short.json --actions actions.json',
   );
   assert.match(
     steps[ingest].if,
@@ -172,4 +179,14 @@ test("the Worker may dispatch this file and the slot for it is enabled", () => {
   );
   assert.match(slot, /workflow: "ingest-batch1\.yml"/);
   assert.match(slot, /enabled: true/);
+});
+
+test("the macro step ships OFF: it needs vars.MACRO_FETCH, never fails the batch, and runs only on Fridays (D-1790)", () => {
+  const s = steps.find((x) => x.name?.startsWith("Macro series"));
+  assert.ok(s, "the macro step exists");
+  assert.match(String(s.if), /vars\.MACRO_FETCH == '1'/);
+  assert.equal(s["continue-on-error"], true);
+  assert.match(String(s.run), /date \+%u\)" != "5"/);
+  assert.match(String(s.run), /scripts\/macro\/rba\.mjs/);
+  assert.match(String(s.run), /scripts\/macro\/abs\.mjs/);
 });

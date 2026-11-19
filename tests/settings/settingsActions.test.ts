@@ -3,19 +3,20 @@
 // UXN-280..282, ROL-102a, SEC-013): guard first, own row only, audited, revalidated, codes only.
 import type { Client } from "@libsql/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanupTempDbs } from "../db/helpers";
+import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { addUser, auditRows, authDb, KEY } from "../auth/helpers";
 
 const requireUser = vi.hoisted(() => vi.fn());
 const revalidatePath = vi.hoisted(() => vi.fn());
 const dbMock = vi.hoisted(() => vi.fn());
+const mainMock = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/auth/guard", () => ({ requireUser: (...a: unknown[]) => requireUser(...a) }));
 vi.mock("next/cache", () => ({ revalidatePath: (...a: unknown[]) => revalidatePath(...a) }));
 vi.mock("next/headers", () => ({
   headers: async () => new Headers({ "x-real-ip": "9.9.9.9", "user-agent": "agent" }),
 }));
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
-vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock() }));
+vi.mock("@/lib/db/client", () => ({ authDb: () => dbMock(), mainDb: () => mainMock() }));
 
 import {
   setQuietHoursAction,
@@ -44,6 +45,7 @@ beforeEach(async () => {
   db = await authDb();
   dbMock.mockReset();
   dbMock.mockReturnValue(db);
+  mainMock.mockReturnValue(await freshDb("main")); // the market table: AU enabled, IN and US built but off
 });
 
 describe("updateAppearanceAction", () => {
@@ -115,10 +117,12 @@ describe("updateRegionAction", () => {
     expect(last?.detail).toEqual({ changed: ["times_in"] });
   });
 
-  it("refuses an inactive market, bad values and a guard failure", async () => {
+  it("refuses a market that is not enabled (built or unknown), bad values and a guard failure", async () => {
     const id = await addUser(db, { email: "v@example.test" });
     asUser(id, "viewer");
     expect(await updateRegionAction(form({ default_market: "US" }))).toEqual({ error: "invalid" });
+    expect(await updateRegionAction(form({ default_market: "IN" }))).toEqual({ error: "invalid" });
+    expect(await updateRegionAction(form({ default_market: "JP" }))).toEqual({ error: "invalid" });
     expect(await updateRegionAction(form({ times_in: "utc" }))).toEqual({ error: "invalid" });
     expect(revalidatePath).not.toHaveBeenCalled();
     requireUser.mockRejectedValue(new Error("NEXT_REDIRECT"));

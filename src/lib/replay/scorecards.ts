@@ -754,7 +754,7 @@ export function barrierTrade(
         spec.cost.buckets,
       ).fillMicro;
       const value = qty * fill;
-      return done(value - feeFor(spec.cost.profile, value, "sell"), "up");
+      return done(value - feeFor(spec.cost.profile, value, "sell", { quantity: qty }), "up");
     }
   }
   const fill = slippageFill(
@@ -765,7 +765,7 @@ export function barrierTrade(
     spec.cost.buckets,
   ).fillMicro;
   const value = qty * fill;
-  return done(value - feeFor(spec.cost.profile, value, "sell"), "time");
+  return done(value - feeFor(spec.cost.profile, value, "sell", { quantity: qty }), "time");
 }
 
 export type LiftCard =

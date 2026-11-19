@@ -1,5 +1,5 @@
-export const MARKET: "AU";
-export const TZ: "Australia/Sydney";
+export const MARKET: string;
+export const TZ: string;
 export const SOURCE: "yahoo_eod";
 export const MAX_DATES_PER_RUN: number;
 export const GAP_MAX_DATES: number;

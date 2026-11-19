@@ -6,6 +6,7 @@
 // Masked users see ISO weeks, never an exact review date, and address a review by an opaque `rv-`
 // reference (keyed digest, like `ck-`/`pk:`). Section 7a "New picks" is read from the stored picks with
 // the review's own letters, so "Stock A" is the same stock in every section of the page.
+import { readNoPicksLine } from "@/lib/picks/noPicks";
 import { getConfig } from "@/lib/config/store";
 import {
   isTradingDay,
@@ -16,7 +17,15 @@ import {
 import { listVersions, loadReview, readState } from "@/lib/review/assemble";
 import type { Missing } from "@/lib/review/facts";
 import { activeCodesForDate } from "@/lib/view/active";
-import { formatCents, formatDay, formatInstant, isoWeek, MISSING } from "@/lib/view/format";
+import {
+  displayName,
+  currencyFormatFor,
+  formatCents,
+  formatDay,
+  formatInstant,
+  isoWeek,
+  MISSING,
+} from "@/lib/view/format";
 import { findLeaks, loadMaskLookup, maskText, StockAliases, weekOnly } from "@/lib/view/mask";
 import { opaqueDigest } from "@/lib/view/opaqueRef";
 import {
@@ -31,7 +40,6 @@ import { modelSuccess, pickRef, successLine } from "./picks";
 import {
   intParam,
   isDateParam,
-  marketOf,
   money,
   textParam,
   todayD,
@@ -82,9 +90,12 @@ export type ReviewsQuery = {
   month?: string;
   /** `?all=1`: also list the non-trading days (weekends and holidays), hidden by default. */
   all?: boolean;
+  /** Keyset cursors (D-959, no OFFSET): the oldest review date of the page before, or the newest of the page after. */
+  after?: string;
+  before?: string;
 };
 
-/** `?q=&page=&view=&month=`: q is a date prefix, kind word or text; null when a value is not allowed. */
+/** `?q=&page=&view=&month=&after=&before=`: q is a date prefix, kind word or text; null when a value is not allowed. */
 export function parseReviewsQuery(sp: URLSearchParams): ReviewsQuery | null {
   const q = textParam(sp.get("q"), 20);
   const page = intParam(sp.get("page"), 1, 1000);
@@ -96,7 +107,18 @@ export function parseReviewsQuery(sp: URLSearchParams): ReviewsQuery | null {
   if (m !== null && m !== "" && !MONTH_RE.test(m)) return null;
   const a = sp.get("all");
   if (a !== null && a !== "" && a !== "1") return null;
+  const after = sp.get("after") || undefined;
+  const before = sp.get("before") || undefined;
+  if (
+    (after !== undefined && !isDateParam(after)) ||
+    (before !== undefined && !isDateParam(before))
+  ) {
+    return null;
+  }
+  if (after !== undefined && before !== undefined) return null;
   const out: ReviewsQuery = { q, page };
+  if (after !== undefined) out.after = after;
+  if (before !== undefined) out.before = before;
   if (a === "1") out.all = true;
   if (v === "calendar") out.view = "calendar";
   if (m) out.month = m;
@@ -161,7 +183,7 @@ async function calendarRows(env: LoaderEnv): Promise<CalendarRow[]> {
   try {
     const rs = await env.main.execute({
       sql: "SELECT d, kind, close_time FROM trading_calendar WHERE market = ? ORDER BY d",
-      args: [marketOf(env)],
+      args: [env.market],
     });
     return rs.rows.map((r) => ({
       d: String(r.d),
@@ -254,7 +276,13 @@ export type ReviewListModel = {
   pendingState: PendingState;
   rows: ReviewListRow[];
   page: number;
+  /** Older reviews exist. */
   hasMore: boolean;
+  /** Newer reviews exist. */
+  hasNewer: boolean;
+  /** Cursors for the two links (null for a masked list, which pages in memory, and at either end). */
+  olderAfter: string | null;
+  newerBefore: string | null;
   /** True when every listed review was written by fixed rules (no AI): said once above the list. */
   allRuleWritten: boolean;
   /** True when every listed review was written with AI. */
@@ -310,7 +338,11 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
       seen.set(wk, n);
       ordinal.set(String(x.d), n);
     }
-    return finishList(env, raw, hasMore, q.page, today, ordinal, showNonTrading);
+    return finishList(env, raw, hasMore, q.page, today, ordinal, showNonTrading, {
+      hasNewer: q.page > 1,
+      olderAfter: null,
+      newerBefore: null,
+    });
   }
   const where: string[] = [];
   if (!showNonTrading) where.push("e.kind <> 'non_trading'");
@@ -325,15 +357,35 @@ export async function loadReviewList(env: LoaderEnv, q: ReviewsQuery): Promise<R
     }
     where.push(`(${clauses.join(" OR ")})`);
   }
-  args.push(LIST_ROWS + 1, (q.page - 1) * LIST_ROWS);
+  // Keyset paging (D-959): after the oldest date shown, or before the newest date shown; never OFFSET.
+  // The order is the primary key of evening_review (d, version) through its index, one row read per row listed.
+  const backwards = q.before !== undefined;
+  if (q.after !== undefined) {
+    where.push("e.d < ?");
+    args.push(q.after);
+  } else if (backwards) {
+    where.push("e.d > ?");
+    args.push(q.before!);
+  }
+  args.push(LIST_ROWS + 1);
   const r = await env.main.execute({
     sql: `${select} ${where.length ? `AND ${where.join(" AND ")}` : ""}
-          ORDER BY e.d DESC LIMIT ? OFFSET ?`,
+          ORDER BY e.d ${backwards ? "ASC" : "DESC"} LIMIT ?`,
     args,
   });
-  raw = (r.rows as unknown as ListRow[]).slice(0, LIST_ROWS);
-  hasMore = r.rows.length > LIST_ROWS;
-  return finishList(env, raw, hasMore, q.page, today, null, showNonTrading);
+  const fetched = r.rows as unknown as ListRow[];
+  raw = fetched.slice(0, LIST_ROWS);
+  if (backwards) raw.reverse(); // newest first again
+  const more = fetched.length > LIST_ROWS;
+  hasMore = backwards ? true : more; // going back, the cursor review itself is older
+  const hasNewer = backwards ? more : q.after !== undefined;
+  const cursor = {
+    hasNewer,
+    olderAfter: hasMore && raw.length > 0 ? String(raw[raw.length - 1]!.d) : null,
+    newerBefore: hasNewer && raw.length > 0 ? String(raw[0]!.d) : null,
+  };
+  const page = hasNewer ? Math.max(2, q.page) : 1;
+  return finishList(env, raw, hasMore, page, today, null, showNonTrading, cursor);
 }
 
 async function finishList(
@@ -344,6 +396,7 @@ async function finishList(
   today: string,
   ordinal: Map<string, number> | null,
   showingNonTrading: boolean,
+  cursor: { hasNewer: boolean; olderAfter: string | null; newerBefore: string | null },
 ): Promise<ReviewListModel> {
   const masked = env.mask.masked;
   const deliveries = await deliveryByDate(
@@ -388,6 +441,9 @@ async function finishList(
     rows,
     page,
     hasMore,
+    hasNewer: cursor.hasNewer,
+    olderAfter: cursor.olderAfter,
+    newerBefore: cursor.newerBefore,
     allRuleWritten: rows.length > 0 && rows.every((r) => !r.ai),
     allAi: rows.length > 0 && rows.every((r) => r.ai),
     showingNonTrading,
@@ -460,10 +516,6 @@ function shiftMonth(month: string, by: number): string {
   return `${yy}-${String(mm + 1).padStart(2, "0")}`;
 }
 
-function currencyPrefix(c: string): string {
-  return c === "AUD" ? "A$" : `${c} `;
-}
-
 /** Sums the stored day P/L of a review's executions per currency (no FX blending, O-34). */
 function dayPlOf(exJson: unknown): DayPl[] {
   let list: unknown;
@@ -487,7 +539,7 @@ function dayPlOf(exJson: unknown): DayPl[] {
     .map(([currency, cents]) => ({
       currency,
       cents,
-      text: formatCents(cents, { currency: currencyPrefix(currency), sign: "always" }),
+      text: formatCents(cents, currencyFormatFor(currency), { sign: "always" }),
     }));
 }
 
@@ -545,7 +597,7 @@ export async function loadReviewCalendar(
         .map(([currency, cents]) => ({
           currency,
           cents,
-          text: formatCents(cents, { currency: currencyPrefix(currency), sign: "always" }),
+          text: formatCents(cents, currencyFormatFor(currency), { sign: "always" }),
         }));
       return {
         week,
@@ -604,6 +656,8 @@ export type NewPickView = {
 };
 export type NewPicksView = {
   none: boolean;
+  /** OPS-110: the plain-words reason when none (stored with the night), else null. */
+  noneLine: string | null;
   honesty: string;
   profiles: Array<{ profile: string; successLine: string; picks: NewPickView[] }>;
 };
@@ -663,7 +717,7 @@ async function pickRows(env: LoaderEnv, d: string): Promise<PickRaw[]> {
                    p.valid_until_d, p.time_frame_sessions, p.based_on_json
             FROM pick p LEFT JOIN instrument i ON i.market = p.market AND i.code = p.code
             WHERE p.market = ? AND p.d = ? ORDER BY p.profile, p.rank LIMIT 60`,
-      args: [marketOf(env), d],
+      args: [env.market, d],
     });
     return r.rows.map((x) => {
       let based: string | null = null;
@@ -703,7 +757,7 @@ async function successLines(
     const confidence = Number(await getConfig(env.main, "cif_confidence"));
     for (const profile of profiles) {
       const s = await modelSuccess(env.main, {
-        market: marketOf(env),
+        market: env.market,
         profile,
         d,
         minN,
@@ -731,6 +785,8 @@ async function newPicksOf(
   const { lines, proven } = await successLines(env, d, names);
   return {
     none: rows.length === 0,
+    noneLine:
+      rows.length === 0 ? await readNoPicksLine(env.main, env.market, d).catch(() => null) : null,
     honesty: "Personal use only · Not financial advice" + (proven ? "" : " · Model not proven yet"),
     profiles: names.map((profile) => ({
       profile,
@@ -742,10 +798,10 @@ async function newPicksOf(
           return {
             rank: r.rank,
             stock: aliases ? aliases.label(r.code) : r.code,
-            company: masked ? null : r.name,
-            buyUpTo: masked ? null : money(r.buy),
-            stop: masked ? null : money(r.stop),
-            aim: masked ? null : money(r.aim),
+            company: masked || r.name === null ? null : displayName(r.name, { code: r.code }),
+            buyUpTo: masked ? null : money(r.buy, env.currency),
+            stop: masked ? null : money(r.stop, env.currency),
+            aim: masked ? null : money(r.aim, env.currency),
             validUntil: masked ? (isoWeek(r.valid) ?? MISSING) : formatDay(r.valid),
             timeFrameWeeks:
               r.sessions === null ? null : Math.max(1, Math.round(r.sessions / SESSIONS_PER_WEEK)),
@@ -797,7 +853,7 @@ export async function loadReviewPage(
       args: [d, review.version],
     });
     const facts = row.rows.length ? parseFacts(String(row.rows[0]!.facts_json)) : null;
-    const market = marketOf(env);
+    const market = env.market;
     const active = await activeCodesForDate(env.main, market, d);
     const lookup = await loadMaskLookup(env.main, market);
     const aliases = new StockAliases([

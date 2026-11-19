@@ -11,6 +11,8 @@ export type Deps = {
   store: NonceStore;
   nowSec: () => number;
   /** Optional run-record writer (SEC-101). Its failure never changes the response. */
+  /** Optional reader of the Owner's `app_public_domain` (D-1230). Its failure means "none set". */
+  readPublicDomain?: () => Promise<string>;
   recordRun?: (report: SelfCheckReport) => Promise<void>;
 };
 
@@ -34,6 +36,8 @@ export function createSelfCheckHandler(deps: Deps) {
         secret: deps.env.ACTIONS_HMAC_SECRET,
         headers: req.headers,
         rawBody,
+        method: req.method,
+        path: new URL(req.url).pathname,
         nowSec: deps.nowSec(),
         store: deps.store,
       });
@@ -54,7 +58,13 @@ export function createSelfCheckHandler(deps: Deps) {
         return badRequest();
       }
 
-      const report = await runSelfChecks(deps.env, deps.fetchImpl);
+      let publicDomain = "";
+      try {
+        publicDomain = (await deps.readPublicDomain?.()) ?? "";
+      } catch {
+        publicDomain = "";
+      }
+      const report = await runSelfChecks(deps.env, deps.fetchImpl, { publicDomain });
       try {
         await deps.recordRun?.(report);
       } catch {

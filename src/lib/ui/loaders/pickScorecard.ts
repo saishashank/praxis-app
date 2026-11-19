@@ -4,6 +4,7 @@
 // weeks for a masked one (DAT-124). Nothing here writes, and nothing a learner or promotion test reads.
 import { loadLatestScorecard } from "@/lib/scorecard/pickScorecardStore";
 import type { ScorecardSummary } from "@/lib/scorecard/pickScorecard";
+import { HOME_MARKET } from "@/lib/market/profileCore.mjs";
 import { formatDay, isoWeek, MISSING } from "@/lib/view/format";
 import type { LoaderEnv } from "./shell";
 
@@ -19,7 +20,7 @@ export type ReplayCheckView = {
 export async function loadReplayCheck(env: LoaderEnv): Promise<ReplayCheckView | null> {
   let run;
   try {
-    run = await loadLatestScorecard(env.main, env.market ?? "AU");
+    run = await loadLatestScorecard(env.main, env.market ?? HOME_MARKET);
   } catch {
     return null; // a database without the table (older schema): no section
   }

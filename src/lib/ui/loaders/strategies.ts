@@ -157,6 +157,8 @@ const worst = (...s: ControlState[]): ControlState =>
 // ---- the list ------------------------------------------------------------------------------------
 
 export type StrategyTile = {
+  /** ISO 4217 code of every amount on the tile (D-1815). */
+  currency: string;
   execution: string;
   family: string;
   variant: string;
@@ -199,6 +201,7 @@ export type StrategiesView = {
   sort: StrategySort;
   /** Needs-attention tiles first, then the rest, each part in the chosen order. */
   tiles: StrategyTile[];
+  currency: string;
   attentionCount: number;
   market: { control: ControlState };
   /** While one round has ended and the next has not started: "Round 2 starts Tue 17 Nov with A$5,000 a strategy. ..." */
@@ -335,17 +338,18 @@ export async function loadStrategies(
       name: names[family]?.name ?? family,
       oneLiner: names[family]?.one_liner ?? "",
       moneyType: str(e.variant) === "L" ? "With leverage sleeve" : "Plain shares",
+      currency: v.currency,
       hasCohort: c !== null,
       round: rounds.get(id) ?? 0,
       startD: c?.startD ?? null,
       sessions: c ? (sessions.get(c.id) ?? 0) : 0,
       live: c !== null && c.terminalKind === null,
-      seed: c ? money(c.seed) : null,
-      nav: last === null ? null : money(last),
+      seed: c ? money(c.seed, v.currency) : null,
+      nav: last === null ? null : money(last, v.currency),
       returnPpm: last !== null && c ? ratioPpm(last - c.seed, c.seed) : null,
       positionPpm: d.positionPpm,
-      bust: lim ? money(lim.bust) : null,
-      target: lim ? money(lim.target) : null,
+      bust: lim ? money(lim.bust, v.currency) : null,
+      target: lim ? money(lim.target, v.currency) : null,
       stage: d.stage,
       bustDistancePpm: d.bustDistancePpm,
       label: labels.get(id) ?? null,
@@ -357,7 +361,7 @@ export async function loadStrategies(
       day:
         series.length >= 2 && last !== null
           ? {
-              change: money(last - series[series.length - 2]!.nav),
+              change: money(last - series[series.length - 2]!.nav, v.currency),
               ppm: ratioPpm(last - series[series.length - 2]!.nav, series[series.length - 2]!.nav),
               label: shortDay(series[series.length - 1]!.d),
             }
@@ -393,10 +397,10 @@ export async function loadStrategies(
       const now = x.nav + change;
       tiles[i] = {
         ...tiles[i]!,
-        nav: money(now),
+        nav: money(now, v.currency),
         returnPpm: ratioPpm(now - x.seed, x.seed),
         ...derive(latest.get(x.execution) ?? null, now, tiles[i]!.control),
-        day: { change: money(change), ppm: ratioPpm(change, x.nav), label },
+        day: { change: money(change, v.currency), ppm: ratioPpm(change, x.nav), label },
       };
     }
   }
@@ -421,7 +425,7 @@ export async function loadStrategies(
   // A round ended and the next has not traded yet: say so instead of "No rounds yet" (Owner 2026-11-16).
   const pendingRound = tiles.some((t) => t.live && t.nav !== null)
     ? null
-    : await pendingRoundNote(deps.mainDb, v.market, v.now);
+    : await pendingRoundNote(deps.mainDb, v.market, v.currency, v.now);
   return loaded(
     newest,
     v.now,
@@ -429,6 +433,7 @@ export async function loadStrategies(
     {
       sort,
       tiles,
+      currency: v.currency,
       attentionCount: tiles.filter((t) => t.needsAttention).length,
       market: { control: controls.market },
       pendingRound,
@@ -445,7 +450,8 @@ export type TradeRow = {
   /** Entry and exit dates: exact, or ISO weeks for a masked viewer. */
   entryDay: string | null;
   exitDay: string | null;
-  qty: number;
+  /** Shares; null for a masked viewer (UXN-320 b, D-1204). */
+  qty: number | null;
   open: boolean;
   exitType: string | null;
   /** Return of the trade between its two fills, ppm; null while open. */
@@ -583,7 +589,7 @@ export async function loadStrategyDetail(
         stock: sc.label(str(r.code)),
         entryDay: sc.day(str(r.entry_d)),
         exitDay: r.exit_d === null || r.exit_d === undefined ? null : sc.day(str(r.exit_d)),
-        qty: num(r.qty),
+        qty: masked ? null : num(r.qty),
         open: r.exit_type === null,
         exitType: strOrNull(r.exit_type),
         returnPpm: xp === null || ep <= 0 ? null : Math.round(((xp - ep) * PPM) / ep),
@@ -607,7 +613,7 @@ export async function loadStrategyDetail(
             state: str(s0.state),
             mode: str(s0.mode),
             sinceD: str(s0.d),
-            lossToRecover: money(num(s0.loss_to_recover_micro)),
+            lossToRecover: money(num(s0.loss_to_recover_micro), v.currency),
             openTrades: num(open.rows[0]?.n),
           }
         : null;
@@ -618,7 +624,7 @@ export async function loadStrategyDetail(
   const pastRounds: PastRound[] = cohorts.map((c, i) => ({
     round: total - i,
     startD: c.startD,
-    seed: money(c.seed),
+    seed: money(c.seed, v.currency),
     // cohorts are newest first: the next newer round started with more and this one was cut short
     endedForNewRound: c.terminalKind === "timeout" && i > 0 && (cohorts[i - 1]?.seed ?? 0) > c.seed,
     terminalKind: c.terminalKind,
@@ -635,7 +641,7 @@ export async function loadStrategyDetail(
     const byId = new Map(oc.rows.map((r) => [str(r.id), num(r.outcome_micro)]));
     cohorts.forEach((c, i) => {
       const o = byId.get(c.id);
-      if (o !== undefined) pastRounds[i]!.outcome = money(o);
+      if (o !== undefined) pastRounds[i]!.outcome = money(o, v.currency);
     });
   }
 
@@ -810,7 +816,7 @@ export async function loadLeaderboard(
           const nav = Number(
             (JSON.parse(str(r.value_json)) as { liq_nav_micro?: string }).liq_nav_micro,
           );
-          if (Number.isFinite(nav)) a.row.recostNav = money(nav);
+          if (Number.isFinite(nav)) a.row.recostNav = money(nav, v.currency);
         } catch {
           // an unreadable row leaves the cell empty
         }

@@ -3,6 +3,7 @@
 // user gets "Stock A" for the code, no company name, no trade price, order value or cost amount, the
 // week instead of the exact date and no links; free text goes through maskText.
 import type { DecisionCard } from "@/lib/agents/cards";
+import type { CurrencyFormat } from "@/lib/market/profileCore.mjs";
 import { formatDay, formatMicro, formatPpm, isoWeek, MISSING } from "./format";
 import { regimeLabel } from "./terms";
 import { maskText, StockAliases, type MaskContext, type MaskLookup, EMPTY_LOOKUP } from "./mask";
@@ -43,6 +44,8 @@ export function cardViewModel(
   note: CardNote | null,
   ctx: MaskContext,
   aliases: StockAliases,
+  /** The market currency format of the card (`currencyFormatOf(profile.currency)`). */
+  fmt: CurrencyFormat,
   lookup: MaskLookup = EMPTY_LOOKUP,
   /** The strategy in words; without it the title falls back to the execution id (D-919). */
   strategyName?: string,
@@ -60,7 +63,7 @@ export function cardViewModel(
   else if (m) {
     sizing = `Quantity ${card.sizing.qty ?? MISSING}${card.sizing.half_size ? " (half size)" : ""}. Prices and amounts are hidden for your access level.`;
   } else {
-    sizing = `Quantity ${card.sizing.qty ?? MISSING} at ${formatMicro(card.sizing.fill_price_micro)}, order value ${formatMicro(card.sizing.order_value_micro)}${card.sizing.half_size ? " (half size)" : ""}.`;
+    sizing = `Quantity ${card.sizing.qty ?? MISSING} at ${formatMicro(card.sizing.fill_price_micro, fmt)}, order value ${formatMicro(card.sizing.order_value_micro, fmt)}${card.sizing.half_size ? " (half size)" : ""}.`;
   }
   let cost: string;
   if (!card.cost.available) {
@@ -68,7 +71,7 @@ export function cardViewModel(
   } else if (m) {
     cost = `Break-even ${formatPpm(card.cost.break_even_ppm)}.`;
   } else {
-    cost = `Round-trip cost ${formatMicro(card.cost.cost_estimate_micro)}, break-even ${formatPpm(card.cost.break_even_ppm)}.`;
+    cost = `Round-trip cost ${formatMicro(card.cost.cost_estimate_micro, fmt)}, break-even ${formatPpm(card.cost.break_even_ppm)}.`;
   }
 
   return {
