@@ -56,24 +56,27 @@ describe("e2e openLocalDb", () => {
     }
   });
 
-  it("a plain client fails at once on a locked file (the CI failure)", async () => {
+  // Writes, not reads: in WAL mode (Linux CI) a reader is never blocked by a writer, but a second
+  // writer meets the lock on every platform, which is what the sign-in write hit.
+  it("a plain client's write fails at once on a locked file (the CI failure)", async () => {
     const w = await holdLock(file, 300);
     const db = createClient({ url });
     try {
-      await expect(db.execute("SELECT v FROM t")).rejects.toThrow(/SQLITE_BUSY|locked/);
+      await expect(db.execute("UPDATE t SET v = v + 10")).rejects.toThrow(/SQLITE_BUSY|locked/);
     } finally {
       db.close();
       await released(w);
     }
   });
 
-  it("openLocalDb waits for the lock and reads the committed row", async () => {
+  it("openLocalDb's write waits for the lock and lands after the other commit", async () => {
     const w = await holdLock(file, 300);
     const done = released(w);
     const db = await openLocalDb(url);
     try {
+      await db.execute("UPDATE t SET v = v + 10");
       const r = await db.execute("SELECT v FROM t");
-      expect(Number(r.rows[0].v)).toBe(2);
+      expect(Number(r.rows[0].v)).toBe(12);
     } finally {
       db.close();
       await done;
