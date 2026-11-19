@@ -3,7 +3,7 @@
 // adds one pack with two points a side and one open suggestion. The Owner sees both; an Editor and a
 // Viewer get the card section without codes and a 403 on /review; the card fits a phone with the body
 // collapsed; axe is clean.
-import { createClient } from "@libsql/client";
+import { openLocalDb } from "./localDb";
 import { expect, test } from "@playwright/test";
 import { opaqueDigest } from "../src/lib/view/opaqueRef";
 import { axeViolations, expectNoHorizontalScroll, setTheme, signIn } from "./helpers";
@@ -15,7 +15,7 @@ test.describe.configure({ timeout: 300_000 });
 test.beforeAll(async () => {
   cardId = await ensureSteelman();
   cardPath = `/cards/${encodeURIComponent(cardId)}`;
-  const m = createClient({ url: process.env.TURSO_MAIN_URL! });
+  const m = await openLocalDb(process.env.TURSO_MAIN_URL!);
   try {
     const r = await m.execute({
       sql: "SELECT code FROM steelman_pack WHERE card_id = ?",

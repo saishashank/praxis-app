@@ -55,13 +55,13 @@ async function addRun(db: Client, key: string, job: string, d: string): Promise<
 describe("arguments", () => {
   it("accepts 2b, 3, learn, words and all; anything else is refused with exit 2", async () => {
     const { url } = await fileDb("data_only");
-    for (const phase of ["2b", "3", "learn", "words", "all"]) {
+    for (const phase of ["2b", "3", "learn", "words", "all", "core", "after"]) {
       const r = await cli(url, ["--date", D, "--phase", phase]);
       expect(r.code, phase).not.toBe(2);
     }
     const bad = await cli(url, ["--phase", "reports"]);
     expect(bad.code).toBe(2);
-    expect(bad.lines[0]).toContain("--phase must be 2b, 3, learn, words or all");
+    expect(bad.lines[0]).toContain("--phase must be 2b, 3, learn, words, all, core or after");
   });
 });
 
@@ -119,6 +119,25 @@ describe("order and partial runs", () => {
     expect(gh.some((l) => l.startsWith("words="))).toBe(true);
     // statuses and counts only
     expect(r.lines.join("\n")).not.toMatch(/file:|libsql|token|secret/i);
+  });
+
+  it("D-1847: `core` runs only 2b (and 3), `after` only learn then words; together they equal `all`", async () => {
+    const { url, db } = await fileDb("full");
+    const c = await cli(url, ["--date", D, "--replay", "--wait-minutes", "0", "--phase", "core"]);
+    expect(c.code).toBe(1); // 2a missing, as in `all`
+    expect(c.lines.map((l) => l.split(" ")[0])).toEqual(["arena-2b"]);
+    expect(await jobs(db)).toEqual(["arena-signals"]);
+    const a = await cli(url, ["--date", D, "--replay", "--phase", "after"]);
+    expect(a.lines.map((l) => l.split(" ")[0])).toEqual(["arena-learn", "arena-words"]);
+    expect(await jobs(db)).toEqual(["arena-signals", "arena-learn", "arena-words"]);
+  });
+
+  it("D-1847: `after` in data-only mode writes nothing, like the tail of `all`", async () => {
+    const { url, db } = await fileDb("data_only");
+    const a = await cli(url, ["--date", D, "--phase", "after"]);
+    expect(a.code).toBe(0);
+    expect(a.lines).toHaveLength(0);
+    expect(await jobs(db)).toEqual([]);
   });
 
   it("learn then words alone follow a finished batch 3 in order and are idempotent", async () => {

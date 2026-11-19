@@ -11,7 +11,7 @@ import path from "node:path";
 import type { Metrics } from "../scripts/ci/lighthouse.mjs";
 import { importEsm } from "./esm";
 import { EMAIL } from "./helpers";
-import { createClient } from "@libsql/client";
+import { openLocalDb } from "./localDb";
 import { encode } from "next-auth/jwt";
 
 import { requireEnv, requireScenario } from "./support/requireScenario";
@@ -32,7 +32,7 @@ async function freePort(): Promise<number> {
 }
 
 async function sessionCookie(): Promise<{ name: string; value: string }> {
-  const authDb = createClient({ url: process.env.TURSO_AUTH_URL! });
+  const authDb = await openLocalDb(process.env.TURSO_AUTH_URL!);
   try {
     const res = await authDb.execute({
       sql: "SELECT id, session_version FROM app_user WHERE email = ?",
