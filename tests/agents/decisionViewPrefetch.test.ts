@@ -95,8 +95,9 @@ describe("DecisionView prefetch (D-910)", () => {
     const fast = await answers(db, true);
     expect(fast.out).toEqual(plain.out);
     // bars(code, 4), shortInterest, insiderNotices of the 3 prefetched codes and the coverage answer
-    // from memory; the longer bars, the other upTo and the unprefetched ZZZ still query
-    expect(plain.queries - fast.queries).toBe(10);
+    // from memory, and (D-1848) so does bars(code, n, upTo) when the cached range holds n rows up to upTo;
+    // the longer bars and the unprefetched ZZZ still query
+    expect(plain.queries - fast.queries).toBe(13);
   });
 
   it("keeps the look-ahead guards", async () => {

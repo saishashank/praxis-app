@@ -32,10 +32,12 @@ import { createDecisionView, decisionCutoffUtc } from "./decisionView";
 import { loadConfirmedActions } from "@/lib/arena/corpActionWriter";
 import type { CorpActionRecord } from "@/lib/arena/corpActions";
 import {
+  PREFETCH_MARGIN,
   adjustBars,
   barsNeeded,
   eventRowOf,
   loadDayInputs,
+  sessionFloor,
   splitActionsByCode,
   splitsKnownOn,
   type DayInputs,
@@ -155,6 +157,47 @@ export async function loadDayCandidates(
   return out;
 }
 
+// ---- stored control pools (D-1848) ---------------------------------------------------------------------------
+
+const poolScope = (d: string): string => `pool:${d}`;
+
+/** Store a decision session's control pool (first write wins: the pool of a closed session never changes). */
+export async function putDayPool(
+  db: Client,
+  market: string,
+  d: string,
+  pool: readonly PoolCode[],
+): Promise<boolean> {
+  // JSON cannot carry a non-finite float: such a pool is not stored and is rebuilt when needed
+  if (pool.some((c) => c.vol20 !== null && !Number.isFinite(c.vol20))) return false;
+  const res = await db.execute({
+    sql: `INSERT INTO replay_stat (run_id, scope, metric, d, value_json) VALUES (?, ?, 'pool', ?, ?)
+          ON CONFLICT DO NOTHING`,
+    args: [fwdRunId(market), poolScope(d), d, encodeJson(pool)],
+  });
+  return res.rowsAffected > 0;
+}
+
+export async function loadDayPools(
+  db: Client,
+  market: string,
+  days: readonly string[],
+): Promise<Map<string, PoolCode[]>> {
+  const out = new Map<string, PoolCode[]>();
+  for (let i = 0; i < days.length; i += CHUNK) {
+    const part = days.slice(i, i + CHUNK);
+    const rs = await db.execute({
+      sql: `SELECT scope, value_json FROM replay_stat
+            WHERE run_id = ? AND metric = 'pool' AND scope IN (${part.map(() => "?").join(", ")})`,
+      args: [fwdRunId(market), ...part.map(poolScope)],
+    });
+    for (const r of rs.rows) {
+      out.set(text(r.scope).slice("pool:".length), decodeJson<PoolCode[]>(text(r.value_json)));
+    }
+  }
+  return out;
+}
+
 // ---- the world ---------------------------------------------------------------------------------------------------
 
 /** A code's bars were not loaded yet: the caller loads them and repeats. */
@@ -183,6 +226,8 @@ export type WorldOptions = {
   readonly actions: readonly CorpActionRecord[];
   readonly replay: boolean;
   readonly hours: MarketHours;
+  /** D-1848: with the calendar `load` reads the bars of many codes in a few batched queries. */
+  readonly calendar?: readonly CalendarRow[];
 };
 
 /** One day's universe as control-pool facts (eligible = the 2b control filter without the quality gate). */
@@ -241,6 +286,14 @@ export class LiveWorld implements LedgerSource, PathSource {
     if (todo.length === 0) return;
     const count = this.need + this.sessions.length + 5; // threshold-ok: slack for halted sessions
     const bars = new Map<string, ViewBar[]>();
+    // D-1848: one batched read per 200 codes fills the view's cache; a code whose cached range is too
+    // short (few bars) falls back to its own query, so the bars are the ones the per-code reads give
+    if (this.o.calendar !== undefined && this.view.prefetchBars !== undefined) {
+      await this.view.prefetchBars(
+        todo,
+        sessionFloor(this.o.d, count + PREFETCH_MARGIN, this.o.calendar),
+      );
+    }
     for (const code of todo) bars.set(code, await this.view.bars(code, count));
     const first = this.sessions[0] ?? "";
     const events = new Map<string, EventFact[]>();
@@ -418,8 +471,9 @@ export const EXIT_RULE_METRIC = "exit_rule";
 export const exitRuleScope = (rowId: string): string => `exit:${rowId}`;
 
 /** First write wins: the rule that closed a row is a fact of its walk and never changes. */
-async function putExitRule(tx: Exec, e: LedgerEntry): Promise<void> {
+async function putExitRule(tx: Exec, e: LedgerEntry, pre: Preloaded): Promise<void> {
   if (e.row.exit_d === null || e.exitRule === null) return;
+  if (pre.exitMarkers.has(exitRuleScope(e.row.id))) return; // already stored: first write wins
   const market = e.lineage.slice(0, e.lineage.lastIndexOf(":"));
   await tx.execute({
     sql: `INSERT INTO replay_stat (run_id, scope, metric, d, value_json) VALUES (?, ?, ?, ?, ?)
@@ -434,13 +488,65 @@ async function putExitRule(tx: Exec, e: LedgerEntry): Promise<void> {
   });
 }
 
+/** D-1848: the stored facts the entries of a night are compared with, read in a few batched queries. */
+type Preloaded = {
+  readonly signals: ReadonlySet<string>;
+  readonly rows: ReadonlyMap<string, Record<string, unknown>>;
+  readonly exitMarkers: Set<string>;
+};
+
+async function preload(
+  db: Client,
+  market: string,
+  entries: readonly LedgerEntry[],
+): Promise<Preloaded> {
+  const signals = new Set<string>();
+  const rows = new Map<string, Record<string, unknown>>();
+  const exitMarkers = new Set<string>();
+  const sigIds = [...new Set(entries.map((e) => e.row.signal_id))];
+  const rowIds = entries.map((e) => e.row.id);
+  const closedIds = entries
+    .filter((e) => e.row.exit_d !== null)
+    .map((e) => exitRuleScope(e.row.id));
+  for (let i = 0; i < sigIds.length; i += CHUNK) {
+    const part = sigIds.slice(i, i + CHUNK);
+    const rs = await db.execute({
+      sql: `SELECT id FROM signal WHERE id IN (${part.map(() => "?").join(", ")})`,
+      args: part,
+    });
+    for (const r of rs.rows) signals.add(text(r.id));
+  }
+  for (let i = 0; i < rowIds.length; i += CHUNK) {
+    const part = rowIds.slice(i, i + CHUNK);
+    const rs = await db.execute({
+      sql: `SELECT * FROM ledger_row WHERE id IN (${part.map(() => "?").join(", ")})`,
+      args: part,
+    });
+    for (const r of rs.rows) rows.set(text(r.id), { ...r });
+  }
+  for (let i = 0; i < closedIds.length; i += CHUNK) {
+    const part = closedIds.slice(i, i + CHUNK);
+    const rs = await db.execute({
+      sql: `SELECT scope FROM replay_stat WHERE run_id = ? AND metric = ?
+            AND scope IN (${part.map(() => "?").join(", ")})`,
+      args: [fwdRunId(market), EXIT_RULE_METRIC, ...part],
+    });
+    for (const r of rs.rows) exitMarkers.add(text(r.scope));
+  }
+  return { signals, rows, exitMarkers };
+}
+
 export type WriteCounts = { opened: number; closed: number; unchanged: number; noSignal: number };
 
 /** Insert the open row, or compare with the stored one; apply the one-way close when it is due. */
-async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promise<void> {
+async function writeEntry(
+  tx: Exec,
+  e: LedgerEntry,
+  counts: WriteCounts,
+  pre: Preloaded,
+): Promise<void> {
   const r = e.row;
-  const sig = await tx.execute({ sql: "SELECT 1 FROM signal WHERE id = ?", args: [r.signal_id] });
-  if (sig.rows.length === 0) {
+  if (!pre.signals.has(r.signal_id)) {
     counts.noSignal += 1;
     return;
   }
@@ -454,8 +560,8 @@ async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promis
     stress_in_micro: r.stress_in_micro,
     timed: r.timed,
   };
-  const stored = await tx.execute({ sql: "SELECT * FROM ledger_row WHERE id = ?", args: [r.id] });
-  if (stored.rows.length === 0) {
+  const stored = pre.rows.get(r.id);
+  if (stored === undefined) {
     await tx.execute({
       sql: `INSERT INTO ledger_row (id, signal_id, group_key, entry_d, exit_d, exit_tag, qty, fill_in_micro,
               fill_out_micro, brok_in_micro, brok_out_micro, stress_in_micro, stress_out_micro, qty_out,
@@ -475,7 +581,7 @@ async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promis
     });
     counts.opened += 1;
   } else {
-    const row = stored.rows[0]!;
+    const row = stored;
     for (const c of OPEN_COLS) {
       if (!same(row[c], openValues[c])) {
         throw new ForwardLedgerError("row_conflict", `ledger_row ${r.id}: stored ${c} differs`);
@@ -489,13 +595,13 @@ async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promis
           throw new ForwardLedgerError("row_conflict", `ledger_row ${r.id}: stored ${c} differs`);
         }
       }
-      await putExitRule(tx, e);
+      await putExitRule(tx, e, pre);
       counts.unchanged += 1;
       return;
     }
   }
   if (r.exit_d === null) {
-    if (stored.rows.length > 0) counts.unchanged += 1;
+    if (stored !== undefined) counts.unchanged += 1;
     return;
   }
   const v = closeValues(r);
@@ -505,7 +611,7 @@ async function writeEntry(tx: Exec, e: LedgerEntry, counts: WriteCounts): Promis
           WHERE id = ? AND exit_d IS NULL`,
     args: [...CLOSE_COLS.map((c) => v[c]), r.id] as never,
   });
-  await putExitRule(tx, e);
+  await putExitRule(tx, e, pre);
   counts.closed += 1;
 }
 
@@ -678,6 +784,7 @@ export async function syncForwardLedger(db: Client, o: ForwardOptions): Promise<
     actions,
     replay: o.replay,
     hours: o.hours,
+    calendar: o.calendar,
   });
   const codes = new Set<string>();
   for (const [d, out] of stored) {
@@ -696,11 +803,10 @@ export async function syncForwardLedger(db: Client, o: ForwardOptions): Promise<
   });
   const writeFrom = all[trusted]!;
   const counts: WriteCounts = { opened: 0, closed: 0, unchanged: 0, noSignal: 0 };
+  const toWrite = result.entries.filter((e) => e.decisionD >= writeFrom);
+  const pre = await preload(db, o.market, toWrite);
   await withTx(db, async (tx) => {
-    for (const e of result.entries) {
-      if (e.decisionD < writeFrom) continue;
-      await writeEntry(tx, e, counts);
-    }
+    for (const e of toWrite) await writeEntry(tx, e, counts, pre);
   });
 
   const ctl = await syncControls(db, o);
@@ -823,11 +929,16 @@ async function syncControls(
     actions,
     replay: o.replay,
     hours: o.hours,
+    calendar: o.calendar,
   });
   const cost = costSetupFrom(o.params);
   const library = createControlLibrary(world, cost, o.masterSeed);
   const endIdx = sessions.length - 1;
-  const days = await loadDayCandidates(db, o.market, [...new Set(pending.map((p) => p.decisionD))]);
+  const decisionDays = [...new Set(pending.map((p) => p.decisionD))];
+  const days = await loadDayCandidates(db, o.market, decisionDays);
+  // D-1848: a decision session's pool is a fact of that session; it is read from the store, and only a
+  // session without a stored pool is rebuilt (one `loadDayInputs`, minutes against a remote database)
+  const pools = await loadDayPools(db, o.market, decisionDays);
   for (const p of pending) {
     const day = days.get(p.decisionD);
     const cand = day?.candidates.find(
@@ -836,7 +947,14 @@ async function syncControls(
     );
     if (day === undefined || cand === undefined) continue; // no stored candidate: nothing to draw from
     if (!world.hasUniverse(p.decisionD)) {
-      world.setUniverse(p.decisionD, poolFromDay(await dayInputs(db, o, p.decisionD)));
+      let pool = pools.get(p.decisionD);
+      if (pool === undefined) {
+        pool = poolFromDay(await dayInputs(db, o, p.decisionD));
+        await putDayPool(db, o.market, p.decisionD, pool);
+      }
+      world.setUniverse(p.decisionD, pool);
+      // the draw walks controls from this pool: read their bars in a few batched queries up front
+      await world.load(pool.filter((c) => c.eligible).map((c) => c.code));
     }
     const lineage = `${o.market}:${cand.family}`;
     const rowId = ledgerRowId(lineage, cand.ruleVersion, cand.variant, cand.code, p.entryD);

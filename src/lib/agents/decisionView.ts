@@ -131,6 +131,11 @@ export type DecisionView = {
    * rows cannot answer a call in full falls back to the per-code query.
    */
   prefetch?(req: PrefetchRequest): Promise<void>;
+  /**
+   * D-1848: read only the bars (d in [fromD, D]) of many codes in a few batched queries; `bars` then
+   * answers from memory when the cached range holds enough rows, else it falls back to its own query.
+   */
+  prefetchBars?(codes: readonly string[], fromD: string): Promise<void>;
   /** The latest regime_daily row strictly before D for this rule version. */
   priorRegime(version: number): Promise<PriorRegime | null>;
   /** The latest indicator_daily row for the code with d <= D (stored state, design 4.2). */
@@ -211,10 +216,17 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
     checkInstant,
     async bars(code, count, upTo = guardD) {
       checkDate(upTo);
-      const cached = upTo === guardD ? barCache.get(code) : undefined;
+      const cached = barCache.get(code);
       // the last `count` rows of a complete [barsFromD, D] range are exactly the LIMIT query's rows
-      if (cached !== undefined && cached.length >= count)
+      if (cached !== undefined && upTo === guardD && cached.length >= count)
         return toBars(cached.slice(cached.length - count));
+      // D-1848: the same for an earlier `upTo`: the rows with d <= upTo of the complete range are the
+      // newest rows of that bound, so they answer when there are `count` of them (rows are oldest first)
+      if (cached !== undefined && upTo < guardD) {
+        let n = cached.length;
+        while (n > 0 && String(cached[n - 1]!.d) > upTo) n -= 1;
+        if (n >= count) return toBars(cached.slice(n - count, n));
+      }
       const args: (string | number)[] = [market, code, upTo, guardD];
       if (opts.liveIngestBound === true) args.push(cutoff);
       args.push(count);
@@ -359,6 +371,25 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
         }
       }
       insiderCache = { since: req.insiderSinceIso, byCode };
+    },
+    async prefetchBars(codes, fromD) {
+      checkDate(fromD);
+      const todo = [...new Set(codes)];
+      for (let i = 0; i < todo.length; i += PREFETCH_CHUNK) {
+        const part = todo.slice(i, i + PREFETCH_CHUNK);
+        const barArgs: (string | number)[] = [market, ...part, fromD, guardD];
+        if (opts.liveIngestBound === true) barArgs.push(cutoff);
+        const bars = await db.execute({
+          sql: `SELECT code, d, o, h, l, c, volume FROM price_bar
+                WHERE market = ? AND code IN (${marks(part.length)}) AND d >= ? AND d <= ?${ingestClause}
+                  AND ${listingFloor("price_bar")}
+                ORDER BY code, d`,
+          args: barArgs,
+        });
+        const got = new Map<string, Row[]>(part.map((c) => [c, []]));
+        for (const r of bars.rows) got.get(String(r.code))!.push(r as Row);
+        for (const [c, list] of got) barCache.set(c, list);
+      }
     },
     async priorRegime(version) {
       const rs = await db.execute({
