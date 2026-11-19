@@ -7,9 +7,13 @@
 // GL-07 (O-52): the output is now pasted into watchdog.yml (20:40, 21:50) and ingest-batch1.yml
 // (Batch-1 fallback, 18:15); `scheduleGate.mjs` is the no-op guard for the other regime's line.
 import { fileURLToPath } from "node:url";
-import { OWNER_TZ } from "../../src/lib/market/profileCore.mjs";
 
 export const DEFAULT_TIMES = ["20:40", "21:50"];
+// D-1851: kept here, not imported from src/lib/market/profileCore.mjs. The schedule-gate jobs of
+// ingest-batch1.yml and watchdog.yml check out only scripts/time (sparse), so an import from src/
+// broke both gates on 19 Nov (ERR_MODULE_NOT_FOUND; no ingest, so no 2a, 2b or picks).
+// scripts/time/sparse.test.mjs pins it equal to OWNER_TZ.
+export const OWNER_TZ = "Australia/Melbourne";
 const TZ = OWNER_TZ;
 // One date in each regime (2026): AEST in July, AEDT in January.
 const STANDARD_REF = "2026-07-15";
