@@ -1337,3 +1337,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1847 | The nightly job publishes the picks before the learning stages. |
 | D-1848 | Batch 3's ledger stage grew from 30 to 74 minutes between 13 and 18 Nov because syncControls rebuilt, with a full loadDayInputs (about 570 codes), the contro... |
 | D-1849 | "My portfolio" moves off the Picks page to its own top-nav tab, and the Picks page gets one tab row (Owner 2026-11-19). |
+| D-1851 | The schedule-gate jobs of ingest-batch1.yml and watchdog.yml check out only scripts/time. |
