@@ -79,3 +79,26 @@ test("analyse: exceptions drop an exact text, optionally per page, and are repor
   assert.deepEqual(r.applied, [HARD]);
   assert.match(report(r), /Exceptions in use/);
 });
+
+test("the Portfolio page passes with the repo's exceptions: only the three profile names are dropped (D-1852)", async () => {
+  const fs = await import("node:fs");
+  const { exceptions } = JSON.parse(
+    fs.readFileSync(new URL("../../e2e/readability-exceptions.json", import.meta.url), "utf8"),
+  );
+  // The /portfolio items the CI e2e collected on 20 Nov (heading group graded 15.6).
+  const items = [
+    ["heading", "My portfolio"],
+    ["heading", "Aggressive"],
+    ["heading", "Balanced"],
+    ["heading", "Conservative"],
+    ["button", "Account and settings menu"],
+    ["button", "Region: Australia (ASX)"],
+  ].map(([kind, text]) => ({ kind, text }));
+  const pages = [{ path: "/portfolio", items }];
+  assert.equal(analyse(pages).failures.length, 1, "without exceptions the page fails");
+  const r = analyse(pages, { exceptions });
+  assert.deepEqual(r.failures, []);
+  assert.deepEqual([...r.applied].sort(), ["Aggressive", "Balanced", "Conservative"]);
+  // Page-scoped: the same words elsewhere are still graded.
+  assert.ok(exceptions.every((e) => e.page === "/portfolio"));
+});
