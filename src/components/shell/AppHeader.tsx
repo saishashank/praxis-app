@@ -1,4 +1,4 @@
-// The header (docs/M7_design.md 4.2; UXR-005): wordmark, six tabs (desktop) and exactly three controls:
+// The header (docs/M7_design.md 4.2; UXR-005): wordmark, seven tabs (desktop) and exactly three controls:
 // the region/mode chip, the alert bell and the avatar (account menu). There is no theme toggle here;
 // Settings > Appearance owns the theme. On phones the tabs are the fixed bottom bar instead (TabBar).
 import Link from "next/link";
@@ -8,12 +8,21 @@ import { tabsFor } from "@/lib/ui/nav";
 import { AlertBell, type BellView } from "./AlertBell";
 import { GearMenu, type Account } from "./GearMenu";
 import { RegionMenu, type RegionMarket } from "./RegionMenu";
-import { HomeIcon, MarketIcon, NewsIcon, PicksIcon, ReviewsIcon, StrategiesIcon } from "./icons";
+import {
+  HomeIcon,
+  MarketIcon,
+  NewsIcon,
+  PicksIcon,
+  PortfolioIcon,
+  ReviewsIcon,
+  StrategiesIcon,
+} from "./icons";
 import { TabBar, type TabView } from "./TabBar";
 
 const ICONS: Record<TabView["id"], ReactNode> = {
   home: <HomeIcon />,
   picks: <PicksIcon />,
+  portfolio: <PortfolioIcon />,
   market: <MarketIcon />,
   strategies: <StrategiesIcon />,
   news: <NewsIcon />,

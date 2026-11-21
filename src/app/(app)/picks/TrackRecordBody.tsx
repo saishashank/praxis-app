@@ -3,6 +3,7 @@
 // numbers published with each pick, and offers no way to edit, delete, re-run or re-score anything (no
 // form, no button, no server action). A missed pick is shown as missed and is neither a win nor a loss.
 // A masked user sees "Stock A", percentages and ISO weeks, never prices (DAT-124).
+import type { ReactNode } from "react";
 import { loadTrackRecord, type TrackRow } from "@/lib/ui/loaders/picks";
 import type { LoaderEnv } from "@/lib/ui/loaders/shell";
 import { DataTable, type Column } from "@/components/ui/DataTable";
@@ -91,10 +92,13 @@ export async function TrackRecordBody({
   env,
   profile,
   hrefFor,
+  viewSelect = null,
 }: {
   env: LoaderEnv;
   profile: string;
   hrefFor: (profile: string) => string;
+  /** D-1849: the view dropdown, shown beside the profile tabs (the old /picks/track-record route has none). */
+  viewSelect?: ReactNode;
 }) {
   const model = await loadTrackRecord(env, { profile });
   const rule = profileSentence(
@@ -140,6 +144,7 @@ export async function TrackRecordBody({
         current={model.profile}
         hrefFor={hrefFor}
         rule={rule}
+        viewSelect={viewSelect}
       />
 
       {model.success ? (

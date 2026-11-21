@@ -27,7 +27,7 @@ import {
 } from "./text";
 import { ProfileLabel } from "./ProfileLabel";
 
-function StateBadge({ pick }: { pick: PickRowView }) {
+export function StateBadge({ pick }: { pick: PickRowView }) {
   const o = pick.outcome;
   let text = stateText(o);
   if (o?.state === "bought" && o.entry) text = "Bought";

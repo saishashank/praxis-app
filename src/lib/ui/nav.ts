@@ -1,18 +1,18 @@
 // The navigation model of the app shell (docs/M7_design.md 4.2; UXN-270, UXN-033, UXN-282, UXN-280).
-// ONE source for the six tabs, the gear (account) menu, the region label, the breadcrumb and the theme
+// ONE source for the seven tabs, the gear (account) menu, the region label, the breadcrumb and the theme
 // cycle. Pure data and functions: no server imports, so client components may use it. Role filtering
 // uses the same `can()` matrix as the server guards (ROL-102a); the pages and actions still refuse
 // regardless of what a menu shows (UX-004).
 import { can, type Role } from "@/lib/auth/permissions";
 import type { Theme } from "@/lib/preferences/service";
 
-export type TabId = "home" | "picks" | "market" | "strategies" | "news" | "reviews";
+export type TabId = "home" | "picks" | "portfolio" | "market" | "strategies" | "news" | "reviews";
 
 export type Tab = {
   id: TabId;
   label: string;
   href: string;
-  /** Needed role action; every signed-in role reads the six tabs. */
+  /** Needed role action; every signed-in role reads the seven tabs. */
   action: string;
   /** Badge source: only Strategies has one (attention count, UXN-046; none at zero). */
   badge?: "attention";
@@ -22,6 +22,8 @@ export type Tab = {
 export const TABS: readonly Tab[] = [
   { id: "home", label: "Home", href: "/", action: "read" },
   { id: "picks", label: "Picks", href: "/picks", action: "read" },
+  // D-1849: the portfolio is user-specific, so it has its own tab (every role reads it, like Picks).
+  { id: "portfolio", label: "Portfolio", href: "/portfolio", action: "read" },
   { id: "market", label: "Market", href: "/market", action: "read" },
   {
     id: "strategies",
@@ -72,6 +74,7 @@ type RouteNode = {
 export const ROUTES: readonly RouteNode[] = [
   { pattern: "/", label: "Home", tab: "home" },
   { pattern: "/picks", label: "Picks", tab: "picks" },
+  { pattern: "/portfolio", label: "My portfolio", tab: "portfolio" },
   { pattern: "/picks/track-record", label: "Track record", parent: "/picks", tab: "picks" },
   { pattern: "/picks/[id]", label: "Why this pick", parent: "/picks", tab: "picks" },
   { pattern: "/alerts", label: "My alerts", parent: "/picks", tab: "picks" },

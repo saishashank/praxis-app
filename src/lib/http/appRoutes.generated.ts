@@ -78,6 +78,7 @@ export const KNOWN_ROUTE_PATTERNS: readonly string[] = [
   "/picks",
   "/picks/[id]",
   "/picks/track-record",
+  "/portfolio",
   "/privacy",
   "/recommendations",
   "/review",

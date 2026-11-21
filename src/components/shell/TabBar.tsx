@@ -1,5 +1,5 @@
 "use client";
-// The six tabs (UXN-270): a top tab row from 1024 px up and a fixed bottom bar below it (UXN-017). Both
+// The seven tabs (UXN-270; D-1849 added Portfolio): a top tab row from 1024 px up and a fixed bottom bar below it (UXN-017). Both
 // show a two-tone line icon and the label, always (UXR-055). Both are plain links with aria-current on the active tab. The active tab
 // comes from the pathname, so it is right after a client-side navigation too. Only one of the two
 // navs is displayed at a time (CSS), so assistive technology reads one.
@@ -11,7 +11,7 @@ import { activeTabOf } from "@/lib/ui/activeTab";
 import type { TabId } from "@/lib/ui/nav";
 import { CheckIcon } from "@/components/ui/icons";
 
-/** `icon` is rendered by the server (AppHeader), so the six icon components stay out of the client JS. */
+/** `icon` is rendered by the server (AppHeader), so the seven icon components stay out of the client JS. */
 export type TabView = { id: TabId; label: string; href: string; badge?: number; icon: ReactNode };
 
 function badgeOf(t: TabView): number | null {
@@ -88,14 +88,14 @@ export function TabBar({ tabs }: { tabs: TabView[] }) {
         aria-label="Main (bottom bar)"
         className="app-tabbar fixed inset-x-0 bottom-0 z-40 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden"
       >
-        <ul className="m-0 grid list-none grid-cols-6 p-0">
+        <ul className="m-0 grid list-none grid-cols-7 p-0">
           {tabs.map((t) => (
             <li key={t.id} className="min-w-0">
               <Link
                 href={t.href}
                 aria-current={t.id === current ? "page" : undefined}
                 className={cn(
-                  "relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[11px] leading-tight",
+                  "relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[10px] leading-tight",
                   t.id === current ? "bg-surface-2 font-semibold text-accent" : "text-text-muted",
                 )}
               >

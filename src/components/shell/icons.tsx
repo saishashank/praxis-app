@@ -27,7 +27,7 @@ function Svg({ children, ...rest }: ShellIconProps & { children: ReactNode }) {
 
 // Tab icons are two-tone line icons (UXR-055): the main shape in the tab's own section hue
 // (--color-section-<tab>, a token per theme), the supporting strokes in the neutral text colour.
-export type TabHue = "home" | "picks" | "market" | "strategies" | "news" | "reviews";
+export type TabHue = "home" | "picks" | "portfolio" | "market" | "strategies" | "news" | "reviews";
 const hue = (t: TabHue) => ({ stroke: `var(--color-section-${t})` });
 
 export const HomeIcon = (p: ShellIconProps) => (
@@ -42,6 +42,14 @@ export const PicksIcon = (p: ShellIconProps) => (
     <circle cx="12" cy="12" r="9" />
     <circle cx="12" cy="12" r="4" style={hue("picks")} />
     <path d="M12 12h.01" style={hue("picks")} />
+  </Svg>
+);
+// D-1849: the Portfolio tab shares the Picks hue (no new colour token); the shape is a briefcase.
+export const PortfolioIcon = (p: ShellIconProps) => (
+  <Svg {...p}>
+    <rect x="3" y="7" width="18" height="13" rx="2" />
+    <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" style={hue("picks")} />
+    <path d="M3 13h18" style={hue("picks")} />
   </Svg>
 );
 export const MarketIcon = (p: ShellIconProps) => (

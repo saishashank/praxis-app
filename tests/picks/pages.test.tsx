@@ -80,25 +80,33 @@ describe("Picks list", () => {
     expect(sheet.textContent).toContain("Usually breaks when");
     cleanup();
     render(await PicksPage({ searchParams: sp() }));
-    const tabs = screen.getByRole("navigation", { name: "Picks view" });
-    expect(within(tabs).getByRole("link", { name: /Today/ })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
-    expect(within(tabs).getByRole("link", { name: "Track record" })).toHaveAttribute(
-      "href",
-      "/picks?profile=balanced&view=track",
+    // D-1849: one tab row (profiles) plus a view dropdown that defaults to Today; no portfolio here.
+    const view = screen.getByLabelText("View") as HTMLSelectElement;
+    expect(view).toHaveValue("today");
+    expect([...view.options].map((o) => o.textContent)).toEqual([
+      "Today",
+      "History",
+      "Track record",
+    ]);
+    expect(screen.getByRole("navigation", { name: "Risk profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Picks view" })).toBeNull();
+    expect(screen.queryByTestId("pick-portfolio")).toBeNull();
+    expect(screen.queryByText("My portfolio")).toBeNull();
+    const table = screen.getByTestId("pick-table");
+    expect(
+      within(table)
+        .getAllByRole("columnheader")
+        .map((h) => h.textContent),
+    ).toEqual(["Stock", "Strategy", "Buy up to", "Stop-loss", "Aim", "Time frame", "Status"]);
+    expect(within(table).getAllByTestId("pick-row").length).toBe(
+      screen.getAllByTestId("pick-card").length,
     );
   });
 
   it("renders the History tab with the status filter, Open by default (Owner 2026-11-10)", async () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp({ view: "history" }) }));
-    const tabs = screen.getByRole("navigation", { name: "Picks view" });
-    expect(within(tabs).getByRole("link", { name: /History/ })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.getByLabelText("View")).toHaveValue("history");
     expect(screen.getByLabelText("Show")).toHaveValue("open");
     cleanup();
     render(await PicksPage({ searchParams: sp({ view: "history", status: "all" }) }));
@@ -117,11 +125,7 @@ describe("Picks list", () => {
   it("renders the Track record tab on /picks?view=track and keeps the old route", async () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp({ view: "track" }) }));
-    const tabs = screen.getByRole("navigation", { name: "Picks view" });
-    expect(within(tabs).getByRole("link", { name: /Track record/ })).toHaveAttribute(
-      "aria-current",
-      "page",
-    );
+    expect(screen.getByLabelText("View")).toHaveValue("track");
     expect(screen.getByRole("table")).toBeInTheDocument();
     expect(screen.queryByTestId("pick-card")).toBeNull();
     cleanup();
@@ -158,7 +162,7 @@ describe("Picks list", () => {
       "aria-current",
     );
     // The profile sentence sits directly under the control.
-    expect(chips.parentElement?.querySelector("p")?.textContent).toContain(
+    expect(chips.parentElement?.parentElement?.querySelector("p")?.textContent).toContain(
       "Balanced: Middle-of-the-road",
     );
     expect(screen.getByTestId("success-line").textContent).toBe(
@@ -182,9 +186,11 @@ describe("Picks list", () => {
     );
     // Decision support only: nothing can place an order (UX-130, PRD-001).
     expect(screen.queryByRole("button", { name: /buy now|sell|place.*order/i })).toBeNull();
-    // The only form is the sort toggle (UXN-309, D-474): one hidden field, no order control.
+    // The only forms are the sort toggle (UXN-309, D-474) and the view dropdown (D-1849): no order control.
     expect(
-      document.querySelector("form:not([data-testid=sort-toggle]), input:not([type=hidden])"),
+      document.querySelector(
+        'form:not([data-testid=sort-toggle]):not([action="/picks"]), input:not([type=hidden])',
+      ),
     ).toBeNull();
   });
 
