@@ -38,9 +38,10 @@
       # The only step with database secrets. It waits (up to 20 minutes) for batch 2a of the same
       # session, then decides it.
       - name: Decide the session
-        run: node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}
+        run: node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${DATE_INPUT:+--date "$DATE_INPUT" --rerun}
         env:
           MARKET_INPUT: ${{ inputs.market }}
+          DATE_INPUT: ${{ inputs.date }}
           TURSO_MAIN_URL: ${{ secrets.TURSO_MAIN_URL_PROD }}
           TURSO_MAIN_TOKEN: ${{ secrets.TURSO_MAIN_TOKEN_PROD }}
           COMMIT_SHA: ${{ steps.approved.outputs.sha }}

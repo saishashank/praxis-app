@@ -1339,3 +1339,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1849 | "My portfolio" moves off the Picks page to its own top-nav tab, and the Picks page gets one tab row (Owner 2026-11-19). |
 | D-1851 | The schedule-gate jobs of ingest-batch1.yml and watchdog.yml check out only scripts/time. |
 | D-1852 | The new Portfolio page failed the e2e readability check (UXN-030): whole page grade 8.9 > 8, because its only headings are "My portfolio" and the three one-w... |
+| D-1853 | arena-signals.yml gets an optional date input so the Owner can rerun a missed night (Owner yes, 2026-11-21). |
