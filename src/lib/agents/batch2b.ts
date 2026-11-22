@@ -163,6 +163,13 @@ export type SignalsOptions = {
   /** An explicit replay against a NON-production database (D-066 / BLD-024). */
   readonly replay?: boolean;
   /**
+   * D-1856: the Owner's manual rerun of a named past session (`arena-signals.yml` input `date`, CLI
+   * `--date D --rerun`). Only then do the decision inputs read bars of sessions on or before D that were
+   * stored after the cut-off (a late price feed); a scheduled night keeps the ingest bound. Recorded on
+   * the run record (`late_bars_rerun`).
+   */
+  readonly rerun?: boolean;
+  /**
    * D-711: the live entry points set this so a weekday the calendar has no row for is skipped as
    * `calendar_missing` (fail safe). Off (default): the looser "not a holiday row" rule that
    * replays and the synthetic-date tests rely on.
@@ -1859,6 +1866,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       hours,
       params,
       replay: o.replay === true,
+      lateBars: o.rerun === true,
       heldCodes: [...new Set(trades.map((t) => t.code))].sort(cmp),
       actions,
     });
@@ -2135,6 +2143,7 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
         ...stats,
         partial: day.partialReasons.length > 0 ? day.partialReasons : null,
         ...(cutoffPollMissing ? { cutoff_poll_missing: true } : {}),
+        ...(o.rerun === true && o.replay !== true ? { late_bars_rerun: true } : {}), // D-1856 audit note
         coverage: gaps.length > 0 ? gaps : null,
         ...(started !== null && started.opened > 0
           ? { cohortsOpened: started.opened, cohortStartD: started.startD }

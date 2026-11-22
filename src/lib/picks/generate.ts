@@ -122,6 +122,19 @@ export type GenerateContext = {
   readonly universe: readonly UniverseCode[];
   /** ISO instant stamped on every pick of the night. */
   readonly createdAt: string;
+  /**
+   * D-1856: the picks already published for this session, per profile (the Owner's dated rerun). New
+   * picks follow them from their highest rank + 1 up to PICK_RANK_MAX; their companies and families count
+   * as taken. The published picks themselves are never produced again, so never changed.
+   */
+  readonly existing?: ReadonlyMap<string, readonly ExistingPick[]>;
+};
+
+/** D-1856: one published pick of the session (rank, company, family). */
+export type ExistingPick = {
+  readonly rank: number;
+  readonly code: string;
+  readonly family: string;
 };
 
 const cmpText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -373,8 +386,16 @@ export function generatePicks(
     const perFamily = new Map<string, number>();
     const seen = new Set<string>();
     let rank = 0;
+    // D-1856: append after the session's published picks, up to the table's rank limit
+    const before = ctx.existing?.get(profile);
+    const limit = ctx.existing === undefined ? ctx.picks.picksPerProfile : PICK_RANK_MAX;
+    for (const e of before ?? []) {
+      rank = Math.max(rank, e.rank);
+      seen.add(e.code);
+      perFamily.set(e.family, (perFamily.get(e.family) ?? 0) + 1);
+    }
     for (const inp of sorted) {
-      if (rank >= ctx.picks.picksPerProfile) break;
+      if (rank >= limit) break;
       if (seen.has(inp.code)) continue; // one pick per company per profile
       if ((perFamily.get(inp.family) ?? 0) >= ctx.picks.picksMaxPerFamily) continue;
       const pick = build(inp, profile, rank + 1, ctx, caps, spec.tiers);

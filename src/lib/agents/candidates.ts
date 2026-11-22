@@ -169,6 +169,11 @@ export type DayRequest = {
   readonly params: AgentParams;
   /** Replays read backfilled rows whose ingested_at is later than the cut-off by construction. */
   readonly replay: boolean;
+  /**
+   * D-1856: the Owner's manual dated rerun only (batch 2b `rerun`). Bars of sessions on or before D
+   * stored after the cut-off are read; the date bound `d <= D` and the announcement bound stay.
+   */
+  readonly lateBars?: boolean;
   /** Codes held in open trades (their facts are built even when outside the universe). */
   readonly heldCodes: readonly string[];
   readonly actions: readonly CorpActionRecord[];
@@ -308,6 +313,14 @@ export function withReferenceData(
 }
 
 /**
+ * D-1856: whether the decision view hides bars stored after the cut-off. Every live night does; a
+ * replay reads backfilled rows, and the Owner's dated rerun of a past session reads a late feed.
+ */
+export function barsIngestBound(req: Pick<DayRequest, "replay" | "lateBars">): boolean {
+  return !req.replay && req.lateBars !== true;
+}
+
+/**
  * A4 -> A3 -> A2 for D. Failures of A2/A3 are caught per agent and make the outputs partial
  * (AGT-004, decision 22); a look-ahead is a bug and always propagates.
  */
@@ -320,7 +333,7 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
     market,
     d,
     cutoff,
-    liveIngestBound: !req.replay,
+    liveIngestBound: barsIngestBound(req),
     announcementIngestBound: annBound.bound,
   });
   const partialReasons: string[] = [];
