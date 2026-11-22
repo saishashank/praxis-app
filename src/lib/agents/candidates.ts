@@ -320,6 +320,11 @@ export function barsIngestBound(req: Pick<DayRequest, "replay" | "lateBars">): b
   return !req.replay && req.lateBars !== true;
 }
 
+/** D-1857: index bars published after the cut-off are read on the Owner's dated rerun only. */
+export function lateIndexBars(req: Pick<DayRequest, "replay" | "lateBars">): boolean {
+  return !req.replay && req.lateBars === true;
+}
+
 /**
  * A4 -> A3 -> A2 for D. Failures of A2/A3 are caught per agent and make the outputs partial
  * (AGT-004, decision 22); a look-ahead is a bug and always propagates.
@@ -334,6 +339,8 @@ export async function loadDayInputs(db: Client, req: DayRequest): Promise<DayInp
     d,
     cutoff,
     liveIngestBound: barsIngestBound(req),
+    // D-1857: the index bar arrived late too on Fri 20 Nov; same dated-rerun-only rule as the bars
+    lateIndexBars: lateIndexBars(req),
     announcementIngestBound: annBound.bound,
   });
   const partialReasons: string[] = [];

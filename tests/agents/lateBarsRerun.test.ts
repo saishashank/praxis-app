@@ -19,7 +19,7 @@ vi.mock("@/lib/agents/batch2b", async (importOriginal) => {
   };
 });
 
-import { barsIngestBound } from "@/lib/agents/candidates";
+import { barsIngestBound, lateIndexBars } from "@/lib/agents/candidates";
 import { createDecisionView, decisionCutoffUtc } from "@/lib/agents/decisionView";
 import { defaultAgentParams } from "@/lib/agents/params";
 import { signalsMain } from "@/lib/arena/cli";
@@ -76,6 +76,48 @@ describe("decision view of Fri 20 Nov with the bars stored late", () => {
     const bars = await view.bars("AAA", 10);
     expect(bars.map((b) => b.d)).toEqual(["2026-11-19", D]);
     expect(bars.at(-1)!.close).toBe(12_000_000n);
+  });
+});
+
+describe("D-1857: Fri 20 Nov's index bar was published after the cut-off too", () => {
+  const ix = (db: Client, d: string, c: number, published: string) =>
+    db.execute({
+      sql: `INSERT INTO index_bar (market, index_code, d, o_micro, h_micro, l_micro, c_micro, source, published_at, ingested_at)
+            VALUES ('AU', 'AXJO', ?, ?, ?, ?, ?, 'test', ?, ?)`,
+      args: [d, c, c, c, c, published, published],
+    });
+  async function world() {
+    const db = await freshDb("main");
+    await ix(db, "2026-11-19", 8_000_000_000, "2026-11-19T06:30:00.000Z");
+    await ix(db, D, 8_100_000_000, "2026-11-20T13:30:00.000Z"); // after the 07:10Z cut-off
+    await ix(db, "2026-11-23", 9_999_000_000, "2026-11-23T06:30:00.000Z"); // after D: never read
+    return db;
+  }
+  const view = async (late: boolean) =>
+    createDecisionView(await world(), {
+      market: "AU",
+      d: D,
+      cutoff: CUTOFF,
+      liveIngestBound: barsIngestBound({ replay: false, lateBars: late }),
+      lateIndexBars: lateIndexBars({ replay: false, lateBars: late }),
+    });
+
+  it("lateIndexBars only on a dated live rerun, never on a scheduled night or a replay", () => {
+    expect(lateIndexBars({ replay: false })).toBe(false);
+    expect(lateIndexBars({ replay: false, lateBars: true })).toBe(true);
+    expect(lateIndexBars({ replay: true, lateBars: true })).toBe(false);
+  });
+
+  it("scheduled night: the late index bar is hidden, so the regime cannot be read for D", async () => {
+    expect((await (await view(false)).indexBars("AXJO", 10)).map((b) => b.d)).toEqual([
+      "2026-11-19",
+    ]);
+  });
+
+  it("dated rerun: the late index bar is read; Monday's is still never read", async () => {
+    const bars = await (await view(true)).indexBars("AXJO", 10);
+    expect(bars.map((b) => b.d)).toEqual(["2026-11-19", D]);
+    expect(bars.at(-1)!.close).toBe(8_100_000_000n);
   });
 });
 

@@ -58,7 +58,9 @@ describe("diagnoseDay", () => {
     expect(text).toMatch(/versions: none \(single v1 run\)/);
     // the golden index history is shorter than the default regime warm-up: regime "unknown" with
     // no partial reason, so batch 2b would still record success while every family is blocked
-    expect(text).toMatch(/inputs: regime=unknown regimeD=\d{4}-\d{2}-\d{2} partial=\[\]/);
+    expect(text).toMatch(
+      /inputs: view=scheduled regime=unknown regimeD=\d{4}-\d{2}-\d{2} partial=\[\]/,
+    );
     expect(text).toMatch(/index: rows=\d+ visibleAtCutoff=\d+ first=\S+ needed=1281 raw=unknown/);
     expect(text).toMatch(/live params: candidates=0 by=\{\}/);
     expect(text).toMatch(/live params: blocked=[1-9]\d* .*reasons=\{"regime_unknown":/);
@@ -83,11 +85,21 @@ describe("diagnoseDay", () => {
     expect(lines[1]).toMatch(
       /tiers now: \{\} .* sessionsWithBars=0 busiest=0 thin=\[\] u1AdvPool=0 poolBars: 60=0 54-59=0 under54=0$/,
     );
-    expect(text).toMatch(/inputs: regime=unknown regimeD=none partial=\["a3_no_index_data"\]/);
+    expect(text).toMatch(
+      /inputs: view=scheduled regime=unknown regimeD=none partial=\["a3_no_index_data"\]/,
+    );
     expect(text).toMatch(
       /index: rows=0 visibleAtCutoff=0 first=none needed=1281 raw=none smaNull=true/,
     );
     expect(text).toMatch(/bars per code: min=0 median=0 max=0 /);
+  });
+
+  it("D-1857: --rerun reads the session as the dated rerun does, and still writes nothing", async () => {
+    const before = await tableCounts(db);
+    const lines: string[] = [];
+    await diagnoseDay(readOnly(db), DATES[D]!, (l) => lines.push(l), { rerunView: true });
+    expect(await tableCounts(db)).toEqual(before);
+    expect(lines.join("\n")).toMatch(/inputs: view=dated-rerun regime=/);
   });
 
   it("says so when the market row is missing", async () => {

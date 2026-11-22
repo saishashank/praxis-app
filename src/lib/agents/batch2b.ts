@@ -542,6 +542,14 @@ const SIGNAL_COLS = [
   "decided_at",
 ] as const;
 
+/** D-1857: the night's partial-input reasons for the log, each once with its count ("none" when complete). */
+export function partialNote(reasons: readonly string[]): string {
+  if (reasons.length === 0) return "none";
+  const n = new Map<string, number>();
+  for (const r of reasons) n.set(r, (n.get(r) ?? 0) + 1);
+  return [...n].map(([r, k]) => (k > 1 ? `${r}x${k}` : r)).join("+");
+}
+
 function signalValues(market: string, c: Candidate, day: DayInputs): unknown[] {
   const facts = day.facts.get(c.code);
   const evidence = canonicalJson({
@@ -1871,7 +1879,12 @@ export async function signalsDay(db: Client, o: SignalsOptions): Promise<Signals
       actions,
     });
     stats.agentRows = await recordAgentRows(db, day, o.market);
-    tick("loadDayInputs", `codes=${day.inputs.codes.length}`);
+    // D-1857: the partial-input reasons (fixed codes, never a company) and the regime go in the log,
+    // so a degraded night says why without a database read
+    tick(
+      "loadDayInputs",
+      `codes=${day.inputs.codes.length} regime=${day.inputs.regime} partial=${partialNote(day.partialReasons)}`,
+    );
 
     // A5: the rule interpreter, once per active rule version (live set first; D-110 #44)
     const { out, paramsOf } = runVersions(day.inputs, params, versionSet);

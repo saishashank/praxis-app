@@ -82,6 +82,12 @@ export type DecisionViewOptions = {
    */
   readonly liveIngestBound?: boolean;
   /**
+   * D-1857: the Owner's dated rerun only (D-1856). Index bars normally need `published_at < cutoff`;
+   * on that rerun an index bar of a session on or before D published after the cut-off (a late feed,
+   * Fri 20 Nov 2026) is read too, so the regime is known. A bar dated after D is never read.
+   */
+  readonly lateIndexBars?: boolean;
+  /**
    * GL-05: an announcement first stored after this instant did not exist for the decision (live or
    * replay alike). Rows with first_ingested_at NULL (stored before the column) are always visible.
    * Set by loadDayInputs from the cut-off poll marker (src/lib/sentinel/cutoffPoll.ts).
@@ -241,11 +247,14 @@ export function createDecisionView(db: Reader, opts: DecisionViewOptions): Decis
     },
     async indexBars(indexCode, count, upTo = guardD) {
       checkDate(upTo);
+      const late = opts.lateIndexBars === true; // D-1857: the dated rerun only
       const rs = await db.execute({
         sql: `SELECT d, c_micro FROM index_bar
-              WHERE market = ? AND index_code = ? AND d <= ? AND d <= ? AND published_at < ?
+              WHERE market = ? AND index_code = ? AND d <= ? AND d <= ?${late ? "" : " AND published_at < ?"}
               ORDER BY d DESC LIMIT ?`,
-        args: [market, indexCode, upTo, guardD, cutoff, count],
+        args: late
+          ? [market, indexCode, upTo, guardD, count]
+          : [market, indexCode, upTo, guardD, cutoff, count],
       });
       return rs.rows.map((r) => ({ d: String(r.d), close: bigintCol(r.c_micro) })).reverse();
     },
