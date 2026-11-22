@@ -4,14 +4,23 @@
 // score >= 80 %" (`mutation_score_min`): `thresholds.break` makes Stryker exit non-zero below it and
 // scripts/ci/mutation-summary.mjs reads the same number for the job summary.
 //
-// NOT INSTALLED YET: this file is ready for @stryker-mutator/core and @stryker-mutator/vitest-runner
-// (Apache-2.0, dev-only, never shipped). Adding them to package.json waits for the Owner's approval
-// (decision 22, as for Lighthouse in D-153); the workflow refuses to run until they are installed.
+// @stryker-mutator/core and @stryker-mutator/vitest-runner (Apache-2.0, dev-only, never shipped) are in
+// devDependencies (decision 22).
+//
+// D-1854: the dry run (Stryker first runs all its tests once) failed every weekly run since 24 Oct 2026
+// with "Initial test run timed out" after the 5-minute default. The vitest runner's "related" set for
+// the mutated files was nearly the whole suite, because src/lib/agents/params.ts is imported almost
+// everywhere. Now Stryker runs only the unit tests in vitest.mutation.config.mts (`related: false`), with
+// a 20-minute dry-run limit. The two loader files src/lib/agents/{candidates,params}.ts left the mutate
+// list: AT-31 and docs/M8_design.md 2.8 set the floor on the money and statistics modules, the families
+// are the pure rule interpreter, and those two are a database loader and the parameter registry that only
+// the database tests reach. They keep their 90 % coverage floor in vitest.config.mts.
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 const config = {
   testRunner: "vitest",
   plugins: ["@stryker-mutator/vitest-runner"],
-  vitest: { configFile: "vitest.config.mts" },
+  vitest: { configFile: "vitest.mutation.config.mts", related: false },
+  dryRunTimeoutMinutes: 20,
   mutate: [
     // money maths
     "src/lib/money/**/*.ts",
@@ -21,7 +30,6 @@ const config = {
     "src/lib/replay/{cif,scorecards}.ts",
     // rule interpreter
     "src/lib/agents/families/**/*.ts",
-    "src/lib/agents/{candidates,params}.ts",
   ],
   coverageAnalysis: "perTest",
   ignoreStatic: true,
