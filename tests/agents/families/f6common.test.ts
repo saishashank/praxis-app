@@ -397,14 +397,19 @@ describe("determinism and one implementation for live and replay", () => {
     expect(out.candidates.map((c) => c.code)).toEqual(["ZZB", "ZZC", "ZZD"]);
   });
 
-  it("nothing in the output depends on a live/replay mode: one function, no mode switch", () => {
-    const dir = path.join(ROOT, "src/lib/agents/families");
-    for (const f of readdirSync(dir)) {
-      const src = readFileSync(path.join(dir, f), "utf8");
-      expect(src, f).not.toMatch(/\b(isReplay|isLive|replayMode|liveMode)\b/);
-      expect(src, f).not.toMatch(/Date\.now|new Date\(\)|Math\.random|process\.env/);
-    }
-  });
+  // D-1854: a scan of the source text, so not inside the weekly mutation run, whose workers see
+  // Stryker's instrumented copies (their preamble reads process.env). The normal suite runs it.
+  it.skipIf(process.env.STRYKER_MUTATOR_WORKER !== undefined)(
+    "nothing in the output depends on a live/replay mode: one function, no mode switch",
+    () => {
+      const dir = path.join(ROOT, "src/lib/agents/families");
+      for (const f of readdirSync(dir)) {
+        const src = readFileSync(path.join(dir, f), "utf8");
+        expect(src, f).not.toMatch(/\b(isReplay|isLive|replayMode|liveMode)\b/);
+        expect(src, f).not.toMatch(/Date\.now|new Date\(\)|Math\.random|process\.env/);
+      }
+    },
+  );
 
   it("facts built from a snapshot cut at D equal facts built live from the same bars", () => {
     const full = makeBars({ close: rising(CENT), volume: volumes(1_000_000n, 2_000_000n), n: 305 });

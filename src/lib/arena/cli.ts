@@ -6,7 +6,9 @@
 //   close-books [--date YYYY-MM-DD] [--wait-minutes N] [--max-sessions N] [--replay]
 //   close-books --kill market_off [--market <CODE>] [--date YYYY-MM-DD]   (the rollback kill, M20 D-1101: closes every
 //                open book of a market in rollback at the open, then disables it; src/lib/arena/kill.ts)
-//   signals [--date YYYY-MM-DD] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all|core|after]
+//   signals [--date YYYY-MM-DD [--rerun]] [--wait-minutes N] [--replay] [--phase 2b|3|learn|words|all|core|after]
+//   D-1853: `--rerun` (the workflow input `date`, the Owner rerunning a missed night) refuses any date
+//   but the latest session on or before today, before any write (`rerunRefusal`).
 //   D-1847: `core` = 2b then 3 (as in `all`), `after` = learn then words (as in `all`); the nightly
 //   orchestrator runs core -> picks -> after so the picks never wait behind the learning stages.
 //                (batch 2b, M4 T8; batch 3, T15; then A6 `learn` and the `words` text, M6 T11; all = in that order)
@@ -55,6 +57,29 @@ const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "
 function flag(args: readonly string[], name: string): string | null {
   const i = args.indexOf(name);
   return i >= 0 && has(args[i + 1]) ? args[i + 1] : null;
+}
+
+/**
+ * D-1853: the Owner's manual rerun of a missed night (`arena-signals.yml` input `date`, passed as
+ * `--date D --rerun`). Batch 2b decides ONE session and never a past one, because its orders would
+ * be filled after the fact. So a rerun may only name the latest session on or before today in the
+ * market's zone: a Friday decided on the Saturday is allowed; a Thursday decided after Friday has
+ * traded is not. Returns the refusal reason, or null when the date may be decided.
+ */
+// A string, not a regex literal: the no-float-money check reads `/` outside rational.ts as division.
+const ISO_DATE = new RegExp("^\\d{4}-\\d{2}-\\d{2}$");
+
+export function rerunRefusal(
+  date: string | null,
+  today: string,
+  calendar: Parameters<typeof sessionsBetween>[2],
+): string | null {
+  if (date === null || !ISO_DATE.test(date) || Number.isNaN(Date.parse(date)))
+    return "--rerun needs --date YYYY-MM-DD";
+  if (date > today) return "rerun date is in the future";
+  if (date < today && sessionsBetween(addDays(date, 1), today, calendar).length > 0)
+    return "rerun date is not the latest session (a later session has traded)";
+  return null;
 }
 
 export type CliDeps = {
@@ -472,6 +497,13 @@ export async function signalsMain(
     const tz = (await loadProfile(db, market)).tz!;
     const d = flag(argv, "--date") ?? marketDate(new Date(nowMs()), tz);
     const calendar = await loadCalendar(db, market);
+    if (argv.includes("--rerun")) {
+      const why = rerunRefusal(flag(argv, "--date"), marketDate(new Date(nowMs()), tz), calendar);
+      if (why !== null) {
+        out(`arena-2b: refused (${why})`);
+        return 2;
+      }
+    }
     const mode = await db.execute({
       sql: "SELECT mode FROM market WHERE code = ?",
       args: [market],

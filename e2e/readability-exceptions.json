@@ -1,4 +1,20 @@
 {
   "_comment": "UXN-030 readability exceptions, reported for the Owner. Each entry drops one exact text from the Flesch-Kincaid check: { \"page\": \"/path (optional)\", \"text\": \"exact text\", \"reason\": \"why it cannot be simpler\" }.",
-  "exceptions": []
+  "exceptions": [
+    {
+      "page": "/portfolio",
+      "text": "Aggressive",
+      "reason": "D-1852: a risk profile's fixed name, the same word as the Picks tab; on the short Portfolio page the three one-word profile headings alone lift the page past grade 8."
+    },
+    {
+      "page": "/portfolio",
+      "text": "Balanced",
+      "reason": "D-1852: a risk profile's fixed name, the same word as the Picks tab."
+    },
+    {
+      "page": "/portfolio",
+      "text": "Conservative",
+      "reason": "D-1852: a risk profile's fixed name, the same word as the Picks tab."
+    }
+  ]
 }

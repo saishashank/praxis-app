@@ -13,14 +13,14 @@ import {
   type HistoryFilter,
 } from "@/lib/ui/loaders/picks";
 import { Banner } from "@/components/ui/States";
-import { PickCard } from "./PickCard";
-import { ProfileSwitch, ViewTabs } from "./PickTabs";
+import { PickTable } from "./PickTable";
+import { ProfileSwitch } from "./PickTabs";
+import { ViewSelect } from "./ViewSelect";
+import { pickViewHref, pickViewOf } from "./views";
 import { PicksEmptyArt } from "./EmptyArt";
 import { TrackRecordBody } from "./TrackRecordBody";
 import { HistoryBody } from "./HistoryBody";
 import { SuccessStrip } from "./SuccessStrip";
-import { PortfolioCard } from "./PortfolioCard";
-import { loadMyPortfolios } from "@/lib/ui/loaders/pickPortfolio";
 import { IntradaySection } from "./IntradaySection";
 import { SortToggle } from "./SortToggle";
 import { setPicksSortAction } from "../settings/alerts/actions";
@@ -49,9 +49,9 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") q.set(k, v);
   const query = await parsePicksQuery(env, q);
   if (query === null) notFound();
-  const track = sp.view === "track";
-  if (track) return await TrackView({ env, profile: query.profile });
-  if (sp.view === "history")
+  const view = pickViewOf(sp.view);
+  if (view === "track") return await TrackView({ env, profile: query.profile });
+  if (view === "history")
     return await HistoryView({
       env,
       profile: query.profile,
@@ -68,7 +68,6 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   const picks = sortPicks(capPerFamily(model.picks, max), sort);
   const chips = model.realD ? await loadAlertChips(env, model.realD) : new Map();
   const intraday = await loadIntraday(env);
-  const portfolio = await loadMyPortfolios(env);
   // M21 D-1214, D-1219: the Owner's tier label and broker links ride on the tile through its `extra` slot, computed only
   // when the one hidden-route predicate says the tools are visible to this user; the module is loaded then and only then.
   const extras = (await ownerToolsVisibleTo(user))
@@ -92,18 +91,15 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
         </p>
       </header>
 
-      <ViewTabs current="today" profile={model.profile} />
-
       <ProfileSwitch
         profiles={model.profiles}
         current={model.profile}
-        hrefFor={(p) => `/picks?profile=${encodeURIComponent(p)}`}
+        hrefFor={(p) => pickViewHref("today", p)}
         rule={rule}
+        viewSelect={<ViewSelect current="today" profile={model.profile} />}
       />
 
       {model.success ? <SuccessStrip success={model.success} profile={model.profile} /> : null}
-
-      <PortfolioCard v={portfolio} />
 
       {model.state === "stale" && model.staleText ? (
         <Banner tone="warning" title="Out of date">
@@ -127,20 +123,16 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
       {picks.length === 0 ? (
         <PicksEmptyArt title="No picks yet">{EMPTY_PICKS_SENTENCE}</PicksEmptyArt>
       ) : (
-        <ul className="m-0 flex list-none flex-col gap-4 p-0" aria-labelledby="tonight-h">
-          {picks.map((p) => (
-            <li key={p.id} className="min-w-0">
-              <PickCard
-                pick={p}
-                profile={model.profile}
-                masked={model.masked}
-                beatsLuck={model.success?.beatsLuck ?? false}
-                chip={chips.get(`${model.realD}.${model.profile}.${p.rank}`) ?? null}
-                extra={extras?.get(p.id) ?? null}
-              />
-            </li>
-          ))}
-        </ul>
+        <PickTable
+          picks={picks}
+          profile={model.profile}
+          masked={model.masked}
+          beatsLuck={model.success?.beatsLuck ?? false}
+          chips={chips}
+          realD={model.realD}
+          extras={extras}
+          labelledBy="tonight-h"
+        />
       )}
 
       <IntradaySection model={intraday} />
@@ -167,8 +159,13 @@ async function HistoryView({
           {HISTORY_PURPOSE} {NOT_REAL_ORDERS}
         </p>
       </header>
-      <ViewTabs current="history" profile={profile} />
-      {await HistoryBody({ env, profile, filter, cursor })}
+      {await HistoryBody({
+        env,
+        profile,
+        filter,
+        cursor,
+        viewSelect: <ViewSelect current="history" profile={profile} />,
+      })}
     </main>
   );
 }
@@ -188,11 +185,11 @@ async function TrackView({
           Nothing shown here can be changed afterwards. {NOT_REAL_ORDERS}
         </p>
       </header>
-      <ViewTabs current="track" profile={profile} />
       {await TrackRecordBody({
         env,
         profile,
-        hrefFor: (p) => `/picks?profile=${encodeURIComponent(p)}&view=track`,
+        hrefFor: (p) => pickViewHref("track", p),
+        viewSelect: <ViewSelect current="track" profile={profile} />,
       })}
     </main>
   );

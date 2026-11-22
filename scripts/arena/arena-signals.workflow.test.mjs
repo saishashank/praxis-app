@@ -70,7 +70,14 @@ test("the database secrets appear only in env of the one deciding step, the prod
   assert.equal(s.env.TURSO_MAIN_URL, "${{ secrets.TURSO_MAIN_URL_PROD }}");
   assert.equal(s.env.TURSO_MAIN_TOKEN, "${{ secrets.TURSO_MAIN_TOKEN_PROD }}");
   assert.equal(s.env.COMMIT_SHA, "${{ steps.approved.outputs.sha }}");
-  assert.equal(s.run, 'node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"}');
+  assert.equal(
+    s.run,
+    'node scripts/arena/signals.mjs ${MARKET_INPUT:+--market "$MARKET_INPUT"} ${DATE_INPUT:+--date "$DATE_INPUT" --rerun}',
+  );
+  // D-1853: the inputs reach the script only through env, never as an expression in the run line.
+  assert.equal(s.env.DATE_INPUT, "${{ inputs.date }}");
+  assert.equal(wf.on.workflow_dispatch.inputs.date.type, "string");
+  assert.equal(wf.on.workflow_dispatch.inputs.date.default, "");
   assert.ok(!String(s.run).includes("secrets."));
   assert.equal(s.with, undefined);
   assert.equal(wf.env, undefined);

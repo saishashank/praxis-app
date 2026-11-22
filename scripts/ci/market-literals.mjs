@@ -66,7 +66,7 @@ export const EXTRA_ALLOW = Object.freeze([
       "onboarding copy of the six AU practice strategies' starting amount (D-1816: the numbers stay)",
   },
   {
-    file: "src/app/(app)/picks/PortfolioCard.tsx",
+    file: "src/app/(app)/portfolio/PortfolioCard.tsx",
     classes: ["currency"],
     includes: "first buy of a share",
     reason:

@@ -1,6 +1,8 @@
 // Profile switch (UXR-021, UXR-002, UXN-040): a Segmented control (links, state in the URL; the selected
 // profile has fill + check + "Selected") with the one-sentence rule of the chosen profile directly under
-// it, taken from the stored `pick_profiles` caps.
+// it, taken from the stored `pick_profiles` caps. D-1849: the Today / History / Track record choice is the
+// `ViewSelect` dropdown, passed in as `viewSelect` and shown on the same row as the profile tabs.
+import type { ReactNode } from "react";
 import { Segmented } from "@/components/ui/Segmented";
 import { profileLabel } from "./text";
 import { ProfileLabel } from "./ProfileLabel";
@@ -10,45 +12,29 @@ export function ProfileSwitch({
   current,
   hrefFor,
   rule,
+  viewSelect = null,
 }: {
   profiles: readonly string[];
   current: string;
   /** Link of a profile, e.g. (p) => `/picks?profile=${p}`. */
   hrefFor: (profile: string) => string;
   rule: string;
+  /** The view dropdown; sits beside the profile tabs (wraps under them on a phone). */
+  viewSelect?: ReactNode;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <Segmented
-        label="Risk profile"
-        value={current}
-        items={profiles.map((p) => ({ value: p, label: profileLabel(p), href: hrefFor(p) }))}
-      />
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
+        <Segmented
+          label="Risk profile"
+          value={current}
+          items={profiles.map((p) => ({ value: p, label: profileLabel(p), href: hrefFor(p) }))}
+        />
+        {viewSelect}
+      </div>
       <p className="m-0 text-sm text-text-muted">
         <ProfileLabel profile={current} />: {rule}
       </p>
     </div>
-  );
-}
-
-/** Today / History / Track record tabs of the Picks page (UXR-021; History: Owner 2026-11-10). */
-export function ViewTabs({
-  current,
-  profile,
-}: {
-  current: "today" | "history" | "track";
-  profile: string;
-}) {
-  const p = encodeURIComponent(profile);
-  return (
-    <Segmented
-      label="Picks view"
-      value={current}
-      items={[
-        { value: "today", label: "Today", href: `/picks?profile=${p}` },
-        { value: "history", label: "History", href: `/picks?profile=${p}&view=history` },
-        { value: "track", label: "Track record", href: `/picks?profile=${p}&view=track` },
-      ]}
-    />
   );
 }

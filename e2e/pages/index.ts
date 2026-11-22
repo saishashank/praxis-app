@@ -5,6 +5,7 @@ import { ROLES, can, type Role } from "../../src/lib/auth/permissions";
 import { CORE_PAGES } from "./core";
 import { MARKET_PAGES } from "./market";
 import { PICKS_PAGES } from "./picks";
+import { PORTFOLIO_PAGES } from "./portfolio";
 import { STRATEGIES_PAGES } from "./strategies";
 import { RISK_IDEAS_PAGES } from "./riskIdeas";
 import { NEWS_PAGES } from "./news";
@@ -21,6 +22,7 @@ export const PAGES: PageEntry[] = [
   ...CORE_PAGES,
   ...MARKET_PAGES,
   ...PICKS_PAGES,
+  ...PORTFOLIO_PAGES,
   ...STRATEGIES_PAGES,
   ...RISK_IDEAS_PAGES,
   ...NEWS_PAGES,

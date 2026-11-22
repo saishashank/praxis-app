@@ -23,7 +23,7 @@ import { familyBadge } from "./familyMap";
 import { CountUp, PopIn } from "./Motion";
 import { WelcomeBanner } from "./WelcomeBanner";
 import { IntradaySection } from "../picks/IntradaySection";
-import { PortfolioCard } from "../picks/PortfolioCard";
+import { PortfolioCard } from "../portfolio/PortfolioCard";
 import { ProfileLabel } from "../picks/ProfileLabel";
 import { nowPct, pct, profileHue } from "../picks/text";
 

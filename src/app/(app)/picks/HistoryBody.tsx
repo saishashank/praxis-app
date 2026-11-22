@@ -4,6 +4,7 @@
 // day is its own row with its own buy and sale. Read only. A masked viewer sees the letter, the ISO
 // week and percentages, never prices or dates (DAT-124), and only the first page.
 import Link from "next/link";
+import type { ReactNode } from "react";
 import {
   HISTORY_FILTERS,
   loadPickHistory,
@@ -16,6 +17,7 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Values";
 import { formatDay, formatPpm } from "@/lib/view/format";
 import { ProfileSwitch } from "./PickTabs";
+import { pickViewHref } from "./views";
 import { pickProfilesConfig } from "./data";
 import { PicksEmptyArt } from "./EmptyArt";
 import { StatusFilter } from "./StatusFilter";
@@ -122,11 +124,14 @@ export async function HistoryBody({
   profile,
   filter,
   cursor,
+  viewSelect = null,
 }: {
   env: LoaderEnv;
   profile: string;
   filter: HistoryFilter;
   cursor: string | null;
+  /** D-1849: the view dropdown, shown beside the profile tabs. */
+  viewSelect?: ReactNode;
 }) {
   const model = await loadPickHistory(env, { profile, filter, cursor });
   const rule = profileSentence(
@@ -157,8 +162,9 @@ export async function HistoryBody({
       <ProfileSwitch
         profiles={model.profiles}
         current={model.profile}
-        hrefFor={(p) => `/picks?profile=${encodeURIComponent(p)}&view=history`}
+        hrefFor={(p) => pickViewHref("history", p)}
         rule={rule}
+        viewSelect={viewSelect}
       />
 
       <form method="get" action="/picks" className="flex flex-wrap items-center gap-2 text-sm">

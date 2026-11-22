@@ -4177,6 +4177,28 @@
       "attrs": {}
     },
     {
+      "id": "page:/portfolio",
+      "type": "page",
+      "name": "/portfolio",
+      "purpose": "Screen /portfolio of the web app.",
+      "specIds": [
+        "UXN-001"
+      ],
+      "owner": "app",
+      "schedule": null,
+      "inputs": [],
+      "outputs": [],
+      "configKeys": [],
+      "tables": [],
+      "failure": "Shows the standard error state; nothing is written.",
+      "runbook": null,
+      "views": [
+        "platform"
+      ],
+      "source": "src/app/(app)/portfolio/page.tsx",
+      "attrs": {}
+    },
+    {
       "id": "page:/privacy",
       "type": "page",
       "name": "/privacy",
@@ -20724,6 +20746,16 @@
       "id": "service:app|contains|page:/picks/track-record",
       "from": "service:app",
       "to": "page:/picks/track-record",
+      "kind": "contains",
+      "contract": "Runs or holds this element.",
+      "views": [
+        "platform"
+      ]
+    },
+    {
+      "id": "service:app|contains|page:/portfolio",
+      "from": "service:app",
+      "to": "page:/portfolio",
       "kind": "contains",
       "contract": "Runs or holds this element.",
       "views": [

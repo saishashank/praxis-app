@@ -10,6 +10,8 @@ export default defineConfig([
     ".next/**",
     "out/**",
     "coverage/**",
+    // D-1854: Stryker's instrumented sandbox (gitignored; left behind when a local run stops early)
+    ".stryker-tmp/**",
     "worker/**",
     "spec/**",
     "docs/**",

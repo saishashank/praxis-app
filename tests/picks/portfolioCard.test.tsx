@@ -3,7 +3,7 @@
 // and percentages, no amounts or dates).
 import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { PortfolioCard } from "@/app/(app)/picks/PortfolioCard";
+import { PortfolioCard } from "@/app/(app)/portfolio/PortfolioCard";
 import type { MyPortfolio, MyPortfoliosView } from "@/lib/ui/loaders/pickPortfolio";
 
 afterEach(cleanup);

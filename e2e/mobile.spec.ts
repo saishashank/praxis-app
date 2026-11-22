@@ -21,7 +21,7 @@ for (const role of ROLE_LIST) {
   });
 }
 
-// AT-26: every allowed page shows the bottom bar with the six tabs, and forbidden pages also fit.
+// AT-26: every allowed page shows the bottom bar with the seven tabs, and forbidden pages also fit.
 for (const role of ROLE_LIST) {
   test(`${role}: bottom bar on every page, 403 page fits`, async ({ page, context }) => {
     test.setTimeout(180_000);
@@ -36,7 +36,7 @@ for (const role of ROLE_LIST) {
       if (allowed) {
         const bar = page.getByRole("navigation", { name: "Main (bottom bar)" });
         await expect(bar, entry.path).toBeVisible();
-        await expect(bar.getByRole("link"), entry.path).toHaveCount(6);
+        await expect(bar.getByRole("link"), entry.path).toHaveCount(7);
         await expect(page.getByRole("main"), entry.path).toHaveCount(1);
         await expect(page.getByRole("heading", { level: 1 }), entry.path).toHaveCount(1);
       }

@@ -24,12 +24,12 @@ import {
   tabsFor,
 } from "@/lib/ui/nav";
 
-const SIX = ["Home", "Picks", "Market", "Strategies", "News", "Reviews"];
+const SEVEN = ["Home", "Picks", "Portfolio", "Market", "Strategies", "News", "Reviews"];
 
 describe("tabs (UXN-270)", () => {
-  it("are the six final tabs in order, for every role", () => {
-    expect(TABS.map((t) => t.label)).toEqual(SIX);
-    for (const role of ROLES) expect(tabsFor(role).map((t) => t.label)).toEqual(SIX);
+  it("are the seven tabs in order (Portfolio right after Picks, D-1849), for every role", () => {
+    expect(TABS.map((t) => t.label)).toEqual(SEVEN);
+    for (const role of ROLES) expect(tabsFor(role).map((t) => t.label)).toEqual(SEVEN);
   });
   it("show nothing without a valid role", () => {
     expect(tabsFor(null)).toEqual([]);
@@ -138,7 +138,7 @@ describe("expert routes (M13-lite D-511)", () => {
     ]);
   });
   it("adds no tab", () => {
-    expect(TABS.map((t) => t.label)).toEqual(SIX);
+    expect(TABS.map((t) => t.label)).toEqual(SEVEN);
   });
 });
 

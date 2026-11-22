@@ -18,7 +18,8 @@ permissions: {}
 jobs:
   mutation:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # D-1854: the dry run takes minutes; every mutant then reruns only the unit tests that cover it.
+    timeout-minutes: 300
     permissions:
       contents: read
     concurrency:

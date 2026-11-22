@@ -1335,3 +1335,9 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1845 | E2E helpers open their local libSQL files with a 10 s busy timeout (e2e/localDb.ts). |
 | D-1846 | The release-PR fixtures check (GL-09) allows a skip only for a test named in SKIP_EXEMPT (scripts/ci/fixtures-skip-check.mjs). |
 | D-1847 | The nightly job publishes the picks before the learning stages. |
+| D-1848 | Batch 3's ledger stage grew from 30 to 74 minutes between 13 and 18 Nov because syncControls rebuilt, with a full loadDayInputs (about 570 codes), the contro... |
+| D-1849 | "My portfolio" moves off the Picks page to its own top-nav tab, and the Picks page gets one tab row (Owner 2026-11-19). |
+| D-1851 | The schedule-gate jobs of ingest-batch1.yml and watchdog.yml check out only scripts/time. |
+| D-1852 | The new Portfolio page failed the e2e readability check (UXN-030): whole page grade 8.9 > 8, because its only headings are "My portfolio" and the three one-w... |
+| D-1853 | arena-signals.yml gets an optional date input so the Owner can rerun a missed night (Owner yes, 2026-11-21). |
+| D-1854 | The weekly mutation.yml run failed every Saturday from 24 Oct 2026 with Stryker's "Initial test run timed out", after the 5-minute default dry-run limit, bef... |
