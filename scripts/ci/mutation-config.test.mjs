@@ -76,6 +76,36 @@ test("each mutated group has at least one listed test, and the database loaders 
   assert.ok(mutated.some((f) => f.startsWith("src/lib/stats/")));
 });
 
+// D-1855: vitest-runner 10.0.0 built each mutant's test-name filter with spaces; vitest 5 matches names
+// joined with " > ", so no test ran and every mutant survived (score 0 %). 10.1.1 is the first fix.
+const atLeast = (v, min) => {
+  const a = v.split(".").map(Number);
+  const b = min.split(".").map(Number);
+  for (let i = 0; i < 3; i += 1) if (a[i] !== b[i]) return a[i] > b[i];
+  return true;
+};
+
+test("the vitest runner joins test names the way vitest 5 matches them (D-1855)", () => {
+  const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
+  const lock = JSON.parse(readFileSync(path.join(root, "package-lock.json"), "utf8"));
+  const vitest = pkg.devDependencies.vitest;
+  for (const name of ["@stryker-mutator/core", "@stryker-mutator/vitest-runner"]) {
+    const v = pkg.devDependencies[name];
+    if (atLeast(vitest.replace(/^\D*/, ""), "5.0.0"))
+      assert.ok(atLeast(v, "10.1.1"), `${name} ${v} cannot filter tests under vitest ${vitest}`);
+    assert.equal(lock.packages[`node_modules/${name}`]?.version, v, `${name}: lockfile differs`);
+  }
+});
+
+test("vitest's github-actions reporter is off in the mutation run (D-1855: 1 MB summary limit)", () => {
+  const reporters = text.match(/^\s*reporters: (.*)$/gm) ?? [];
+  assert.deepEqual(
+    reporters.map((l) => l.trim()),
+    ['reporters: ["dot"],'],
+  );
+  assert.ok(config.concurrency >= 2 && config.concurrency <= 4);
+});
+
 test("the job has room for the run (D-1854)", () => {
   const wf = readFileSync(path.join(root, ".github/workflows/mutation.yml"), "utf8");
   const m = /timeout-minutes: (\d+)/.exec(wf);

@@ -1341,6 +1341,7 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1852 | The new Portfolio page failed the e2e readability check (UXN-030): whole page grade 8.9 > 8, because its only headings are "My portfolio" and the three one-w... |
 | D-1853 | arena-signals.yml gets an optional date input so the Owner can rerun a missed night (Owner yes, 2026-11-21). |
 | D-1854 | The weekly mutation.yml run failed every Saturday from 24 Oct 2026 with Stryker's "Initial test run timed out", after the 5-minute default dry-run limit, bef... |
+| D-1855 | With D-1854 the dry run passed on GitHub's Linux runner (907 tests in 4 min 36 s), but every mutant then ran 0 tests and "survived": score 0 % (0 killed, 11,... |
 | D-1856 | (Owner, Fri 20 Nov 2026: "Change the rule get picks"; replaces the 21 Nov choice to keep the night as it was.) A manual arena-signals.yml dispatch that names... |
 | D-1857 | (Owner, Sun 22 Nov 2026: "Fix it as we might have similar issues later".) The D-1856 dated rerun of Fri 20 Nov read the late bars (day inputs for 575 compani... |
 | D-1858 | (Owner, Mon 23 Nov 2026: three fixes after the first week of My portfolio and the dated rerun of Fri 20 Nov.) (1) A fresh start for My portfolio: the three p... |
