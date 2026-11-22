@@ -540,6 +540,8 @@ export async function signalsMain(
         market: market,
         d,
         replay,
+        // D-1856: only the Owner's dated rerun (checked by rerunRefusal above) reads late bars
+        rerun: argv.includes("--rerun"),
         strictCalendar: !replay, // D-711
         calendar,
         now: () => new Date(nowMs()).toISOString(),
