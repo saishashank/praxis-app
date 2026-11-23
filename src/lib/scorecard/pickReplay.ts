@@ -40,6 +40,7 @@ import { createCortexReplay, cortexTierFrom, type CortexReplay } from "@/lib/rep
 import { signalId } from "@/lib/replay/ledger";
 import type { SnapshotWorld } from "@/lib/replay/snapshotWorld";
 import type { FeatureNight } from "@/lib/cortex/learn/scorecard";
+import { trialId } from "@/lib/cortex/angles/trial";
 import type { ViewBar } from "@/lib/agents/decisionView";
 import {
   cortexDay,
@@ -377,6 +378,8 @@ export async function passportsAsOf(
 export function featureNightOf(
   out: {
     readonly features: ReadonlyMap<string, ReadonlyMap<string, unknown>>;
+    /** D-1860: the trial angles' values (code → angle id → value); stored under `trial:<id>` keys. */
+    readonly trial?: ReadonlyMap<string, ReadonlyMap<string, unknown>>;
     readonly activeSetHash: string;
     readonly manifest: { readonly manifestId: string };
   },
@@ -387,7 +390,12 @@ export function featureNightOf(
     d,
     rows: [...out.features.entries()].map(([code, m]) => ({
       code,
-      features: Object.fromEntries(m),
+      features: {
+        ...Object.fromEntries(m),
+        ...Object.fromEntries(
+          [...(out.trial?.get(code) ?? [])].map(([id, v]) => [trialId(id), v] as const),
+        ),
+      },
       activeSetHash: out.activeSetHash,
       manifestId: out.manifest.manifestId,
     })),

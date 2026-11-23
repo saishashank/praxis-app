@@ -5,7 +5,9 @@
 //   replay --mode light|full|null|injected|evidence|learning [--date YYYY-MM-DD] [--since YYYY-MM-DD]
 //          [--runs N] [--synthetic] [--budget-minutes N]
 //   replay --mode pick-scorecard [--sessions N] [--date YYYY-MM-DD]   (D-1068, O-84: a report only)
-//   replay --mode cortex-warm-start [--sessions N]   (D-1078: fills the learning Cortex's scorecard)
+//   replay --mode cortex-warm-start [--sessions N] [--trial]   (D-1078: fills the learning Cortex's scorecard)
+//   replay --mode cortex-trial-warm-start [--sessions N]   (D-1860: the same with --trial: back-scores the
+//          angles not yet proven as trial evidence and stores the computed feature nights)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN, DATA_REPO, DATA_REPO_TOKEN, COMMIT_SHA (optional)
 // Output: statuses, counts and minutes only (SEC-110). Never a row, a code, a URL, a token or a driver
@@ -26,6 +28,7 @@ import {
   WARM_SESSIONS_DEFAULT,
   WARM_SESSIONS_MAX,
   WARM_SESSIONS_MIN,
+  WARM_TRIAL_SESSIONS_DEFAULT,
   type FeatureNightSource,
   type WarmWorld,
 } from "@/lib/cortex/learn/warmStart";
@@ -58,6 +61,8 @@ function warmDiagText(skips: SkipReasons, t: CortexTally): string {
 export const SCORECARD_MODE = "pick-scorecard";
 /** D-1078: the learning Cortex's warm start: scorecard rows for past sessions; no replay_run row. */
 export const WARM_START_MODE = "cortex-warm-start";
+/** D-1860: the warm start with the trial angles (the workflow's way to pass `--trial`). */
+export const TRIAL_WARM_START_MODE = "cortex-trial-warm-start";
 const BATCH = 400; // threshold-ok: statements per DB batch
 
 const has = (v: unknown): v is string => typeof v === "string" && v.trim() !== "";
@@ -335,10 +340,12 @@ export async function replayMain(
   const nowMs = deps.nowMs ?? (() => Date.now());
   const mode = flagOf(argv, "--mode");
   if (mode === SCORECARD_MODE) return pickScorecardMain(argv, env, deps, out, nowMs);
-  if (mode === WARM_START_MODE) return warmStartMain(argv, env, deps, out, nowMs);
+  if (mode === WARM_START_MODE || mode === TRIAL_WARM_START_MODE) {
+    return warmStartMain(argv, env, deps, out, nowMs, mode === TRIAL_WARM_START_MODE);
+  }
   if (mode === null || !RUN_MODES.includes(mode as RunMode)) {
     out(
-      `replay: failed (usage: --mode ${[...RUN_MODES, SCORECARD_MODE, WARM_START_MODE].join("|")})`,
+      `replay: failed (usage: --mode ${[...RUN_MODES, SCORECARD_MODE, WARM_START_MODE, TRIAL_WARM_START_MODE].join("|")})`,
     );
     return 2;
   }
@@ -569,10 +576,13 @@ async function warmStartMain(
   deps: CliDeps,
   out: (line: string) => void,
   nowMs: () => number,
+  trialMode = false,
 ): Promise<number> {
+  const trial = trialMode || argv.includes("--trial"); // D-1860
   const date = marketDate(new Date(nowMs()), MARKET_TZ);
   const text = flagOf(argv, "--sessions");
-  const sessions = text === null ? WARM_SESSIONS_DEFAULT : Number(text);
+  const sessions =
+    text === null ? (trial ? WARM_TRIAL_SESSIONS_DEFAULT : WARM_SESSIONS_DEFAULT) : Number(text);
   if (
     !Number.isInteger(sessions) ||
     sessions < WARM_SESSIONS_MIN ||
@@ -594,7 +604,7 @@ async function warmStartMain(
   try {
     const calendar = await loadCalendar(db, MARKET);
     stage = "plan";
-    const plan = await planWarmStart(db, { market: MARKET, calendar, sessions });
+    const plan = await planWarmStart(db, { market: MARKET, calendar, sessions, trial });
     let source: FeatureNightSource | undefined;
     let warmWorld: WarmWorld | undefined;
     const tally = newCortexTally();
@@ -631,6 +641,7 @@ async function warmStartMain(
           market: MARKET,
           firstNight: plan.nights[0]!,
           tally,
+          ...(trial ? { trial: true } : {}),
         });
       }
     }
@@ -640,11 +651,15 @@ async function warmStartMain(
       calendar,
       sessions,
       now: new Date(nowMs()).toISOString(),
+      ...(trial ? { trial: true } : {}),
       ...(source === undefined ? {} : { source }),
       ...(warmWorld === undefined ? {} : { world: warmWorld }),
     });
+    const trialText = trial
+      ? ` trial=1 feature_nights_stored=${r.featureNightsStored} feature_nights_kept=${r.featureNightsKept}`
+      : "";
     out(
-      `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows} ${warmDiagText(r.skipReasons, tally)}`,
+      `replay cortex-warm-start: nights_written=${r.written} skipped_existing=${r.skippedExisting} skipped_no_data=${r.skippedNoData} first=${r.firstD ?? "none"} last=${r.lastD ?? "none"} rows=${r.rows} ${warmDiagText(r.skipReasons, tally)}${trialText}`,
     );
     return 0;
   } catch (e) {

@@ -13,6 +13,7 @@ import {
   type BatchExec,
   type Exec,
 } from "../store/common";
+import { TRIAL_PREFIX } from "../angles/trial";
 import type { AngleDayRow, FeatureNight, Horizon } from "./scorecard";
 import type { DuelDecisionRow, DuelOutcomeRow } from "./types";
 
@@ -86,7 +87,14 @@ const toAngleDay = (x: Record<string, unknown>): AngleDayRow => ({
   manifestId: str(x.manifest_id),
 });
 
-/** Scorecard rows of nights fromD..toD (inclusive), oldest first, by angle and horizon. */
+/**
+ * D-1860: the SQL that leaves trial rows (angle id `trial:<id>`) out of every learner read: the weekly
+ * re-weighting, the checkpoint, the probes and the leader all read through these two readers, so a trial
+ * score can never reach a weight, a map, a leader or a switch.
+ */
+const NOT_TRIAL = `angle_id NOT LIKE '${TRIAL_PREFIX}%'`;
+
+/** Scorecard rows of nights fromD..toD (inclusive), oldest first, by angle and horizon. Never trial rows. */
 export async function angleDaysSince(
   db: Exec,
   market: string,
@@ -94,7 +102,7 @@ export async function angleDaysSince(
   toD?: string,
 ): Promise<AngleDayRow[]> {
   const r = await db.execute({
-    sql: `SELECT * FROM cortex_angle_day WHERE market = ? AND d >= ? AND d <= ?
+    sql: `SELECT * FROM cortex_angle_day WHERE market = ? AND d >= ? AND d <= ? AND ${NOT_TRIAL}
           ORDER BY d, angle_id, horizon`,
     args: [market, fromD, upper(toD)],
   });
@@ -114,6 +122,7 @@ export async function angleDaysOfHorizon(
 ): Promise<AngleDayRow[]> {
   const r = await db.execute({
     sql: `SELECT * FROM cortex_angle_day WHERE market = ? AND d >= ? AND d <= ? AND horizon = ?
+            AND ${NOT_TRIAL}
           ORDER BY d, angle_id`,
     args: [market, fromD, upper(toD), horizon],
   });

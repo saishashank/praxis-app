@@ -32,14 +32,24 @@ import {
   regimeBefore,
   sessionsBack,
 } from "./stage";
-import { scorecardNight, type AngleDayRow, type FeatureNight, type Mover } from "./scorecard";
-import { WARM_EVENT_SEQ, WARM_PREFIX } from "./warmConst";
+import {
+  scorecardNight,
+  type AngleDayRow,
+  type FeatureNight,
+  type FeatureNightRow,
+  type Mover,
+} from "./scorecard";
+import { WARM_EVENT_SEQ, WARM_PREFIX, WARM_TRIAL_EVENT_SEQ } from "./warmConst";
 import { eventsSince, featureNights, insertAngleDays, logEvent } from "./store";
+import { insertFeatureRows, type FeatureRow } from "../store/features";
+import { isTrialId, TRIAL_PREFIX } from "../angles/trial";
 
 export const WARM_SESSIONS_DEFAULT = 60; // threshold-ok: the learner's window (learn_window_sessions default)
 export const WARM_SESSIONS_MIN = 1; // threshold-ok: at least one night
 export const WARM_SESSIONS_MAX = 120; // threshold-ok: learn_window_sessions maximum
-export { WARM_EVENT_SEQ, WARM_PREFIX };
+/** D-1860: a trial run covers four weeks (20 sessions) plus slack; its feature nights reach 21 sessions further back. */
+export const WARM_TRIAL_SESSIONS_DEFAULT = 25; // threshold-ok: four weeks of nights plus slack
+export { WARM_EVENT_SEQ, WARM_PREFIX, WARM_TRIAL_EVENT_SEQ };
 const CALENDAR_SPAN = 3; // threshold-ok: calendar days searched per session (weekends, holidays)
 const CACHE_NIGHTS = 25; // threshold-ok: feature nights kept (D-1 and D-21 of a window of nights)
 const CLOSE_CACHE = 3; // threshold-ok: closes of D, D-1 and one spare
@@ -78,6 +88,12 @@ export type WarmStartOpts = {
   readonly source?: FeatureNightSource;
   /** D-1084: reads the universe, closes and bars from here instead of the database. */
   readonly world?: WarmWorld;
+  /**
+   * D-1860: TRIAL run. Scores the angles not yet proven (`trial:` ids) and writes ONLY those rows, plus
+   * the computed feature nights into `cortex_feature_daily` (insert-or-ignore: a stored live night wins).
+   * Default sessions: WARM_TRIAL_SESSIONS_DEFAULT.
+   */
+  readonly trial?: boolean;
 };
 
 export type WarmStartResult = {
@@ -92,6 +108,10 @@ export type WarmStartResult = {
   readonly rows: number;
   /** D-1083: why nights were left out (their sum is `skippedNoData`). */
   readonly skipReasons: SkipReasons;
+  /** D-1860: feature nights newly stored in `cortex_feature_daily` by a trial run. */
+  readonly featureNightsStored: number;
+  /** D-1860: stored live nights that had no trial values and so could not be completed (append-only). */
+  readonly featureNightsKept: number;
 };
 
 /** The ways a planned night is skipped for want of data, in the order the run checks them. */
@@ -118,8 +138,53 @@ export type WarmStartPlan = {
 
 const str = (v: unknown): string => String(v);
 
-function checkSessions(n: number | undefined): number {
-  const v = n ?? WARM_SESSIONS_DEFAULT;
+/** D-1860: does any code of the night carry a trial value (a `trial:<id>` key)? */
+function hasTrialValues(night: FeatureNight): boolean {
+  return night.rows.some((r) => Object.keys(r.features).some(isTrialId));
+}
+
+/** D-1860: a stored (live) night with the replay's trial values added in memory; the stored rows win. */
+function withTrialValues(stored: FeatureNight, computed: FeatureNight): FeatureNight {
+  const by = new Map(computed.rows.map((r) => [r.code, r] as const));
+  const rows: FeatureNightRow[] = stored.rows.map((r) => {
+    const c = by.get(r.code);
+    if (c === undefined) return r;
+    const add = Object.entries(c.features).filter(([k]) => isTrialId(k));
+    return add.length === 0 ? r : { ...r, features: { ...r.features, ...Object.fromEntries(add) } };
+  });
+  return { d: stored.d, rows };
+}
+
+/** D-1860: a computed night as `cortex_feature_daily` rows (numbers and null; flags apart), marked as replayed. */
+function storedRowsOf(market: string, night: FeatureNight): FeatureRow[] {
+  return night.rows.map((r) => {
+    const features: Record<string, number | null> = {};
+    const flags: Record<string, string> = {};
+    for (const [id, v] of Object.entries(r.features).sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+      if (typeof v === "number") features[id] = Number.isFinite(v) ? v : null;
+      else if (v === undefined || v === null) features[id] = null;
+      else {
+        features[id] = null;
+        const o = v as { flag?: unknown; bucket?: unknown };
+        flags[id] = String(o.flag ?? o.bucket ?? "");
+      }
+    }
+    return {
+      market,
+      d: night.d,
+      code: r.code,
+      features,
+      flags,
+      activeSetHash: r.activeSetHash,
+      manifestId: r.manifestId.startsWith(WARM_PREFIX)
+        ? r.manifestId
+        : `${WARM_PREFIX}${r.manifestId}`,
+    };
+  });
+}
+
+function checkSessions(n: number | undefined, trial = false): number {
+  const v = n ?? (trial ? WARM_TRIAL_SESSIONS_DEFAULT : WARM_SESSIONS_DEFAULT);
   if (!Number.isInteger(v) || v < WARM_SESSIONS_MIN || v > WARM_SESSIONS_MAX) {
     throw new RangeError(`sessions must be ${WARM_SESSIONS_MIN}..${WARM_SESSIONS_MAX}`);
   }
@@ -145,13 +210,16 @@ async function candidateNights(
 /** Which nights still need rows and which feature nights they need that are not stored. Read only. */
 export async function planWarmStart(
   db: Pick<Client, "execute" | "batch">,
-  o: Pick<WarmStartOpts, "market" | "calendar" | "sessions">,
+  o: Pick<WarmStartOpts, "market" | "calendar" | "sessions" | "trial">,
 ): Promise<WarmStartPlan> {
-  const n = checkSessions(o.sessions);
+  const trial = o.trial === true;
+  const n = checkSessions(o.sessions, trial);
   const cands = await candidateNights(db, o, n);
   if (cands.length === 0) return { nights: [], skippedExisting: 0, missingFeatureNights: [] };
   const have = await db.execute({
-    sql: `SELECT DISTINCT d FROM cortex_angle_day WHERE market = ? AND d >= ? AND d <= ?`,
+    // D-1860: a regular run counts only proven rows, a trial run only trial rows (each skips what it has)
+    sql: `SELECT DISTINCT d FROM cortex_angle_day WHERE market = ? AND d >= ? AND d <= ?
+            AND angle_id ${trial ? "LIKE" : "NOT LIKE"} '${TRIAL_PREFIX}%'`,
     args: [o.market, cands[0]!, cands[cands.length - 1]!],
   });
   const existing = new Set(have.rows.map((x) => str(x.d)));
@@ -166,7 +234,11 @@ export async function planWarmStart(
   if (list.length > 0) {
     const res = await db.batch(
       list.map((d) => ({
-        sql: "SELECT 1 AS x FROM cortex_feature_daily WHERE market = ? AND d = ? LIMIT 1",
+        // a trial run needs the trial values in the stored night, not only a stored night
+        sql: trial
+          ? `SELECT 1 AS x FROM cortex_feature_daily WHERE market = ? AND d = ?
+              AND instr(features_json, '"${TRIAL_PREFIX}') > 0 LIMIT 1`
+          : "SELECT 1 AS x FROM cortex_feature_daily WHERE market = ? AND d = ? LIMIT 1",
         args: [o.market, d],
       })),
       "read",
@@ -194,8 +266,11 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     lastD: null,
     rows: 0,
     skipReasons: { universe: 0, moves: 0, features: 0, liquid: 0, card: 0 },
+    featureNightsStored: 0,
+    featureNightsKept: 0,
   };
   if (plan.nights.length === 0) return none;
+  const trial = o.trial === true;
   const { market, calendar } = o;
   const first = plan.nights[0]!;
   const last = plan.nights[plan.nights.length - 1]!;
@@ -249,6 +324,8 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
       : o.world.barsOf([...liquidUnion].sort(), barsFrom, last);
 
   // the feature nights: stored rows first, else the source; cached, at most CACHE_NIGHTS in memory
+  let featureStored = 0;
+  let featureKept = 0;
   const cache = new Map<string, FeatureNight | null>();
   const featureOf = async (d: string): Promise<FeatureNight | null> => {
     if (cache.has(d)) {
@@ -259,7 +336,22 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     }
     const stored = (await featureNights(db, market, [d])).get(d) ?? null;
     let night: FeatureNight | null = stored !== null && stored.rows.length > 0 ? stored : null;
-    if (night === null && o.source !== undefined) night = await o.source(d);
+    if (trial && (night === null || !hasTrialValues(night)) && o.source !== undefined) {
+      // D-1860: the night as the replay computes it; a stored live night wins and only gets the trial values in memory
+      const computed = await o.source(d);
+      if (computed !== null && computed.rows.length > 0) {
+        if (night === null) {
+          night = computed;
+          if (hasTrialValues(computed)) {
+            const res = await insertFeatureRows(db, storedRowsOf(market, computed));
+            if (res.inserted > 0) featureStored += 1;
+          }
+        } else {
+          night = withTrialValues(night, computed);
+          featureKept += 1;
+        }
+      }
+    } else if (night === null && o.source !== undefined) night = await o.source(d);
     if (night !== null && night.rows.length === 0) night = null;
     cache.set(d, night);
     if (cache.size > CACHE_NIGHTS) cache.delete(cache.keys().next().value as string);
@@ -394,7 +486,7 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
         .filter((e) => e.d >= from && e.d <= prev)
         .map((e) => e.evidence),
     );
-    const card = scorecardNight({
+    const scored = scorecardNight({
       market,
       d,
       featuresPrev,
@@ -407,7 +499,9 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
       resultsSeason: (fd) => inResultsWindow(fd, DEFAULT_MOVERS_PARAMS),
       prior60: reference,
     });
-    computedCards.push({ d, evidence: { hist: card.histograms } });
+    // D-1860: a regular run writes the proven angles only, a trial run the trial angles only
+    const card = { ...scored, rows: scored.rows.filter((r) => isTrialId(r.angleId) === trial) };
+    computedCards.push({ d, evidence: { hist: scored.histograms } });
     if (card.rows.length === 0) {
       skippedNoData += 1;
       skips.card += 1;
@@ -415,7 +509,9 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     }
     const marked: AngleDayRow[] = card.rows.map((r) => ({
       ...r,
-      manifestId: `${WARM_PREFIX}${r.manifestId}`,
+      manifestId: r.manifestId.includes(WARM_PREFIX)
+        ? r.manifestId
+        : `${WARM_PREFIX}${r.manifestId}`,
     }));
     const res = await insertAngleDays(db, marked);
     if (res.inserted > 0) {
@@ -432,8 +528,29 @@ export async function warmStart(db: Client, o: WarmStartOpts): Promise<WarmStart
     lastD: written[written.length - 1] ?? null,
     rows: rowsTotal,
     skipReasons: skips,
+    featureNightsStored: featureStored,
+    featureNightsKept: featureKept,
   };
-  if (out.lastD !== null) {
+  if (out.lastD !== null && trial) {
+    await logEvent(db, {
+      market,
+      d: out.lastD,
+      seq: WARM_TRIAL_EVENT_SEQ,
+      kind: "scorecard",
+      evidence: {
+        trialWarmStart: true,
+        nights: out.written,
+        rows: out.rows,
+        firstD: out.firstD,
+        lastD: out.lastD,
+        skippedExisting: out.skippedExisting,
+        skippedNoData: out.skippedNoData,
+        featureNightsStored: featureStored,
+      },
+      words: `Trial back-scoring: ${out.written} past sessions were scored with angles that are not yet proven, as of each evening. They are context only and change no weight.`,
+      createdAt: o.now,
+    });
+  } else if (out.lastD !== null) {
     await logEvent(db, {
       market,
       d: out.lastD,

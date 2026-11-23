@@ -7,6 +7,7 @@
 // of at most 19 rows, no OFFSET).
 import type { Top5Sets } from "@/lib/learning/dailyTop5";
 import type { BatchExec } from "../store/common";
+import { isTrialId } from "../angles/trial";
 import type { FeatureNight } from "./scorecard";
 import { angleName } from "./words";
 
@@ -29,7 +30,7 @@ export function top5Flags(night: FeatureNight | null, sets: Top5Sets | undefined
   const values = new Map<string, [string, number][]>();
   for (const r of night.rows) {
     for (const [id, v] of Object.entries(r.features ?? {})) {
-      if (typeof v !== "number" || !Number.isFinite(v)) continue;
+      if (typeof v !== "number" || !Number.isFinite(v) || isTrialId(id)) continue; // D-1860: trial is never a flag
       const list = values.get(id) ?? [];
       list.push([r.code, v]);
       values.set(id, list);

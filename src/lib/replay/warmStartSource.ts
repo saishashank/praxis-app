@@ -30,6 +30,8 @@ export async function snapshotFeatureSource(deps: {
   readonly firstNight?: string;
   /** D-1083: receives why feature nights came back empty (counts only). */
   readonly tally?: CortexTally;
+  /** D-1860: also compute the trial angles (passport measured / candidate) into each feature night. */
+  readonly trial?: boolean;
 }): Promise<FeatureNightSource> {
   const fromD =
     deps.firstNight === undefined
@@ -46,6 +48,7 @@ export async function snapshotFeatureSource(deps: {
         params: opened.live,
         passports,
         schemaSha: SCHEMA_SHA,
+        ...(deps.trial === true ? { trial: true } : {}),
         ...(fromD === undefined ? {} : { fromD }),
       });
       by.set(key, c);
