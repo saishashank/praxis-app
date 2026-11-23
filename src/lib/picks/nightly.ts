@@ -8,7 +8,7 @@ import type { Client } from "@libsql/client";
 import type { AgentParams } from "@/lib/agents/params";
 import type { CalendarRow } from "@/lib/data/calendar";
 import { isTradingDay } from "@/lib/data/calendar";
-import { generatePicks, type ExistingPick } from "./generate";
+import { generatePicks, type ExistingPick, type SkipTally } from "./generate";
 import { loadPickInputs } from "./inputs";
 import { countBlocks, noPicksSentence, type BlockCounts } from "./noPicks";
 import { writePicks } from "./store";
@@ -32,7 +32,12 @@ export type PicksNightResult = {
   readonly tracking: TrackSummary;
   readonly checks: CheckSummary;
   /** D-1856: on a dated rerun, the published picks kept and the strategy picks added after them. */
-  readonly appended?: { readonly kept: number; readonly added: number };
+  readonly appended?: {
+    readonly kept: number;
+    readonly added: number;
+    /** D-1858: per profile, why candidates did not become picks (fixed reason codes and counts). */
+    readonly skipped: SkipTally;
+  };
 };
 
 /** D-1856: the session's published picks per profile (rank, company, family), oldest rank first. */
@@ -105,15 +110,21 @@ export async function runPicksNight(
   });
   if (o.appendAfterPublished === true) {
     const existing = await loadPublished(db, o.market, o.d);
-    const picks = generatePicks(inputs, {
-      market: o.market,
-      d: o.d,
-      calendar: o.calendar,
-      picks: o.params.picks,
-      universe,
-      createdAt: o.now,
-      existing,
-    });
+    const skipped: SkipTally = {};
+    const picks = generatePicks(
+      inputs,
+      {
+        market: o.market,
+        d: o.d,
+        calendar: o.calendar,
+        picks: o.params.picks,
+        universe,
+        createdAt: o.now,
+        existing,
+      },
+      undefined,
+      skipped,
+    );
     const published = await writePicks(db, picks);
     return {
       published,
@@ -127,6 +138,7 @@ export async function runPicksNight(
       appended: {
         kept: [...existing.values()].reduce((n, l) => n + l.length, 0),
         added: published,
+        skipped,
       },
     };
   }

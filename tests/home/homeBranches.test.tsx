@@ -297,6 +297,7 @@ describe("Home content: My portfolio (D-950)", () => {
         seed: m(1_000_000_000),
         stockMaxPct: 30,
         strategyMaxPct: 40,
+        startD: "2026-11-23",
         portfolios: ["conservative", "balanced", "aggressive"].map((profile) => ({
           profile,
           started: profile === "balanced",

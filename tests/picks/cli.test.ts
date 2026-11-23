@@ -94,3 +94,16 @@ describe("picks entry", () => {
     expect(lines).toEqual(["arena-picks: failed (database not configured)"]);
   });
 });
+
+describe("D-1858 dated rerun log line", () => {
+  it("prints the kept and added picks and, per profile, why candidates did not become picks", async () => {
+    const { url, db } = await fileDb("full");
+    await reviewed(db);
+    const r = await cli(url, ["--date", D, "--phase", "picks", "--rerun"]);
+    expect(r.code).toBe(0);
+    // nothing to pick from on an empty file: the line still carries the (empty) reasons
+    expect(r.lines).toContain(`arena-picks AU ${D}: rerun_append kept=0 added=0 skipped=none`);
+    // codes, counts and profile words only, never a company code or a secret
+    expect(r.lines.join("\n")).not.toContain("secret-token-do-not-print");
+  });
+});

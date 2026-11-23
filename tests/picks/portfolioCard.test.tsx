@@ -53,6 +53,7 @@ const base: MyPortfoliosView = {
   seed: m("1000000000"),
   stockMaxPct: 30,
   strategyMaxPct: 40,
+  startD: "2030-03-04",
   portfolios: [one("conservative"), one("balanced"), one("aggressive", { holdingsMax: 3 })],
 };
 
@@ -62,6 +63,7 @@ describe("PortfolioCard (D-950)", () => {
     const card = screen.getByTestId("pick-portfolio");
     expect(card).toHaveTextContent("My portfolio");
     expect(card).toHaveTextContent("each started with A$1,000.00");
+    expect(card).toHaveTextContent("Started fresh on Mon 4 Mar 2030.");
     expect(card).toHaveTextContent("at most 40% each");
     expect(card).toHaveTextContent("at most 30% in one stock");
     for (const p of ["conservative", "balanced", "aggressive"]) {

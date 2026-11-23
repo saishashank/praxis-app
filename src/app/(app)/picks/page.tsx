@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth/guard";
 import { ownerToolsVisibleTo } from "@/lib/auth/ownerToolsGuard";
 import { envFor } from "@/lib/ui/loaders/shell";
 import {
+  ALL_PROFILES,
   historyFilterOf,
   loadPicks,
   parsePicksQuery,
@@ -47,9 +48,15 @@ export default async function PicksPage({ searchParams }: { searchParams: Promis
   const env = await envFor(user, undefined, sp.market);
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(sp)) if (typeof v === "string") q.set(k, v);
-  const query = await parsePicksQuery(env, q);
-  if (query === null) notFound();
   const view = pickViewOf(sp.view);
+  // D-1858: the History tab also lists every profile together (`profile=all`)
+  const allProfiles = view === "history" && sp.profile === ALL_PROFILES;
+  // the other views have no all-profiles list: they open on the default profile
+  if (!allProfiles && sp.profile === ALL_PROFILES) q.delete("profile");
+  const query = allProfiles
+    ? { profile: ALL_PROFILES, d: undefined }
+    : await parsePicksQuery(env, q);
+  if (query === null) notFound();
   if (view === "track") return await TrackView({ env, profile: query.profile });
   if (view === "history")
     return await HistoryView({
