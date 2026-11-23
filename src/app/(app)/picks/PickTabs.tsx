@@ -13,6 +13,7 @@ export function ProfileSwitch({
   hrefFor,
   rule,
   viewSelect = null,
+  allHref,
 }: {
   profiles: readonly string[];
   current: string;
@@ -21,19 +22,25 @@ export function ProfileSwitch({
   rule: string;
   /** The view dropdown; sits beside the profile tabs (wraps under them on a phone). */
   viewSelect?: ReactNode;
+  /** D-1858: link of the "All profiles" choice (the History tab); omitted elsewhere. */
+  allHref?: string;
 }) {
+  const items = profiles.map((p) => ({ value: p, label: profileLabel(p), href: hrefFor(p) }));
+  if (allHref !== undefined) items.push({ value: "all", label: "All profiles", href: allHref });
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <div className="flex min-w-0 flex-wrap items-center gap-3">
-        <Segmented
-          label="Risk profile"
-          value={current}
-          items={profiles.map((p) => ({ value: p, label: profileLabel(p), href: hrefFor(p) }))}
-        />
+        <Segmented label="Risk profile" value={current} items={items} />
         {viewSelect}
       </div>
       <p className="m-0 text-sm text-text-muted">
-        <ProfileLabel profile={current} />: {rule}
+        {allHref !== undefined && current === "all" ? (
+          <>All profiles: every pick published for the three risk profiles, newest first.</>
+        ) : (
+          <>
+            <ProfileLabel profile={current} />: {rule}
+          </>
+        )}
       </p>
     </div>
   );

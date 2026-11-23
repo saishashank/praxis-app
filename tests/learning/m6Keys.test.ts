@@ -89,6 +89,7 @@ const EXPLICIT: readonly ConfigKey[] = [
   "pick_profiles",
   "profile_portfolio_amount",
   "my_portfolio_profiles",
+  "my_portfolio_start_d",
   "cif_horizons_sessions",
   "progress_nav_edges_ppm",
   "progress_sessions_edges",
@@ -281,6 +282,29 @@ describe("M6 keys: explicit keys", () => {
     }
   });
 
+  it("my_portfolio_start_d (D-1858): a real date, default the Owner's reset of Mon 23 Nov 2026", async () => {
+    const k = CONFIG_KEYS.my_portfolio_start_d;
+    expect(k.default).toBe("2026-11-23");
+    expect(k.editable).toBe("O");
+    expect(k.unit).toBe("date");
+    expect(CONFIG_META.my_portfolio_start_d.bounds).toBe("a date written YYYY-MM-DD");
+    expect(await check("my_portfolio_start_d", "2026-11-23")).toBeNull();
+    expect(await check("my_portfolio_start_d", "2028-02-29")).toBeNull();
+    for (const bad of [
+      "junk",
+      "",
+      "2026-13-01",
+      "2026-02-30",
+      "2027-02-29",
+      "23/11/2026",
+      "2026-11-23T00:00",
+      20261123,
+      null,
+    ]) {
+      expect(await check("my_portfolio_start_d", bad), String(bad)).not.toBeNull();
+    }
+  });
+
   it("the three D-091 lists are fixed with the reviewed values", async () => {
     expect(CONFIG_KEYS.cif_horizons_sessions.default).toEqual([63, 126, 252]);
     expect(CONFIG_KEYS.progress_nav_edges_ppm.default).toEqual([
@@ -299,11 +323,11 @@ describe("M6 keys: explicit keys", () => {
 });
 
 describe("M6 keys: registry hygiene", () => {
-  it("M6_KEY_NAMES lists 16 ranged + 29 fixed + 10 explicit keys, all registered, none repeated", () => {
+  it("M6_KEY_NAMES lists 16 ranged + 29 fixed + 11 explicit keys, all registered, none repeated", () => {
     // + 1: my_portfolio_cost_max_pct, a ranged number key tested on its own
     expect(M6_KEY_NAMES).toHaveLength(RANGED.length + 1 + FIXED.length + EXPLICIT.length);
-    expect(M6_KEY_NAMES).toHaveLength(55);
-    expect(new Set(M6_KEY_NAMES).size).toBe(55);
+    expect(M6_KEY_NAMES).toHaveLength(56);
+    expect(new Set(M6_KEY_NAMES).size).toBe(56);
     expect(M6_KEY_NAMES).toContain("my_portfolio_cost_max_pct");
     expect(M6_KEY_NAMES).not.toContain("picks_portfolio_seed_aud");
     for (const k of M6_KEY_NAMES) expect(CONFIG_KEYS[k], k).toBeDefined();

@@ -20,6 +20,7 @@ import { cortexLearnNight } from "@/lib/cortex/learn/stage";
 import { runDailyLearning, type DailyLearningResult } from "@/lib/learning/daily";
 import { candidateTally } from "./candidates";
 import { pickHooks } from "./dailyHooks";
+import { formatSkips } from "./generate";
 import { runPicksNight } from "./nightly";
 import { recordPicksNight } from "./noPicks";
 import { runPickPortfolio } from "./portfolioStore";
@@ -98,7 +99,8 @@ export async function picksMain(
     });
     if (p.appended !== undefined) {
       out(
-        `arena-picks ${market} ${d}: rerun_append kept=${p.appended.kept} added=${p.appended.added}`,
+        `arena-picks ${market} ${d}: rerun_append kept=${p.appended.kept} added=${p.appended.added}` +
+          ` skipped=${formatSkips(p.appended.skipped)}`,
       );
     }
     const t = p.tracking;

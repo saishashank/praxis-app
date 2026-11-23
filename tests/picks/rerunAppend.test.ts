@@ -102,14 +102,20 @@ describe("D-1856 dated rerun of a published session", () => {
     // published pick counts)
     const added = after.slice(pick.length).map((p) => ({ rank: p.rank, code: p.code }));
     expect(added).toEqual([{ rank: 2, code: "ZZB1" }]);
-    expect(res.appended).toEqual({ kept: 1, added: 1 });
+    expect(res.appended).toMatchObject({ kept: 1, added: 1 });
+    // D-1858: the reasons per profile; ZZD3 is the third F1 pick of the aggressive profile
+    expect(res.appended?.skipped.aggressive).toEqual({ held: 1, family_cap: 1 });
+    expect(res.appended?.skipped.balanced).toEqual({ tier: 3 });
+    expect(res.appended?.skipped.conservative).toEqual({ tier: 3 });
     expect(res.shortlist).toBe(0);
   });
 
   it("is idempotent: the same rerun again writes nothing", async () => {
     const before = await rows("SELECT * FROM pick ORDER BY profile, rank");
     const res = await night(true);
-    expect(res.appended).toEqual({ kept: 2, added: 0 });
+    expect(res.appended).toMatchObject({ kept: 2, added: 0 });
+    // the 2 published companies are held; ZZD3 stays out by the family cap
+    expect(res.appended?.skipped.aggressive).toEqual({ held: 2, family_cap: 1 });
     expect(await rows("SELECT * FROM pick ORDER BY profile, rank")).toEqual(before);
   });
 });

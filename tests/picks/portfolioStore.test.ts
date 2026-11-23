@@ -5,8 +5,10 @@
 // cash) and a candidate-measure pick (never in the portfolio). A re-run writes the same rows; a
 // masked viewer sees letters and percentages only; the review gets one line per valued profile.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { cleanupTempDbs } from "../db/helpers";
+import { cleanupTempDbs, freshDb } from "../db/helpers";
 import { findLeaks } from "@/lib/view/mask";
+import { setConfig } from "@/lib/config/store";
+import { loadPortfolioSettings } from "@/lib/picks/portfolioConfig";
 import { runPickPortfolio } from "@/lib/picks/portfolioStore";
 import { loadMyPortfolios } from "@/lib/ui/loaders/pickPortfolio";
 import { readMyPortfolios, type Ctx } from "@/lib/review/sections";
@@ -15,7 +17,20 @@ import { CODES, D, envOf, fullWorld, NAMES, SHA, type World } from "../loaders/w
 afterAll(cleanupTempDbs);
 
 let w: World;
-const addPick = async (profile: string, rank: number, code: string, ruleVersion: string) => {
+const setStart = (value: string) =>
+  setConfig(w.main, {
+    key: "my_portfolio_start_d",
+    value,
+    userId: null,
+    now: "2026-10-19T00:00:00.000Z",
+  });
+const addPick = async (
+  profile: string,
+  rank: number,
+  code: string,
+  ruleVersion: string,
+  day: string = D,
+) => {
   await w.main.execute({
     sql: `INSERT INTO pick (market, d, profile, rank, code, family, tier, rule_version, signal_id, label,
             reference_micro, buy_max_micro, valid_until_d, stop_micro, aim_micro, n_similar, bad_ppm,
@@ -23,22 +38,24 @@ const addPick = async (profile: string, rank: number, code: string, ruleVersion:
             pick_sha, created_at)
           VALUES ('AU', ?, ?, ?, ?, 'F1', 'U1', ?, 's1', 'UNVALIDATED', 10000000, 10050000,
             '2026-10-23', 9200000, 11000000, 50, -60000, 20000, 110000, 4, 1000000000, 100000000, '[]', '[]', ?, ?)`,
-    args: [D, profile, rank, code, ruleVersion, SHA, `${D}T07:00:00.000Z`],
+    args: [day, profile, rank, code, ruleVersion, SHA, `${day}T07:00:00.000Z`],
   });
   await w.main.execute({
     sql: `INSERT INTO pick_outcome (market, d, profile, rank, kind, code, published_sha, state, updated_d)
           VALUES ('AU', ?, ?, ?, 'pick', ?, ?, 'waiting', ?)`,
-    args: [D, profile, rank, code, SHA, D],
+    args: [day, profile, rank, code, SHA, day],
   });
   await w.main.execute({
     sql: `UPDATE pick_outcome SET state = 'bought', entry_d = ?, entry_micro = 10000000, updated_d = ?
           WHERE market = 'AU' AND d = ? AND profile = ? AND rank = ? AND kind = 'pick'`,
-    args: [D, D, D, profile, rank],
+    args: [day, day, day, profile, rank],
   });
 };
 
 beforeAll(async () => {
   w = await fullWorld();
+  // D-1858: the world's picks are older than the default start of My portfolio
+  await setStart("2026-01-01");
   await addPick("conservative", 1, "ZZUP", "F1.v1");
   await addPick("balanced", 3, "ZZDN", "CAND.v1");
 });
@@ -150,5 +167,59 @@ describe("runPickPortfolio (D-950)", () => {
       "Balanced: A$1,011.50, +A$11.50 (+1.1%) since the start; no fall from a peak yet; 1 holding; split Follow the trend 40%, cash 60%; today 1 buy.",
     ]);
     expect(await readMyPortfolios({ ...ctx, d: "2026-10-20" } as Ctx)).toBeNull();
+  });
+});
+
+describe("D-1858 fresh start of My portfolio (my_portfolio_start_d)", () => {
+  const days = async (profile: string) =>
+    (
+      await w.main.execute({
+        sql: "SELECT d, cash_micro, value_micro FROM pick_portfolio_day WHERE profile = ? ORDER BY d",
+        args: [profile],
+      })
+    ).rows.map((r) => ({ ...r }));
+
+  it("the setting reads as a date and falls back to the reset day when unset or junk", async () => {
+    expect((await loadPortfolioSettings(w.main)).startD).toBe("2026-01-01");
+    const db = await freshDb("main");
+    expect((await loadPortfolioSettings(db)).startD).toBe("2026-11-23");
+    await db.execute(
+      "INSERT INTO config_version (key, scope, value_json, changed_at) VALUES ('my_portfolio_start_d', 'global', '\"junk\"', 't')",
+    );
+    expect((await loadPortfolioSettings(db)).startD).toBe("2026-11-23");
+  });
+
+  it("picks before the start day are left out: no trade, no day, cash stays at the seed", async () => {
+    // an older aggressive pick of the same stock, published three sessions before the world's picks
+    await addPick("aggressive", 1, "ZZUP", "F1.v1", "2026-10-14");
+    await setStart("2026-01-01");
+    await runPickPortfolio(w.main, { market: "AU", d: D });
+    const early = await days("aggressive");
+    expect(early.length).toBeGreaterThan(0);
+    expect(String(early[0]!.d) >= "2026-10-14").toBe(true);
+    // the start moves to the world's pick day: the older pick and its days are gone
+    await setStart(D);
+    const r = await runPickPortfolio(w.main, { market: "AU", d: D });
+    expect(r.aggressive).toEqual({ trades: 0, open: 0, days: 0, splits: 0, skipped: 0 });
+    expect(await days("aggressive")).toEqual([]);
+    const tradeDays = (await w.main.execute("SELECT MIN(pub_d) AS first FROM pick_portfolio_trade"))
+      .rows[0]!;
+    expect(String(tradeDays.first) >= D).toBe(true);
+    // the balanced portfolio (picked on the start day itself) is kept, from the seed
+    const bal = await days("balanced");
+    expect(bal.length).toBe(1);
+    expect(bal.every((x) => String(x.d) >= D)).toBe(true);
+  });
+
+  it("a start day after every pick leaves the three portfolios empty and unstarted", async () => {
+    await setStart("2026-10-20");
+    const r = await runPickPortfolio(w.main, { market: "AU", d: D });
+    for (const p of ["conservative", "balanced", "aggressive"] as const) {
+      expect(r[p]).toEqual({ trades: 0, open: 0, days: 0, splits: 0, skipped: 0 });
+    }
+    expect(await all("pick_portfolio_day")).toEqual([]);
+    const v = await loadMyPortfolios(envOf(w, "owner"));
+    expect(v.startD).toBe("2026-10-20");
+    expect(v.portfolios.every((p) => !p.started)).toBe(true);
   });
 });

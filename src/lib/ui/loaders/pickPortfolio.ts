@@ -72,6 +72,8 @@ export type MyPortfoliosView = {
   /** Most of a portfolio in one stock and per strategy, percent (config). */
   stockMaxPct: number;
   strategyMaxPct: number;
+  /** D-1858: the day the portfolios started fresh (YYYY-MM-DD). */
+  startD: string;
   portfolios: MyPortfolio[];
 };
 
@@ -280,6 +282,7 @@ export async function loadMyPortfolios(env: LoaderEnv): Promise<MyPortfoliosView
     seed: masked ? null : money(seed, env.currency),
     stockMaxPct: settings.stockMaxPct,
     strategyMaxPct: settings.strategyMaxPct,
+    startD: settings.startD,
     portfolios,
   };
 }

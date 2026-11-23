@@ -2,8 +2,9 @@
 // the tracked buys and the finished results, the bars, the strategy signals and the strategies'
 // closing signals of those stocks in a few batched queries (codes in chunks of 200, bounded by the
 // window, never OFFSET, D-903), run `simulatePortfolio` per profile and replace the stored rows of the
-// market in one batch. A re-run gives the same rows. Runs after the picks step; a failure is reported
-// and never stops the picks.
+// market in one batch. A re-run gives the same rows. D-1858: only picks published on or after the
+// configured start day (`my_portfolio_start_d`) are replayed, so the series and the cash start fresh.
+// Runs after the picks step; a failure is reported and never stops the picks.
 import type { Client, InStatement } from "@libsql/client";
 import { getCostProfile } from "@/lib/arena/costs";
 import { loadConfirmedActions } from "@/lib/arena/corpActionWriter";
@@ -60,9 +61,9 @@ export async function runPickPortfolio(
                  o.entry_d, o.entry_micro, o.state, o.exit_d, o.net_ppm
           FROM pick p LEFT JOIN pick_outcome o ON o.market = p.market AND o.d = p.d
             AND o.profile = p.profile AND o.rank = p.rank AND o.kind = 'pick'
-          WHERE p.market = ? AND p.profile IN (${marks}) AND p.d <= ?
+          WHERE p.market = ? AND p.profile IN (${marks}) AND p.d >= ? AND p.d <= ?
           ORDER BY p.profile, p.d, p.rank`,
-    args: [o.market, ...MY_PROFILES, o.d],
+    args: [o.market, ...MY_PROFILES, settings.startD, o.d],
   });
   const picks: PickRow[] = [];
   const finished = new Map<MyProfileName, FinishedPick[]>();

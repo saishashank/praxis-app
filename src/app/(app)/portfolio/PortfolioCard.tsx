@@ -169,6 +169,7 @@ export function PortfolioCard({
           </>
         ) : null}
         . Each buys from every strategy&apos;s picks and shares its money by their records.
+        {v.masked ? null : <> Started fresh on {formatDay(v.startD)}.</>}
       </p>
       <details className="mt-1 text-text-muted">
         <summary className="cursor-pointer font-medium">How they trade</summary>

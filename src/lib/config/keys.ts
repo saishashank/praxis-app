@@ -797,6 +797,19 @@ export function injectionPhrasesOf(v: unknown): readonly string[] {
   return DEFAULT_INJECTION_PHRASES;
 }
 
+/** D-1858: the day My portfolio starts fresh (Mon 23 Nov 2026, the Owner's reset). */
+export const MY_PORTFOLIO_START_DEFAULT = "2026-11-23";
+
+/** A real calendar date written YYYY-MM-DD. */
+async function validateIsoDate(v: unknown): Promise<string | null> {
+  const bad = "must be a date written YYYY-MM-DD";
+  if (typeof v !== "string") return bad;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (!m) return bad;
+  const t = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+  return t.toISOString().slice(0, 10) === v ? null : bad;
+}
+
 const M6_EXPLICIT_KEYS = {
   // ch.15 l.170: selected by the LLM-040 bake-off; none until one passes (M6 decision 9, D-110).
   llm_classifier_model: {
@@ -857,6 +870,13 @@ const M6_EXPLICIT_KEYS = {
     editable: "O",
     ref: "D-956 (Owner 2026-11-11: the profiles differ in holdings, risk, tilt, cash and turnover)",
     validate: async (v: unknown) => validateMyPortfolioProfiles(v),
+  },
+  my_portfolio_start_d: {
+    default: MY_PORTFOLIO_START_DEFAULT,
+    unit: "date",
+    editable: "O",
+    ref: "D-1858 (Owner 2026-11-23: a fresh start, the picks before this date are left out of My portfolio)",
+    validate: async (v: unknown) => validateIsoDate(v),
   },
   cif_horizons_sessions: {
     default: [...CIF_HORIZONS_DEFAULT],
@@ -923,6 +943,12 @@ const M6_EXPLICIT_META: Record<keyof typeof M6_EXPLICIT_KEYS, ConfigMeta> = {
     area: LRN,
     bounds: MY_PORTFOLIO_BOUNDS_TEXT,
     input: "object",
+  },
+  my_portfolio_start_d: {
+    label: "My portfolio: first day (earlier picks are left out)",
+    area: LRN,
+    bounds: "a date written YYYY-MM-DD",
+    input: "text",
   },
   cif_horizons_sessions: { label: "CIF horizons", area: VAL, bounds: "fixed", input: "list" },
   progress_nav_edges_ppm: {

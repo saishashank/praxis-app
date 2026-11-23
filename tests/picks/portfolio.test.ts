@@ -457,6 +457,7 @@ describe("evidence and profiles (D-951, D-956)", () => {
       costMaxPct: 1.5,
       minParcelAud: 100,
       costProfile: "P6",
+      startD: "2026-11-23",
       profiles: MY_PORTFOLIO_PROFILES_DEFAULT,
     };
     const of = (name: "conservative" | "balanced" | "aggressive") =>
