@@ -151,6 +151,7 @@ export function reviewFacts(over: Partial<ReviewFacts> = {}): ReviewFacts {
           setupBefore: ["near a 1-year high"],
           caughtBy: null,
           nearMiss: "Follow the trend (price was 2% under its high)",
+          nearMissKind: "close",
         },
         {
           code: "TST12",

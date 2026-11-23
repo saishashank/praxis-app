@@ -289,7 +289,17 @@ export function shortlistInputs(codes: readonly ShortlistCode[], o: ShortlistOpt
   });
 }
 
-export type ShortlistNote = { readonly note: string; readonly onShortlist: boolean };
+/**
+ * D-1859: `close` = a genuine close call (every rule condition was met and it only ranked below the daily
+ * cut); `excluded` = left out outright (no data, outside the universe, a rule condition failed, no stop).
+ * Only set when the share is not on the shortlist.
+ */
+export type ShortlistNoteKind = "close" | "excluded";
+export type ShortlistNote = {
+  readonly note: string;
+  readonly onShortlist: boolean;
+  readonly kind?: ShortlistNoteKind;
+};
 
 const PCT = 100; // threshold-ok: percent
 const pctOf = (x: number): string => `${String(Math.round(x * PCT))}%`;
@@ -323,6 +333,7 @@ export function shortlistNotes(
       out.set(code, {
         note: "no price bar the evening before, so the shortlist rule could not run",
         onShortlist: false,
+        kind: "excluded",
       });
       continue;
     }
@@ -330,6 +341,7 @@ export function shortlistNotes(
       out.set(code, {
         note: "outside the shortlist: a small share, below the large and mid-size universe",
         onShortlist: false,
+        kind: "excluded",
       });
       continue;
     }
@@ -339,6 +351,7 @@ export function shortlistNotes(
       out.set(code, {
         note: "missed the shortlist: not enough price history for the rule",
         onShortlist: false,
+        kind: "excluded",
       });
       continue;
     }
@@ -363,6 +376,7 @@ export function shortlistNotes(
       out.set(code, {
         note: `missed the shortlist: ${miss.slice(0, 2).join("; ")}`,
         onShortlist: false,
+        kind: "excluded",
       }); // threshold-ok: the two main misses
       continue;
     }
@@ -376,6 +390,7 @@ export function shortlistNotes(
             ? `met every shortlist condition but ranked ${pos + 1} (only the top ${TAKE_PER_DAY} are listed)`
             : "met the shortlist conditions but no stop could be set",
         onShortlist: false,
+        kind: pos >= 0 ? "close" : "excluded",
       });
   }
   return out;

@@ -181,9 +181,13 @@ describe("Evening Review variants", () => {
     expect(text).toMatch(/Strategy 1[^\n]*\+A\$123\.45/);
   });
 
-  it("the profit / loss table has strategy, value, today and since start only", () => {
-    const { html } = CASES["review-full"]!.out;
+  it("the profit / loss table keeps since start only; value and today live in the headline (D-1859)", () => {
+    const { html, text } = CASES["review-full"]!.out;
     expect(html).toContain(">Since start<");
+    const s3 = text.slice(text.indexOf("3. Profit / loss"), text.indexOf("4. "));
+    expect(s3).toContain("Since start");
+    expect(s3).not.toContain("Value now");
+    expect(s3).not.toContain("Today");
     expect(html).not.toContain(">To target<");
     expect(html).not.toContain(">Execution<");
     expect(html).not.toMatch(/realised|unrealised|sleeve/);
@@ -303,7 +307,45 @@ describe("Evening Review variants", () => {
     expect(text).toContain("Rose after a results announcement before the open.");
     expect(text).toContain("Near miss: Follow the trend");
     expect(text).toContain("Not caught");
+    expect(text).not.toContain("Missed: Follow the trend");
     expect(text).not.toContain("?");
+  });
+
+  it("movers read Caught by / Near miss / Missed / Not caught (D-1859)", () => {
+    const base = fx.REVIEW_FULL.learning!.movers[0]!;
+    const mk = (over: Record<string, unknown>) => ({
+      ...base,
+      caughtBy: null,
+      nearMiss: null,
+      nearMissKind: undefined, // the fixture's first mover is a close call; each case sets its own
+      ...over,
+    });
+    const movers = [
+      mk({ code: "TST31", caughtBy: "Picked (Balanced #2)" }),
+      mk({
+        code: "TST32",
+        nearMiss: "met every shortlist condition but ranked 4",
+        nearMissKind: "close",
+      }),
+      mk({
+        code: "TST33",
+        nearMiss: "outside the shortlist: a small share, below the large and mid-size universe",
+        nearMissKind: "excluded",
+      }),
+      mk({ code: "TST34", nearMiss: "an older stored note" }),
+      mk({ code: "TST35" }),
+    ];
+    const { text } = renderReview({
+      ...fx.REVIEW_FULL,
+      learning: { ...fx.REVIEW_FULL.learning!, movers },
+    });
+    expect(text).toContain("Caught by Picked (Balanced #2)");
+    expect(text).toContain("Near miss: met every shortlist condition but ranked 4");
+    expect(text).toContain("Missed: outside the shortlist: a small share");
+    expect(text).toContain("Missed: an older stored note");
+    expect(text).not.toContain("Near miss: outside");
+    expect(text).not.toContain("Near miss: an older");
+    expect(text).toContain("Not caught");
   });
 
   it("the movers fall back to the descriptive check only when the learning is missing", () => {

@@ -450,17 +450,12 @@ function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
     : [];
   if (ex.length === 0)
     return [...out, { t: "p", text: "No strategies.", tone: "muted" }, ...portfolio];
-  const carried = f.variant === "nonTrading";
+  // D-1859: the headline already shows value now and today's result; this section keeps since start.
   out.push({
     t: "table",
-    head: ["Strategy", "Value now", "Today", "Since start"],
+    head: ["Strategy", "Since start"],
     rows: ex.map((e) => [
       { text: nameOf(e), href: joinUrl(f.appUrl, e.path) },
-      aud(e.navCents),
-      {
-        text: carried ? "-" : audWithPct(e.dayPlCents, e.dayPlPpm),
-        tone: carried ? undefined : tone(e.dayPlCents),
-      },
       e.sinceStartCents === undefined
         ? "-"
         : {
@@ -468,7 +463,7 @@ function section3(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
             tone: tone(e.sinceStartCents),
           },
     ]),
-    right: [1, 2, 3],
+    right: [1],
   });
   out.push(...portfolio);
   return out;
@@ -546,7 +541,8 @@ function section5(f: ReviewFacts, missing: Set<number>, n: number): Block[] {
 
 function moverCaught(m: DailyLearning["movers"][number]): string {
   if (m.caughtBy) return `Caught by ${m.caughtBy}`;
-  if (m.nearMiss) return `Near miss: ${m.nearMiss}`;
+  // D-1859: only a genuine close call is a near miss; old stored rows (no kind) read as plainly missed.
+  if (m.nearMiss) return `${m.nearMissKind === "close" ? "Near miss" : "Missed"}: ${m.nearMiss}`;
   return "Not caught";
 }
 
