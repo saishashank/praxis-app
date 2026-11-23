@@ -16,6 +16,7 @@ import { inResultsWindow } from "../gates/resultsSeason";
 import type { BatchExec } from "../store/common";
 import { HIST_BINS, moverCoverage, scorecardNight, type Histogram } from "./scorecard";
 import { eventsSince, featureNights, insertAngleDays, logEvent } from "./store";
+import { isTrialId } from "../angles/trial";
 import { eventWords, NO_WEIGHT_CHANGED, scorecardWords, type CortexLearnSection } from "./words";
 import type { LearnConfig } from "./config";
 import { loadLearnConfig } from "./configStore";
@@ -97,6 +98,15 @@ export function priorReference(evidence: readonly unknown[]): Map<string, Histog
   return out.size === 0 ? null : out;
 }
 
+/** D-1860: has the Cortex any angle passport for the market at all (one row read)? */
+export async function hasPassports(db: BatchExec, market: string): Promise<boolean> {
+  const r = await db.execute({
+    sql: "SELECT 1 AS x FROM angle_passport WHERE market = ? LIMIT 1",
+    args: [market],
+  });
+  return r.rows.length > 0;
+}
+
 /** The night's scorecard: reads, pure core, insert-or-ignore, the review section. Null off-session. */
 export async function cortexLearnNight(
   db: BatchExec,
@@ -138,9 +148,14 @@ export async function cortexLearnNight(
     prior60: reference,
   });
   const coverage = moverCoverage(featuresPrev, movers);
+  // D-1860: trial rows (angles not yet proven) are worded apart and never counted as proven
+  const proven = card.rows.filter((r) => !isTrialId(r.angleId));
+  const trialRows = card.rows.filter((r) => isTrialId(r.angleId));
   const scored = scorecardWords({
     d: o.d,
-    rows: card.rows,
+    rows: proven,
+    trialRows,
+    historyLoaded: coverage !== null || (await hasPassports(db, o.market)),
     coverage,
     now: new Date(`${o.d}T00:00:00.000Z`),
   });
@@ -187,7 +202,7 @@ export async function cortexLearnNight(
       regimeBack20: regimes.get(back20) ?? "unknown",
       bars,
       priorEvents: prior,
-      abstainTonight: card.rows.length === 0,
+      abstainTonight: proven.length === 0,
       now: o.now,
       ...(o.cutoffHhmm === undefined ? {} : { cutoffHhmm: o.cutoffHhmm }),
       ...(o.config === undefined ? {} : { config: o.config }),

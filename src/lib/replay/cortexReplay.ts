@@ -82,6 +82,11 @@ export type CortexReplayConfig = {
    * last CORTEX_TIER_DEFAULT_SESSIONS sessions. Nights before it have no tiers and abstain.
    */
   readonly fromD?: string;
+  /**
+   * D-1860: also compute the trial angles (passport measured / candidate) for the scorecard only; they
+   * come back in `NightOutput.trial` and change nothing else. Absent = the nights' bytes are unchanged.
+   */
+  readonly trial?: boolean;
 };
 
 /** The replay producer of the `AsOfWorld` (design 3a): one builder, the snapshot as the source. */
@@ -188,6 +193,7 @@ export function createCortexReplay(cfg: CortexReplayConfig): CortexReplay {
         rules: cfg.rules ?? new Map(),
         states: cfg.states?.(d) ?? [],
         passports: cfg.passports ?? new Map(),
+        ...(cfg.trial === true ? { trial: true } : {}),
         // M20 A2: the market's own angle set (no franking angle without imputation, CXA-002 i), as the live night does
         angles:
           cfg.angles === undefined

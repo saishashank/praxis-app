@@ -13,6 +13,7 @@
 // Also the mover coverage: how many of the night's biggest gainers and losers sat in the Cortex's top
 // tenth the evening before (equal-cluster score over the stored features, as the fixed Cortex scores).
 import { angleById } from "../angles/registry";
+import { baseIdOf, isTrialId, TRIAL_MANIFEST_PREFIX, TRIAL_PREFIX } from "../angles/trial";
 import { mean } from "@/lib/stats/bootstrap";
 import { RANK_IC_MIN_CODES, spearman } from "@/lib/stats/rankIc";
 
@@ -105,6 +106,8 @@ export type MoverCoverage = {
   readonly newsInTop: number;
   /** Shares the Cortex could score the evening before. */
   readonly scored: number;
+  /** D-1860: true when no proven angle had scores and the figures come from trial angles. */
+  readonly trial?: true;
 };
 
 export type ScorecardNight = {
@@ -123,6 +126,21 @@ export function scoredAngles(night: FeatureNight | null): string[] {
   const ids = new Set<string>();
   for (const r of night.rows) for (const k of Object.keys(r.features)) ids.add(k);
   return [...ids].filter((id) => angleById(id)?.kind === "score").sort(byText);
+}
+
+/**
+ * D-1860: the trial angle keys (`trial:<id>`) present in a feature night whose registry angle is a
+ * score angle, sorted. Never part of `scoredAngles`, so nothing that reads the proven set sees them.
+ */
+export function trialAngles(night: FeatureNight | null): string[] {
+  if (night === null) return [];
+  const ids = new Set<string>();
+  for (const r of night.rows) {
+    for (const k of Object.keys(r.features)) {
+      if (k.startsWith(TRIAL_PREFIX) && angleById(baseIdOf(k))?.kind === "score") ids.add(k);
+    }
+  }
+  return [...ids].sort(byText);
 }
 
 const numeric = (v: unknown): number | null =>
@@ -217,7 +235,7 @@ function legRows(
   const head = [...leg.night.rows].sort((a, b) => byText(a.code, b.code))[0];
   const liquidSet = new Set(liquid);
   const out: AngleDayRow[] = [];
-  for (const angleId of scoredAngles(leg.night)) {
+  for (const angleId of [...scoredAngles(leg.night), ...trialAngles(leg.night)]) {
     const pairs: { code: string; v: number; r: number }[] = [];
     let excluded = 0;
     for (const code of liquid) {
@@ -256,7 +274,7 @@ function legRows(
       market: o.market,
       d: o.d,
       angleId,
-      angleVersion: angleById(angleId)!.version,
+      angleVersion: angleById(baseIdOf(angleId))!.version,
       horizon: leg.horizon,
       featureD,
       n,
@@ -269,7 +287,9 @@ function legRows(
       psiPpm,
       excludedNews: excluded,
       activeSetHash: head!.activeSetHash,
-      manifestId: head!.manifestId,
+      manifestId: isTrialId(angleId)
+        ? `${TRIAL_MANIFEST_PREFIX}${head!.manifestId}`
+        : head!.manifestId,
     });
   }
   return out;
@@ -288,7 +308,9 @@ export function scorecardNight(o: ScorecardInput): ScorecardNight {
   if (reference === null && o.featuresBack20 !== null && o.featuresBack20.rows.length > 0) {
     const set = new Set(liquid);
     const back = o.featuresBack20;
-    reference = new Map(scoredAngles(back).map((id) => [id, histogramOf(back, id, set)]));
+    reference = new Map(
+      [...scoredAngles(back), ...trialAngles(back)].map((id) => [id, histogramOf(back, id, set)]),
+    );
   }
   const rows: AngleDayRow[] = [];
   const legs: Leg[] = [];
@@ -314,12 +336,30 @@ export function scorecardNight(o: ScorecardInput): ScorecardNight {
  * eligible and has no score.
  */
 export function eveningScores(night: FeatureNight): Map<string, number> {
-  const angles = scoredAngles(night).map((id) => ({ id, cluster: angleById(id)!.cluster }));
+  return scoresOf(night, scoredAngles(night), false);
+}
+
+/**
+ * D-1860: the same score over the TRIAL angles. Many trial angles have no value for many shares, so a
+ * missing value counts as 0 (the middle of the rank range) and only a share with no trial value at all
+ * is left out. Used for the mover coverage only, and only when no proven angle has scores.
+ */
+export function trialEveningScores(night: FeatureNight): Map<string, number> {
+  return scoresOf(night, trialAngles(night), true);
+}
+
+function scoresOf(
+  night: FeatureNight,
+  ids: readonly string[],
+  lenient: boolean,
+): Map<string, number> {
+  const angles = ids.map((id) => ({ id, cluster: angleById(baseIdOf(id))!.cluster }));
   const clusters = [...new Set(angles.map((a) => a.cluster))].sort(byText);
   const out = new Map<string, number>();
   if (angles.length === 0) return out;
   for (const r of night.rows) {
     let ok = true;
+    let any = false;
     let s = 0;
     for (const c of clusters) {
       let sum = 0;
@@ -327,13 +367,14 @@ export function eveningScores(night: FeatureNight): Map<string, number> {
       for (const a of angles) {
         if (a.cluster !== c) continue;
         const v = r.features[a.id];
-        if (v === null || v === undefined) ok = false;
+        if (numeric(v) !== null) any = true;
+        if (!lenient && (v === null || v === undefined)) ok = false;
         sum += numeric(v) ?? 0;
         n += 1;
       }
       s += sum / n;
     }
-    if (ok) out.set(r.code, s / clusters.length);
+    if (ok && (!lenient || any)) out.set(r.code, s / clusters.length);
   }
   return out;
 }
@@ -344,7 +385,12 @@ export function moverCoverage(
   movers: readonly Mover[],
 ): MoverCoverage | null {
   if (night === null || night.rows.length === 0) return null;
-  const scores = eveningScores(night);
+  let scores = eveningScores(night);
+  let trial = false;
+  if (scores.size === 0) {
+    scores = trialEveningScores(night);
+    trial = true;
+  }
   if (scores.size === 0) return null;
   const ranked = [...scores.entries()].sort((a, b) => b[1] - a[1] || byText(a[0], b[0]));
   const top = new Set(
@@ -372,5 +418,6 @@ export function moverCoverage(
     newsBeforeOpen,
     newsInTop,
     scored: scores.size,
+    ...(trial ? { trial: true as const } : {}),
   };
 }

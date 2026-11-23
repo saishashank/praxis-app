@@ -4,3 +4,5 @@
 export const WARM_PREFIX = "warmstart:";
 /** Seq of the run's event on its last night (nightly seqs are 0..99, the scorecard takes 0). */
 export const WARM_EVENT_SEQ = 99; // threshold-ok: event seq layout (hooks.ts header)
+/** D-1860: seq of a trial run's event (it never counts as a warm start for the Cortex page). */
+export const WARM_TRIAL_EVENT_SEQ = 98; // threshold-ok: event seq layout (hooks.ts header)

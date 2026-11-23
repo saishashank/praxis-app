@@ -17,6 +17,14 @@ import { offsetMinutes, slotForSchedule } from "./genWatchdogCron.mjs";
  */
 export const MAX_LATE_MIN = 240;
 
+/**
+ * D-1861: GitHub never starts a scheduled run early, so a run that reads as more than this many
+ * minutes before its time is really the next day's clock: it is a day late, not early. (The old
+ * wrap at +/-12 h read the 2026-11-23 07:15 UTC line, started at 19:15 UTC = exactly 12 h late, as
+ * 12 h early, so it ran on the next day's empty date.)
+ */
+export const EARLY_TOLERANCE_MIN = 30;
+
 /** Minutes the run at `nowMs` starts after the Melbourne time "HHMM" (wrapping at midnight). */
 export function lateMinutes(slot, nowMs) {
   const date = new Date(nowMs).toISOString().slice(0, 10);
@@ -25,8 +33,8 @@ export function lateMinutes(slot, nowMs) {
   const localNow = (((utcMin + off) % 1440) + 1440) % 1440;
   const slotMin = Number(slot.slice(0, 2)) * 60 + Number(slot.slice(2, 4));
   let late = localNow - slotMin;
-  if (late > 720) late -= 1440;
-  if (late < -720) late += 1440;
+  if (late < -EARLY_TOLERANCE_MIN) late += 1440;
+  if (late >= 1440 - EARLY_TOLERANCE_MIN) late -= 1440;
   return late;
 }
 

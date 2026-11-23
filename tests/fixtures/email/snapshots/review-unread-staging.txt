@@ -48,13 +48,13 @@ Strategy 1 | Buy Example Company 6 (TST06) | 106 | A$10.42 | A$9.95 | stop A$9.0
 3. Profit / loss
 ----------------
 
-Strategy | Value now | Today | Since start
-Strategy 1 (https://praxis.example.test/executions/E01) | A$101,234.56 | +A$123.45 (+0.1%) | +A$1,234.56 (+1.2%)
-Strategy 3 (https://praxis.example.test/executions/E03) | A$103,703.68 | -A$370.35 (-0.3%) | +A$3,703.68 (+3.6%)
-Strategy 5 (https://praxis.example.test/executions/E05) | A$106,172.80 | +A$617.25 (+0.5%) | +A$6,172.80 (+6.0%)
-Strategy 7 (https://praxis.example.test/executions/E07) | A$108,641.92 | +A$864.15 (+0.7%) | +A$8,641.92 (+8.4%)
-Strategy 9 (https://praxis.example.test/executions/E09) | A$111,111.04 | -A$1,111.05 (-0.9%) | +A$11,111.04 (+10.8%)
-Strategy 11 (https://praxis.example.test/executions/E11) | A$113,580.16 | +A$1,357.95 (+1.1%) | +A$13,580.16 (+13.2%)
+Strategy | Since start
+Strategy 1 (https://praxis.example.test/executions/E01) | +A$1,234.56 (+1.2%)
+Strategy 3 (https://praxis.example.test/executions/E03) | +A$3,703.68 (+3.6%)
+Strategy 5 (https://praxis.example.test/executions/E05) | +A$6,172.80 (+6.0%)
+Strategy 7 (https://praxis.example.test/executions/E07) | +A$8,641.92 (+8.4%)
+Strategy 9 (https://praxis.example.test/executions/E09) | +A$11,111.04 (+10.8%)
+Strategy 11 (https://praxis.example.test/executions/E11) | +A$13,580.16 (+13.2%)
 
 
 4. What we learned today

@@ -7,6 +7,7 @@ import type { Client, InStatement } from "@libsql/client";
 import { afterEach, describe, expect, it } from "vitest";
 import { cortexLearnNight, priorReference, SCORECARD_SEQ } from "@/lib/cortex/learn/stage";
 import { angleDaysSince, eventsSince } from "@/lib/cortex/learn/store";
+import { insertPassport } from "@/lib/cortex/store";
 import { loadDailyLearning, type MoverExplanation } from "@/lib/learning/daily";
 import type { World } from "@/lib/learning/dailyLoad";
 import { cleanupTempDbs, freshDb } from "../../db/helpers";
@@ -174,9 +175,35 @@ describe("cortexLearnNight", () => {
     expect(await cortexLearnNight(db, opts({ d: "2026-11-14" }))).toBeNull();
     const s = (await cortexLearnNight(db, opts()))!;
     expect(s.numbers.rows).toBe(0);
-    expect(s.lines[0]).toMatch(/^The Cortex stored no scores for the evening before Tue 10 Nov/);
+    // D-1860: no angle passport at all = the history was never loaded, said plainly
+    expect(s.lines[0]).toBe(
+      "The Cortex's history has not been loaded yet, so the day's biggest movers cannot be checked against it.",
+    );
+    expect(s.lines.join(" ")).not.toContain("stored no scores");
     expect(await loadDailyLearning(db, "AU", D)).toBeNull(); // the daily loop stored nothing: no row made
     expect(await eventsSince(db, "AU", D)).toHaveLength(1);
+  });
+
+  it("D-1860: with a passport but no stored night, the review says the Cortex stored no scores", async () => {
+    const db = await freshDb("main");
+    await insertPassport(db, {
+      market: "AU",
+      angleId: "A-D1-02",
+      version: 1,
+      domain: 1,
+      cluster: "momentum",
+      orientation: 1,
+      kind: "score",
+      inputs: ["bar_au"],
+      historyFields: {},
+      status: "measured",
+      horizonSessions: 20,
+      evidence: {},
+      measured: null,
+      frozenAt: "2026-01-01T00:00:00Z",
+    });
+    const s = (await cortexLearnNight(db, opts()))!;
+    expect(s.lines[0]).toMatch(/^The Cortex stored no scores for the evening before Tue 10 Nov/);
   });
 
   it("LRN-AT-10 and LRN-AT-11: under 6,000 rows read on a full-size universe; never a picks table", async () => {
