@@ -41,3 +41,18 @@ test("D-914: a scheduled run that starts hours late is skipped, a few minutes la
   assert.equal(lateMinutes("1815", LIMIT), MAX_LATE_MIN);
   assert.equal(gate("15 7 * * *", LIMIT, ["18:15"]).run, true);
 });
+
+test("D-1861: a run 12 h or more late is skipped, not read as early", async () => {
+  const { lateMinutes } = await import("./scheduleGate.mjs");
+  // the 2026-11-23 case: the 07:15 UTC line (18:15 AEDT) started at 19:15 UTC = 06:15 next day
+  const TWELVE = Date.parse("2026-11-23T19:15:49Z");
+  assert.equal(lateMinutes("1815", TWELVE), 720);
+  assert.deepEqual(gate("15 7 * * *", TWELVE, ["18:15"]), { run: false, slot: "", late: true });
+  const THIRTEEN = Date.parse("2026-11-23T20:20:00Z"); // 07:20 next day
+  assert.equal(lateMinutes("1815", THIRTEEN), 785);
+  assert.equal(gate("15 7 * * *", THIRTEEN, ["18:15"]).run, false);
+  // a clock a few minutes early still runs; a run just after midnight for a 23:55 slot is 10 min late
+  assert.equal(lateMinutes("1815", Date.parse("2026-11-23T07:12:00Z")), -3);
+  assert.equal(lateMinutes("2355", Date.parse("2026-11-23T13:05:00Z")), 10);
+  assert.equal(lateMinutes("0005", Date.parse("2026-11-23T12:58:00Z")), -7);
+});

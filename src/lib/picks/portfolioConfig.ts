@@ -22,6 +22,8 @@ export type PortfolioSettings = {
   readonly costMaxPct: number;
   readonly minParcelAud: number;
   readonly costProfile: CostProfileCode;
+  /** D-1858: the first day of My portfolio; earlier picks and days are left out. */
+  readonly startD: string;
   readonly profiles: Readonly<Record<MyProfileName, MyPortfolioProfile>>;
 };
 
@@ -48,6 +50,7 @@ export async function loadPortfolioSettings(
     costMaxPct: (await read(db, "my_portfolio_cost_max_pct")) as number,
     minParcelAud: (await read(db, "my_portfolio_min_parcel_aud")) as number,
     costProfile: isCostProfileCode(cost) ? cost : "P6",
+    startD: (await read(db, "my_portfolio_start_d")) as string,
     profiles: ((await read(db, "my_portfolio_profiles")) ??
       MY_PORTFOLIO_PROFILES_DEFAULT) as Record<MyProfileName, MyPortfolioProfile>,
   };

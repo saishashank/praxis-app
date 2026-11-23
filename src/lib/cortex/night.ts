@@ -102,6 +102,7 @@ import { isLateBarNight, quotaDegrade } from "./pit/integrity";
 import type { AsOfView, InputKind, InputManifest } from "./pit/types";
 import { scoreCode, type CodeScore } from "./score";
 import { activeSetHash } from "./score/map";
+import { trialDefsOf } from "./angles/trial";
 import type { CortexMap, ScoredAngle, ScoreWeights } from "./score/types";
 import { moversGateInput, type MoversNight } from "./moversNight";
 import { coldStartAt } from "./states/coldStart";
@@ -247,6 +248,12 @@ export type NightInputs = {
    * Absent or empty = the night's bytes are unchanged.
    */
   readonly probes?: readonly string[];
+  /**
+   * D-1860: also compute the TRIAL angles (passport `measured` or `candidate`, computable with live
+   * readers) for the scorecard only: values go to `NightOutput.trial` and never into S, eligibility, a
+   * gate, a decision or the shared features. Absent or false = the night's bytes are unchanged.
+   */
+  readonly trial?: boolean;
   /** Current `cortex_state` rows per code (the latest per kind). */
   readonly states: readonly StateRef[];
   /** Angle id → passport status; an angle absent here is `candidate` (never scored). */
@@ -365,6 +372,11 @@ export type NightOutput = {
    * present only when `NightInputs.probes` named a computable probe; stored in cortex_feature_probe.
    */
   readonly probes?: ReadonlyMap<string, ReadonlyMap<string, AngleValue>>;
+  /**
+   * D-1860: code → trial angle id → value (rank-standardised like the features), present only when
+   * `NightInputs.trial` was set and at least one angle is trial. Scorecard evidence only.
+   */
+  readonly trial?: ReadonlyMap<string, ReadonlyMap<string, AngleValue>>;
 };
 
 // ---- constants -------------------------------------------------------------------------------------------
@@ -1489,8 +1501,11 @@ export function runNight(inputs: NightInputs): NightOutput {
   // O-81: the open probes, computed beside the night and kept out of everything above
   const probeDefs = probeDefsOf(angles, scoredDefs, inputs.probes);
   const universe = codes.map((c) => ({ code: c, industry: facts.get(c)!.industry }));
+  // D-1860: the trial angles, computed beside the night for the scorecard only
+  const trialDefs = inputs.trial === true ? trialDefsOf(angles, scoredDefs, inputs.passports) : [];
   return {
     ...(probeDefs.length === 0 ? {} : { probes: featuresAt(view, t, probeDefs, codes) }),
+    ...(trialDefs.length === 0 ? {} : { trial: featuresAt(view, t, trialDefs, codes) }),
     status: mapMissing ? "abstain_all" : "ran",
     reason: mapMissing ? "map_missing" : null,
     manifest,

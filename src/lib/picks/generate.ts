@@ -13,6 +13,7 @@ import { addDays, isTradingDay, type CalendarRow } from "@/lib/data/calendar";
 import { divCeil, divFloor, parseRational } from "@/lib/money/rational";
 import type { PicksParams } from "@/lib/agents/params";
 import { canonicalJson, sha256Hex } from "./canonical";
+import { firstBlock, type BlockReason } from "./noPicks";
 import type { Pick, PickInput, Tier, UniverseCode } from "./types";
 
 const PPM = 1_000_000n; // threshold-ok: parts per million
@@ -122,6 +123,19 @@ export type GenerateContext = {
   readonly universe: readonly UniverseCode[];
   /** ISO instant stamped on every pick of the night. */
   readonly createdAt: string;
+  /**
+   * D-1856: the picks already published for this session, per profile (the Owner's dated rerun). New
+   * picks follow them from their highest rank + 1 up to PICK_RANK_MAX; their companies and families count
+   * as taken. The published picks themselves are never produced again, so never changed.
+   */
+  readonly existing?: ReadonlyMap<string, readonly ExistingPick[]>;
+};
+
+/** D-1856: one published pick of the session (rank, company, family). */
+export type ExistingPick = {
+  readonly rank: number;
+  readonly code: string;
+  readonly family: string;
 };
 
 const cmpText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -186,21 +200,59 @@ function bandLookup(universe: readonly UniverseCode[]): BandLookup {
   };
 }
 
+/**
+ * D-1858: why a candidate cannot be picked for a profile at all, or null when it can. Reasons in order:
+ * the profile's tiers, the D-1000 band of another profile, then the basics (the three cases from enough
+ * history, a stop-loss below the price, a holding time, an aim above the price; ./noPicks.ts).
+ */
+export type IneligibleReason = "tier" | "band" | Exclude<BlockReason, "profile_rules">;
+
+function ineligibleReason(
+  inp: PickInput,
+  profile: string,
+  tiers: readonly string[],
+  bandOf: BandLookup,
+): IneligibleReason | null {
+  if (!tiers.includes(inp.tier)) return "tier";
+  if (isBandProfile(profile) && bandOf(inp) !== profile) return "band"; // D-1000: disjoint bands
+  return firstBlock(inp) as IneligibleReason | null;
+}
+
 function eligible(
   inp: PickInput,
   profile: string,
   tiers: readonly string[],
   bandOf: BandLookup,
 ): boolean {
-  if (!tiers.includes(inp.tier)) return false;
-  if (isBandProfile(profile) && bandOf(inp) !== profile) return false; // D-1000: disjoint bands
-  if (inp.scenario === null) return false; // the three cases need enough history (scenario_min_n)
-  if (inp.stopMicro === null || inp.stopMicro <= 0n || inp.stopMicro >= inp.referenceMicro) {
-    return false;
+  return ineligibleReason(inp, profile, tiers, bandOf) === null;
+}
+
+/** D-1858: every reason a candidate did not become a pick of a profile (fixed codes, never a company). */
+export type SkipReason = IneligibleReason | "held" | "family_cap" | "size" | "rank_full";
+export const SKIP_REASONS: readonly SkipReason[] = [
+  "tier",
+  "band",
+  "no_history",
+  "no_stop",
+  "no_hold",
+  "no_aim",
+  "held",
+  "family_cap",
+  "size",
+  "rank_full",
+];
+/** Profile name -> reason -> number of candidates. */
+export type SkipTally = Record<string, Partial<Record<SkipReason, number>>>;
+
+/** `balanced:band=30+no_history=12;aggressive:size=2`, reasons in fixed order, `none` when empty. */
+export function formatSkips(t: SkipTally): string {
+  const parts: string[] = [];
+  for (const profile of Object.keys(t).sort()) {
+    const r = t[profile]!;
+    const items = SKIP_REASONS.filter((k) => (r[k] ?? 0) > 0).map((k) => `${k}=${r[k]}`);
+    if (items.length > 0) parts.push(`${profile}:${items.join("+")}`);
   }
-  if (inp.holdMedianSessions === null || inp.holdMedianSessions < 1) return false;
-  if (inp.scenario.goodPpm <= 0) return false; // an aim must lie above the reference price
-  return true;
+  return parts.length === 0 ? "none" : parts.join(";");
 }
 
 /** Deterministic index from a hash (the luck-check twin draw). */
@@ -353,6 +405,8 @@ export function generatePicks(
   inputs: readonly PickInput[],
   ctx: GenerateContext,
   extras?: ExtraInputs,
+  /** D-1858: when given, filled with why each candidate did not become a pick (never changes the picks). */
+  skips?: SkipTally,
 ): Pick[] {
   const out: Pick[] = [];
   const bandOf = bandLookup(ctx.universe);
@@ -362,6 +416,17 @@ export function generatePicks(
     if (amount === undefined) continue; // no portfolio amount: nothing to size against
     // only inputs that can ever be picked are sorted (the order reads their scenario)
     const usable = (inp: PickInput) => eligible(inp, profile, spec.tiers, bandOf);
+    const tally: Partial<Record<SkipReason, number>> = {};
+    const skip = (r: SkipReason, n = 1) => {
+      if (skips !== undefined) tally[r] = (tally[r] ?? 0) + n;
+    };
+    if (skips !== undefined) {
+      for (const inp of inputs) {
+        const why = ineligibleReason(inp, profile, spec.tiers, bandOf);
+        if (why !== null) skip(why);
+      }
+      skips[profile] = tally;
+    }
     const cmp = cmpForProfile(profile);
     const sorted = inputs.filter(usable).sort(cmp);
     const extraSorted = (extras?.inputs ?? []).filter(usable).sort(cmp);
@@ -373,12 +438,32 @@ export function generatePicks(
     const perFamily = new Map<string, number>();
     const seen = new Set<string>();
     let rank = 0;
-    for (const inp of sorted) {
-      if (rank >= ctx.picks.picksPerProfile) break;
-      if (seen.has(inp.code)) continue; // one pick per company per profile
-      if ((perFamily.get(inp.family) ?? 0) >= ctx.picks.picksMaxPerFamily) continue;
+    // D-1856: append after the session's published picks, up to the table's rank limit
+    const before = ctx.existing?.get(profile);
+    const limit = ctx.existing === undefined ? ctx.picks.picksPerProfile : PICK_RANK_MAX;
+    for (const e of before ?? []) {
+      rank = Math.max(rank, e.rank);
+      seen.add(e.code);
+      perFamily.set(e.family, (perFamily.get(e.family) ?? 0) + 1);
+    }
+    for (const [i, inp] of sorted.entries()) {
+      if (rank >= limit) {
+        skip("rank_full", sorted.length - i);
+        break;
+      }
+      if (seen.has(inp.code)) {
+        skip("held");
+        continue; // one pick per company per profile
+      }
+      if ((perFamily.get(inp.family) ?? 0) >= ctx.picks.picksMaxPerFamily) {
+        skip("family_cap");
+        continue;
+      }
       const pick = build(inp, profile, rank + 1, ctx, caps, spec.tiers);
-      if (pick === null) continue;
+      if (pick === null) {
+        skip("size");
+        continue;
+      }
       rank += 1;
       seen.add(inp.code);
       perFamily.set(inp.family, (perFamily.get(inp.family) ?? 0) + 1);

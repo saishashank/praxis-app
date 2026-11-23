@@ -8,7 +8,9 @@
 # report only; replays the last 40 sessions night by night with today's rules and scores the picks
 # against the next day's top 5 gainers and losers; changes no rule or config) and cortex-warm-start
 # (D-1078: fills the learning Cortex's scorecard for the last 60 sessions, as of each evening; writes
-# only cortex_angle_day and one learn event; needs no pick-scorecard run). The Worker's
+# only cortex_angle_day and one learn event; needs no pick-scorecard run) and cortex-trial-warm-start
+# (D-1860: the same for the last 25 sessions with the angles not yet proven, as trial evidence for the
+# scorecard only, and it also stores the computed feature nights; changes no weight, map or status). The Worker's
 # per-minute cron may dispatch it with `ref: release` (default mode light); its slot is DISABLED until
 # the Owner enables the replay. It has no `schedule:` trigger (PLT-015).
 # SEC-108 c: the job checks out the latest approved deploy-production commit, not the release head.
@@ -44,6 +46,7 @@ on:
           - seed-recent
           - pick-scorecard
           - cortex-warm-start
+          - cortex-trial-warm-start
       commit:
         description: Wait until this commit is the approved deploy (set by the Worker post-deploy step)
         type: string

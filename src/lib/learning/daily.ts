@@ -71,6 +71,8 @@ export type MoverExplanation = {
   setupBefore: string[];
   caughtBy: string | null;
   nearMiss: string | null;
+  /** D-1859: "close" = a genuine near miss; anything else (or absent on old stored rows) = plainly missed. */
+  nearMissKind?: "close" | "excluded";
 };
 
 export type FeatureLesson = {
@@ -124,7 +126,7 @@ export type PickHooks = {
     shares: readonly { code: string; tier: string; bars: readonly LBar[] }[],
     prev: string,
     codes: readonly string[],
-  ): ReadonlyMap<string, { note: string; onShortlist: boolean }>;
+  ): ReadonlyMap<string, { note: string; onShortlist: boolean; kind?: "close" | "excluded" }>;
 };
 
 type Opts = {
@@ -212,7 +214,7 @@ function buildMovers(
   o: Opts,
   hooks: {
     picked: ReadonlyMap<string, string>;
-    notes: ReadonlyMap<string, { note: string; onShortlist: boolean }>;
+    notes: ReadonlyMap<string, { note: string; onShortlist: boolean; kind?: "close" | "excluded" }>;
   },
   prepared: ReadonlyMap<string, Prepared>,
   newsAfter: ReadonlyMap<string, ReadonlySet<string>>,
@@ -297,6 +299,9 @@ function buildMovers(
       setupBefore,
       caughtBy,
       nearMiss: note === undefined || note.onShortlist ? null : note.note,
+      ...(note === undefined || note.onShortlist || note.kind === undefined
+        ? {}
+        : { nearMissKind: note.kind }),
     };
   };
   return {
@@ -492,7 +497,7 @@ export async function runDailyLearning(db: Client, o: Opts): Promise<DailyLearni
         prev,
         moverCodes,
       )
-    : new Map<string, { note: string; onShortlist: boolean }>();
+    : new Map<string, { note: string; onShortlist: boolean; kind?: "close" | "excluded" }>();
   const { movers, explain } = buildMovers(w, o, { picked, notes }, prepared, newsAfter);
 
   // D-990: the Owner's top-5 gainer target (picks of the evening before, intraday finds of today)

@@ -6,6 +6,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import {
+  ALL_PROFILES,
   HISTORY_FILTERS,
   loadPickHistory,
   type HistoryFilter,
@@ -18,6 +19,7 @@ import { GainLoss, Money, NotMeasured, SimulatedLabel } from "@/components/ui/Va
 import { formatDay, formatPpm } from "@/lib/view/format";
 import { ProfileSwitch } from "./PickTabs";
 import { pickViewHref } from "./views";
+import { ProfileLabel } from "./ProfileLabel";
 import { pickProfilesConfig } from "./data";
 import { PicksEmptyArt } from "./EmptyArt";
 import { StatusFilter } from "./StatusFilter";
@@ -134,13 +136,25 @@ export async function HistoryBody({
   viewSelect?: ReactNode;
 }) {
   const model = await loadPickHistory(env, { profile, filter, cursor });
-  const rule = profileSentence(
-    profileRules(await pickProfilesConfig(env.main), model.profile),
-    model.profile,
-  );
+  const everyProfile = model.profile === ALL_PROFILES;
+  const rule = everyProfile
+    ? ""
+    : profileSentence(
+        profileRules(await pickProfilesConfig(env.main), model.profile),
+        model.profile,
+      );
   const query = `profile=${encodeURIComponent(model.profile)}&view=history&status=${model.filter}`;
   const columns: Column<HistoryRow>[] = [
     { key: "stock", header: "Stock", cell: stockCell },
+    ...(everyProfile
+      ? [
+          {
+            key: "profile",
+            header: "Profile",
+            cell: (r: HistoryRow) => <ProfileLabel profile={r.profile} />,
+          } satisfies Column<HistoryRow>,
+        ]
+      : []),
     {
       key: "picked",
       header: "Picked",
@@ -165,6 +179,7 @@ export async function HistoryBody({
         hrefFor={(p) => pickViewHref("history", p)}
         rule={rule}
         viewSelect={viewSelect}
+        allHref={pickViewHref("history", ALL_PROFILES)}
       />
 
       <form method="get" action="/picks" className="flex flex-wrap items-center gap-2 text-sm">

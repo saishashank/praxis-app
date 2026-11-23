@@ -73,6 +73,7 @@ describe("shortlistNotes", () => {
   it("says how close a near miss came, in plain numbers", () => {
     const slow = notes.get("SLOW")!;
     expect(slow.onShortlist).toBe(false);
+    expect(slow.kind).toBe("excluded");
     expect(slow.note).toMatch(/^missed the shortlist: rise only [23]% over 3 months \(needs 5%\)$/);
   });
 
@@ -84,6 +85,9 @@ describe("shortlistNotes", () => {
 
   it("puts a small share and an unknown share outside the rule's universe", () => {
     expect(notes.get("TINY")!.note).toContain("small share");
+    expect(notes.get("TINY")!.kind).toBe("excluded");
+    expect(notes.get("NOBODY")!.kind).toBe("excluded");
+    expect(notes.get("STRONG")!.kind).toBeUndefined();
     expect(notes.get("NOBODY")!.note).toContain("no price bar");
   });
 

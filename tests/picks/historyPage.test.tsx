@@ -113,6 +113,45 @@ describe("History tab (D-911)", () => {
     expect(screen.queryByRole("link", { name: "Older" })).toBeNull();
   });
 
+  it("D-1858: with no status chosen the list opens on All, not on Open", async () => {
+    as(w, "owner");
+    render(await PicksPage({ searchParams: sp({ view: "history" }) }));
+    expect(within(table()).getAllByRole("row").slice(1)).toHaveLength(25);
+    expect(screen.getByRole("combobox", { name: "Show" })).toHaveValue("all");
+  });
+
+  it("D-1858: All profiles lists every profile with its name and pages by the profile too", async () => {
+    as(w, "owner");
+    await pick("2026-10-12", 1, "ZZUP");
+    await outcome("2026-10-12", 1, "ZZUP");
+    render(await PicksPage({ searchParams: sp({ profile: "all", view: "history" }) }));
+    const t = table();
+    expect(within(t).getByRole("columnheader", { name: "Profile" })).toBeInTheDocument();
+    const rows = within(t).getAllByRole("row").slice(1);
+    expect(rows).toHaveLength(25);
+    expect(within(rows[0]!).getByText("Balanced")).toBeInTheDocument();
+    expect(screen.getByText("All profiles")).toBeInTheDocument(); // the chosen segment
+    expect(
+      screen.getByText(/every pick published for the three risk profiles/),
+    ).toBeInTheDocument();
+    const older = screen.getByRole("link", { name: "Older" }).getAttribute("href") ?? "";
+    expect(older.startsWith("/picks?profile=all&view=history&status=all&after=2026-10-")).toBe(
+      true,
+    );
+    expect(older).toContain(".balanced.");
+    cleanup();
+    // from one profile, the "All profiles" choice is a link to the all-profiles list
+    render(await PicksPage({ searchParams: sp({ profile: "balanced", view: "history" }) }));
+    expect(screen.getByRole("link", { name: "All profiles" })).toHaveAttribute(
+      "href",
+      "/picks?profile=all&view=history",
+    );
+    cleanup();
+    // another view does not 404 on profile=all: it opens on the default profile
+    render(await PicksPage({ searchParams: sp({ profile: "all" }) }));
+    expect(screen.getByRole("heading", { name: "Picks" })).toBeInTheDocument();
+  });
+
   it("a filter with no rows says so", async () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp({ view: "history", status: "loss" }) }));

@@ -4,7 +4,7 @@
 // inputs once more with the default parameters, so "the data" and "the live parameters" can be told
 // apart. Bundled and run by scripts/arena/diagnose.mjs (.github/workflows/diagnose-signals.yml).
 //
-//   diagnose --dates YYYY-MM-DD[,YYYY-MM-DD...]
+//   diagnose --dates YYYY-MM-DD[,YYYY-MM-DD...] [--rerun]   (--rerun: the dated-rerun view, D-1857)
 //   diagnose --scenario splitFrequency [--window N]   (DAT-252 (3), D-1791: split-day frequency, AT-45)
 //
 // env: TURSO_MAIN_URL, TURSO_MAIN_TOKEN. The client is wrapped so that any statement other than a
@@ -147,6 +147,8 @@ export async function diagnoseDay(
   db: Client,
   d: string,
   out: (line: string) => void,
+  /** D-1857: read the day as the Owner's dated rerun does (D-1856: bars stored after the cut-off count). */
+  opts: { readonly rerunView?: boolean } = {},
 ): Promise<void> {
   const market = await db.execute({
     sql: "SELECT mode, tz, open_time, close_time FROM market WHERE code = ?",
@@ -224,12 +226,13 @@ export async function diagnoseDay(
     hours,
     params,
     replay: false,
+    lateBars: opts.rerunView === true,
     heldCodes: [],
     actions: await loadConfirmedActions(db, MARKET, d),
   });
   const facts = [...day.facts.values()];
   out(
-    `  inputs: regime=${day.inputs.regime} regimeD=${day.regime?.d ?? "none"} partial=${JSON.stringify(day.partialReasons)}` +
+    `  inputs: view=${opts.rerunView === true ? "dated-rerun" : "scheduled"} regime=${day.inputs.regime} regimeD=${day.regime?.d ?? "none"} partial=${JSON.stringify(day.partialReasons)}` +
       ` sources=${JSON.stringify(day.inputs.sources)} sessions=${day.inputs.sessions.length}` +
       ` facts=${facts.length} byTier=${tally(facts.map((f) => f.tier))} halted=${facts.filter((f) => f.halted).length}` +
       ` events=${day.inputs.events.length}`,
@@ -458,7 +461,7 @@ export async function diagnoseMain(
   let code = 0;
   for (const d of dates) {
     try {
-      await diagnoseDay(db, d, out);
+      await diagnoseDay(db, d, out, { rerunView: argv.includes("--rerun") });
     } catch (error) {
       out(
         `diagnose ${d}: failed (${error instanceof WriteRefused ? error.message : (error as Error).name})`,

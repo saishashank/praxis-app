@@ -8,6 +8,7 @@ import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { paramsJson, resolveCohortParams } from "@/lib/arena/cohort";
 import { displayHeldCodes } from "@/lib/intraday/universe";
+import { setConfig } from "@/lib/config/store";
 import { runPickPortfolio } from "@/lib/picks/portfolioStore";
 import { ratioPpm } from "@/lib/ui/loaders/common";
 import { loadHome } from "@/lib/ui/loaders/home";
@@ -60,6 +61,13 @@ describe("1. My portfolio: live value from the quotes", () => {
   beforeAll(async () => {
     w = await fullWorld();
     await openPick(w, 9, "ZZUP", 10_000_000);
+    // D-1858: the world's picks are older than the default start of My portfolio
+    await setConfig(w.main, {
+      key: "my_portfolio_start_d",
+      value: "2026-01-01",
+      userId: null,
+      now: "2026-10-19T00:00:00.000Z",
+    });
     await runPickPortfolio(w.main, { market: "AU", d: D });
   });
   const balanced = async (who: "owner" | "viewer") =>

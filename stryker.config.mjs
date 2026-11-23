@@ -15,6 +15,13 @@
 // list: AT-31 and docs/M8_design.md 2.8 set the floor on the money and statistics modules, the families
 // are the pure rule interpreter, and those two are a database loader and the parameter registry that only
 // the database tests reach. They keep their 90 % coverage floor in vitest.config.mts.
+//
+// D-1855: with D-1854 the dry run passed, but every mutant then ran 0 tests (score 0 %). Stryker runs
+// each mutant against the tests that covered it by setting vitest's testNamePattern to their names.
+// vitest-runner 10.0.0 joined suite and test names with a space; vitest 5 matches the full name
+// joined with " > " (vitest/dist/task-utils.js createTaskName), so no test matched and every mutant
+// "survived". vitest-runner 10.1.1 uses " > " for vitest 5; core and runner are pinned to it together.
+// Four workers: a GitHub ubuntu runner has 4 CPUs, and now each mutant really runs its tests.
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 const config = {
   testRunner: "vitest",
@@ -39,7 +46,7 @@ const config = {
   tempDirName: ".stryker-tmp",
   cleanTempDir: true,
   timeoutMS: 60000,
-  concurrency: 2,
+  concurrency: 4,
 };
 
 export default config;

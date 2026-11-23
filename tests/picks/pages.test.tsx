@@ -103,14 +103,16 @@ describe("Picks list", () => {
     );
   });
 
-  it("renders the History tab with the status filter, Open by default (Owner 2026-11-10)", async () => {
+  it("renders the History tab with the status filter, All by default (D-1858)", async () => {
     as(w, "owner");
     render(await PicksPage({ searchParams: sp({ view: "history" }) }));
     expect(screen.getByLabelText("View")).toHaveValue("history");
+    expect(screen.getByLabelText("Show")).toHaveValue("all");
+    cleanup();
+    render(await PicksPage({ searchParams: sp({ view: "history", status: "open" }) }));
     expect(screen.getByLabelText("Show")).toHaveValue("open");
     cleanup();
     render(await PicksPage({ searchParams: sp({ view: "history", status: "all" }) }));
-    expect(screen.getByLabelText("Show")).toHaveValue("all");
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
       "Stock",
       "Picked",

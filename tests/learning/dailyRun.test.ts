@@ -165,7 +165,11 @@ const hooks: PickHooks = {
     new Map(
       codes.map((c) => [
         c,
-        { note: `missed the shortlist: test note for ${c}`, onShortlist: c === "E02" },
+        {
+          note: `missed the shortlist: test note for ${c}`,
+          onShortlist: c === "E02",
+          kind: c === "M03" ? ("close" as const) : ("excluded" as const),
+        },
       ]),
     ),
 };
@@ -216,6 +220,8 @@ describe("runDailyLearning", () => {
     expect(by("M01").caughtBy).toBeNull();
     expect(by("M01").nearMiss).toBe("missed the shortlist: test note for M01");
     expect(by("E02").nearMiss).toBeNull();
+    expect(by("M01").nearMissKind).toBe("excluded");
+    expect(by("E02").nearMissKind).toBeUndefined();
     // the gap-up shares were up 5 % at the open the evening before the close (their setup is listed in words)
     expect(by("W01").setupBefore).toContain("gapped up more than 3% at the open");
 

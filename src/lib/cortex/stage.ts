@@ -47,7 +47,8 @@ import { parseNote, stateOf } from "@/lib/data/corporateActions/rules.mjs";
 import type { Micro } from "@/lib/money/micro";
 import { scopedPrng } from "@/lib/stats/rng";
 import type { CellStatistic } from "@/lib/stats/cells";
-import type { AngleDef, AngleStatus } from "./angles/types";
+import type { AngleDef, AngleStatus, AngleValue } from "./angles/types";
+import { trialId } from "./angles/trial";
 import {
   atr20Micro,
   baseBookId,
@@ -1063,6 +1064,7 @@ export function buildNightInputs(b: InputBuild): NightInputs {
   const probes = [...new Set(b.store.probes ?? [])].sort(cmp);
   return {
     ...(probes.length === 0 ? {} : { probes }),
+    trial: true, // D-1860: the trial angles are scored beside the night, for the scorecard only
     market: b.market,
     d: b.d,
     t,
@@ -1254,7 +1256,10 @@ function featureRowsOf(
   for (const [code, feats] of [...out.features.entries()].sort((a, b) => cmp(a[0], b[0]))) {
     const features: Record<string, number | null> = {};
     const flags: Record<string, string> = {};
-    for (const [id, v] of [...feats.entries()].sort((a, b) => cmp(a[0], b[0]))) {
+    // D-1860: the trial angles ride in the same row under `trial:<id>` keys (never in the scored set)
+    const own: [string, AngleValue][] = [...feats.entries()];
+    for (const [id, v] of out.trial?.get(code) ?? []) own.push([trialId(id), v]);
+    for (const [id, v] of own.sort((a, b) => cmp(a[0], b[0]))) {
       if (typeof v === "number") features[id] = Number.isFinite(v) ? v : null;
       else if (v === undefined) features[id] = null;
       else {

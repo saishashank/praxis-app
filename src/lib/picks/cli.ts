@@ -20,6 +20,7 @@ import { cortexLearnNight } from "@/lib/cortex/learn/stage";
 import { runDailyLearning, type DailyLearningResult } from "@/lib/learning/daily";
 import { candidateTally } from "./candidates";
 import { pickHooks } from "./dailyHooks";
+import { formatSkips } from "./generate";
 import { runPicksNight } from "./nightly";
 import { recordPicksNight } from "./noPicks";
 import { runPickPortfolio } from "./portfolioStore";
@@ -93,7 +94,15 @@ export async function picksMain(
       params,
       calendar: await loadCalendar(db, market),
       now: new Date(nowMs()).toISOString(),
+      // D-1856: the Owner's dated rerun keeps the published picks and adds strategy picks after them
+      appendAfterPublished: argv.includes("--rerun"),
     });
+    if (p.appended !== undefined) {
+      out(
+        `arena-picks ${market} ${d}: rerun_append kept=${p.appended.kept} added=${p.appended.added}` +
+          ` skipped=${formatSkips(p.appended.skipped)}`,
+      );
+    }
     const t = p.tracking;
     out(
       `arena-picks ${market} ${d}: published=${p.published} candidates=${p.candidates}` +

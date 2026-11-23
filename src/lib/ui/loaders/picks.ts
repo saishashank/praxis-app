@@ -685,7 +685,10 @@ export async function loadTrackRecord(env: LoaderEnv, q: { profile: string }): P
 
 // ---- Pick history (Owner 2026-11-10): one row per published pick, paged, filtered by status --------
 
-/** Status filter of the History tab; "open" is the default (the Owner validates live trades first). */
+/** D-1858: the History tab's "All profiles" choice (the `profile` value that drops the profile filter). */
+export const ALL_PROFILES = "all";
+
+/** Status filter of the History tab; "all" is the default (D-1858: every published pick). */
 export const HISTORY_FILTERS = [
   "open",
   "closed",
@@ -762,6 +765,8 @@ const DAY_MS = 86_400_000; // threshold-ok: milliseconds per day
 
 export type HistoryRow = {
   id: string;
+  /** The risk profile the pick was published for (D-1858: shown on the all-profiles list). */
+  profile: string;
   /** "Name (CODE)" for an unmasked viewer, the letter otherwise. */
   stock: string;
   /** The day the pick was published (the ISO week for a masked viewer). */
@@ -806,15 +811,20 @@ const STATUS_OF: Record<string, HistoryRow["status"]> = {
   waiting: "waiting",
 };
 
-/** `d.rank` of the last row of a page; anything else is no cursor (first page). */
-export function parseHistoryCursor(v: unknown): { d: string; rank: number } | null {
+/**
+ * `d.rank` of the last row of a page (one profile), or `d.profile.rank` (all profiles, D-1858: the
+ * profile is part of the key so the order stays stable); anything else is no cursor (first page).
+ */
+export function parseHistoryCursor(
+  v: unknown,
+): { d: string; rank: number; profile: string | null } | null {
   if (typeof v !== "string") return null;
-  const m = /^(\d{4}-\d{2}-\d{2})\.(\d{1,2})$/.exec(v);
-  return m ? { d: m[1]!, rank: Number(m[2]) } : null;
+  const m = /^(\d{4}-\d{2}-\d{2})\.(?:([a-z][a-z_]{0,23})\.)?(\d{1,2})$/.exec(v);
+  return m ? { d: m[1]!, rank: Number(m[3]), profile: m[2] ?? null } : null;
 }
 
 export function historyFilterOf(v: unknown): HistoryFilter {
-  return (HISTORY_FILTERS as readonly unknown[]).includes(v) ? (v as HistoryFilter) : "open";
+  return (HISTORY_FILTERS as readonly unknown[]).includes(v) ? (v as HistoryFilter) : "all";
 }
 
 const dayCount = (from: string, to: string): number =>
@@ -829,8 +839,11 @@ export async function loadPickHistory(
   const market = env.market;
   const masked = env.mask.masked;
   const after = masked ? null : parseHistoryCursor(q.cursor);
-  const where = ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
-  const args: (string | number)[] = [market, q.profile];
+  const everyProfile = q.profile === ALL_PROFILES;
+  const where = everyProfile
+    ? ["o.market = ?", "o.kind = 'pick'"]
+    : ["o.market = ?", "o.profile = ?", "o.kind = 'pick'"];
+  const args: (string | number)[] = everyProfile ? [market] : [market, q.profile];
   let withSql = "";
   const withArgs: (string | number)[] = [];
   if (q.filter === "profit" || q.filter === "loss") {
@@ -849,19 +862,25 @@ export async function loadPickHistory(
     args.push(HISTORY_STATE[q.filter]);
   }
   if (after) {
-    where.push("(o.d < ? OR (o.d = ? AND o.rank > ?))");
-    args.push(after.d, after.d, after.rank);
+    if (everyProfile) {
+      where.push("(o.d < ? OR (o.d = ? AND (o.profile > ? OR (o.profile = ? AND o.rank > ?))))");
+      const pr = after.profile ?? "";
+      args.push(after.d, after.d, pr, pr, after.rank);
+    } else {
+      where.push("(o.d < ? OR (o.d = ? AND o.rank > ?))");
+      args.push(after.d, after.d, after.rank);
+    }
   }
   args.push(HISTORY_PAGE + 1);
   const r = await env.main.execute({
-    sql: `${withSql}SELECT o.d, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
+    sql: `${withSql}SELECT o.d, o.profile, o.rank, o.code, o.state, o.entry_d, o.entry_micro, o.exit_d, o.exit_micro,
                  o.exit_reason, o.net_ppm, p.buy_max_micro, p.stop_micro, p.aim_micro, i.name,
                  p.rule_version
           FROM pick_outcome o JOIN pick p ON p.market = o.market AND p.d = o.d
             AND p.profile = o.profile AND p.rank = o.rank
           LEFT JOIN instrument i ON i.market = o.market AND i.code = o.code
           WHERE ${where.join(" AND ")}
-          ORDER BY o.d DESC, o.rank LIMIT ?`,
+          ORDER BY o.d DESC${everyProfile ? ", o.profile" : ""}, o.rank LIMIT ?`,
     args: [...withArgs, ...args],
   });
   const page = r.rows.slice(0, HISTORY_PAGE);
@@ -912,7 +931,8 @@ export async function loadPickHistory(
     const to = status === "closed" ? exit : now;
     const name = x.name === null || x.name === undefined ? null : String(x.name);
     return {
-      id: publicPickId(`${d}.${q.profile}.${Number(x.rank)}`, masked),
+      id: publicPickId(`${d}.${String(x.profile)}.${Number(x.rank)}`, masked),
+      profile: String(x.profile),
       stock: kit ? kit.aliasOf(d).label(code) : name ? `${name} (${code})` : code,
       pickedD: masked ? (isoWeek(d) ?? MISSING) : d,
       plan: masked
@@ -950,7 +970,9 @@ export async function loadPickHistory(
     rows,
     next:
       !masked && r.rows.length > HISTORY_PAGE && last
-        ? `${String(last.d)}.${Number(last.rank)}`
+        ? everyProfile
+          ? `${String(last.d)}.${String(last.profile)}.${Number(last.rank)}`
+          : `${String(last.d)}.${Number(last.rank)}`
         : null,
     paged: after !== null,
   };
