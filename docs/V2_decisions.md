@@ -1347,3 +1347,4 @@ One line per V2 decision from D-206 on, grouped by milestone, with the file that
 | D-1858 | (Owner, Mon 23 Nov 2026: three fixes after the first week of My portfolio and the dated rerun of Fri 20 Nov.) (1) A fresh start for My portfolio: the three p... |
 | D-1859 | (Owner, Mon 23 Nov 2026: two fixes to the Evening Review after reading it, page and email.) (1) "Near miss" was printed on every top gainer and loser that ha... |
 | D-1860 | (Owner, Mon 23 Nov 2026: "All 3": back-score the past four weeks with the not-yet-proven angles too, as trial evidence, so the learning Cortex has context.)... |
+| D-1861 | (Owner, Tue 24 Nov 2026, reported "Ingest batch 1 (AU EOD) / production Failed in 5 minutes and 34 seconds".) GitHub started the 07:15 UTC fallback line of M... |
