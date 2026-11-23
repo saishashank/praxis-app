@@ -87,5 +87,8 @@ export default defineConfig({
     // pass the suite limit of 30 s only uninstrumented.
     testTimeout: 180_000,
     hookTimeout: 180_000,
+    // D-1855: one plain reporter. On GitHub vitest otherwise adds its "github-actions" reporter, which
+    // appends a job summary on every one of Stryker's ~15,000 runs (1.4 MB, over GitHub's 1 MB limit).
+    reporters: ["dot"],
   },
 });
